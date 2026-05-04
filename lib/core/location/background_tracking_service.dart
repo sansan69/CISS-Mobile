@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class BackgroundTrackingService {
   static bool _configured = false;
@@ -122,9 +123,15 @@ void onStart(ServiceInstance service) async {
         defaultValue: 'https://cisskerala.site',
       );
 
+      final user = FirebaseAuth.instance.currentUser;
+      final token = await user?.getIdToken(false);
+
       await http.post(
         Uri.parse('$baseUrl/api/guard/tracking/heartbeat'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
         body: jsonEncode({
           'employeeId': siteContext!['employeeId'],
           'siteId': siteContext!['siteId'],
