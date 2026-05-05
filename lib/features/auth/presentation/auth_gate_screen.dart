@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -43,61 +44,71 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
   Widget build(BuildContext context) {
     final sessionAsync = ref.watch(authSessionProvider);
     final settings = ref.watch(appSettingsControllerProvider);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return sessionAsync.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
-      error: (Object error, StackTrace stackTrace) => Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text('Auth error: $error'),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: isDark
+          ? SystemUiOverlayStyle.light.copyWith(
+              statusBarColor: Colors.transparent,
+            )
+          : SystemUiOverlayStyle.dark.copyWith(
+              statusBarColor: Colors.transparent,
+            ),
+      child: sessionAsync.when(
+        loading: () => const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
+        error: (Object error, StackTrace stackTrace) => Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('Auth error: $error'),
+            ),
           ),
         ),
-      ),
-      data: (session) {
-        if (session == null) {
-          return const LoginHubScreen();
-        }
+        data: (session) {
+          if (session == null) {
+            return const LoginHubScreen();
+          }
 
-        // Biometric Gate
-        if (settings.biometricsEnabled && !_authenticated) {
-          _checkBiometrics(true);
-          return _BiometricLockScreen(
-            onRetry: () => _checkBiometrics(true),
-            isAuthenticating: _isAuthenticating,
+          // Biometric Gate
+          if (settings.biometricsEnabled && !_authenticated) {
+            _checkBiometrics(true);
+            return _BiometricLockScreen(
+              onRetry: () => _checkBiometrics(true),
+              isAuthenticating: _isAuthenticating,
+            );
+          }
+
+          if (session.role == AppRole.fieldOfficer) {
+            return const FieldOfficerShell();
+          }
+
+          // Guard: check that the two operationally-required permissions are
+          // granted (location for geofencing, camera for photo attendance).
+          return FutureBuilder<bool>(
+            future: _checkCorePermissions(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              if (snapshot.data == false) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (context.mounted) context.go('/permissions');
+                });
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              return const GuardShell();
+            },
           );
-        }
-
-        if (session.role == AppRole.fieldOfficer) {
-          return const FieldOfficerShell();
-        }
-
-        // Guard: check that the two operationally-required permissions are
-        // granted (location for geofencing, camera for photo attendance).
-        return FutureBuilder<bool>(
-          future: _checkCorePermissions(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
-
-            if (snapshot.data == false) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (context.mounted) context.go('/permissions');
-              });
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
-
-            return const GuardShell();
-          },
-        );
-      },
+        },
+      ),
     );
   }
 
