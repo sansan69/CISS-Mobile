@@ -272,6 +272,9 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                 icon: Icons.error_outline_rounded,
               ),
               data: (sites) {
+                final filteredSites = sites
+                    .where((s) => s.district == profile.district)
+                    .toList();
                 final dutyPoints =
                     _site?.dutyPoints ?? const <DutyPointModel>[];
                 return Column(
@@ -289,7 +292,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                         DropdownButtonFormField<SiteOptionModel>(
                           isExpanded: true,
                           initialValue: _site,
-                          items: sites
+                          items: filteredSites
                               .map(
                                 (site) => DropdownMenuItem<SiteOptionModel>(
                                   value: site,

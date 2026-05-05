@@ -48,7 +48,45 @@ void main() {
       expect(payload['employeeId'], dummyEmployeeId);
       expect(payload['siteId'], 'site-123');
     });
-   group('Date Formatting Consistency', () {
+
+    test('site filtering by district logic', () {
+      final sites = [
+        const SiteOptionModel(
+          id: '1',
+          siteName: 'Site A',
+          clientName: 'Client X',
+          district: 'Ernakulam',
+          geofenceRadiusMeters: 100,
+          strictGeofence: true,
+          shiftMode: 'none',
+          shiftPattern: null,
+          shiftTemplates: [],
+          sourceCollection: 'sites',
+        ),
+        const SiteOptionModel(
+          id: '2',
+          siteName: 'Site B',
+          clientName: 'Client Y',
+          district: 'Trivandrum',
+          geofenceRadiusMeters: 100,
+          strictGeofence: true,
+          shiftMode: 'none',
+          shiftPattern: null,
+          shiftTemplates: [],
+          sourceCollection: 'sites',
+        ),
+      ];
+
+      const guardDistrict = 'Ernakulam';
+      final filteredSites =
+          sites.where((s) => s.district == guardDistrict).toList();
+
+      expect(filteredSites.length, 1);
+      expect(filteredSites.first.siteName, 'Site A');
+      expect(filteredSites.first.district, 'Ernakulam');
+    });
+
+    group('Date Formatting Consistency', () {
       test('converts DD/MM/YYYY to ISO for API', () {
         const uiDate = '04/12/1998';
         final parts = uiDate.split('/');
