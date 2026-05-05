@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../core/network/providers.dart';
+import '../../../auth/application/auth_controller.dart';
 import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/glass_card.dart';
 import '../../../../../shared/widgets/state_block.dart';
@@ -20,10 +21,14 @@ final FutureProvider<List<FieldOfficerAttendanceEntry>>
     FutureProvider<List<FieldOfficerAttendanceEntry>>((Ref ref) {
   final date = ref.watch(attendanceSelectedDateProvider) ??
       DateFormat('yyyy-MM-dd').format(DateTime.now());
+  final session = ref.watch(authSessionProvider).value;
+  final district = session?.assignedDistricts.isNotEmpty == true
+      ? session!.assignedDistricts.first
+      : null;
 
   return ref
       .read(mobileRepositoryProvider)
-      .fetchFieldOfficerGuardAttendance(date: date);
+      .fetchFieldOfficerGuardAttendance(date: date, district: district);
 });
 
 class FieldOfficerGuardAttendanceScreen extends ConsumerStatefulWidget {

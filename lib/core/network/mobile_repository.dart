@@ -660,7 +660,7 @@ class MobileRepository {
     String? district,
   }) async {
     final data = await _getJson(
-      '/api/field-officer/attendance',
+      '/api/field-officer/guard-attendance',
       queryParameters: <String, dynamic>{
         if (date != null && date.isNotEmpty) 'date': date,
         if (district != null && district.trim().isNotEmpty)
