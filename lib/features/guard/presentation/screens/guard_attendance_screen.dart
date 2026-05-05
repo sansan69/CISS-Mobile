@@ -464,6 +464,18 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                       icon: Icons.badge_outlined,
                     ),
                     const SizedBox(height: 14),
+                    if (_error != null && _error!.contains('Location')) ...[
+                      StateBlock(
+                        icon: Icons.location_off_rounded,
+                        title: 'Location Required',
+                        message: _error!,
+                        action: FilledButton.tonal(
+                          onPressed: _initLocationCheck,
+                          child: const Text('Retry'),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                    ],
                     GuardFormCard(
                       children: <Widget>[
                         InkWell(
