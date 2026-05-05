@@ -47,23 +47,21 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   Future<void> _initLocationCheck() async {
     await _captureLocation();
     if (_position != null) {
-      final sites = ref.read(attendanceSitesProvider).valueOrNull ?? [];
-      final profile = ref.read(guardProfileProvider).valueOrNull;
-      if (profile != null) {
-        final filtered =
-            sites.where((s) => s.district == profile.district).toList();
-        final nearest = _findNearestSite(_position!, filtered);
-        if (nearest != null && mounted) {
-          setState(() {
-            _site = nearest;
-            _dutyPoint =
-                nearest.dutyPoints.isNotEmpty ? nearest.dutyPoints.first : null;
-            _shift =
-                _dutyPoint?.shiftTemplates.isNotEmpty == true
-                    ? _dutyPoint!.shiftTemplates.first
-                    : null;
-          });
-        }
+      final sites = await ref.read(attendanceSitesProvider.future);
+      final profile = await ref.read(guardProfileProvider.future);
+      final filtered =
+          sites.where((s) => s.district == profile.district).toList();
+      final nearest = _findNearestSite(_position!, filtered);
+      if (nearest != null && mounted) {
+        setState(() {
+          _site = nearest;
+          _dutyPoint =
+              nearest.dutyPoints.isNotEmpty ? nearest.dutyPoints.first : null;
+          _shift =
+              _dutyPoint?.shiftTemplates.isNotEmpty == true
+                  ? _dutyPoint!.shiftTemplates.first
+                  : null;
+        });
       }
     }
   }
@@ -347,7 +345,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                       children: <Widget>[
                         DropdownButtonFormField<SiteOptionModel>(
                           isExpanded: true,
-                          initialValue: _site,
+                          value: _site,
                           items: filteredSites
                               .map(
                                 (site) => DropdownMenuItem<SiteOptionModel>(
@@ -375,7 +373,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<DutyPointModel>(
                           isExpanded: true,
-                          initialValue: _dutyPoint,
+                          value: _dutyPoint,
                           items: dutyPoints
                               .map(
                                 (dutyPoint) => DropdownMenuItem<DutyPointModel>(
@@ -405,7 +403,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<ShiftTemplateModel>(
                           isExpanded: true,
-                          initialValue: _shift,
+                          value: _shift,
                           items:
                               (_dutyPoint?.shiftTemplates ??
                                       const <ShiftTemplateModel>[])
