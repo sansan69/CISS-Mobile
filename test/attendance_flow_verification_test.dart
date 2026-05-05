@@ -86,6 +86,60 @@ void main() {
       expect(filteredSites.first.district, 'Ernakulam');
     });
 
+    test('nearest site selection logic (simulated)', () {
+      final sites = [
+        const SiteOptionModel(
+          id: '1',
+          siteName: 'Far Site',
+          clientName: 'Client X',
+          district: 'Ernakulam',
+          geofenceRadiusMeters: 100,
+          strictGeofence: true,
+          shiftMode: 'none',
+          shiftPattern: null,
+          shiftTemplates: [],
+          sourceCollection: 'sites',
+          lat: 10.0,
+          lng: 76.0,
+        ),
+        const SiteOptionModel(
+          id: '2',
+          siteName: 'Near Site',
+          clientName: 'Client Y',
+          district: 'Ernakulam',
+          geofenceRadiusMeters: 100,
+          strictGeofence: true,
+          shiftMode: 'none',
+          shiftPattern: null,
+          shiftTemplates: [],
+          sourceCollection: 'sites',
+          lat: 10.1,
+          lng: 76.1,
+        ),
+      ];
+
+      // Current position: 10.11, 76.11 (closer to Site 2)
+      const currentLat = 10.11;
+      const currentLng = 76.11;
+
+      SiteOptionModel? nearest;
+      double minDistance = double.infinity;
+
+      // Note: In real code we use Geolocator.distanceBetween
+      // Here we do a simple squared distance for logical verification
+      for (final site in sites) {
+        final dist = (currentLat - site.lat!) * (currentLat - site.lat!) +
+            (currentLng - site.lng!) * (currentLng - site.lng!);
+        if (dist < minDistance) {
+          minDistance = dist;
+          nearest = site;
+        }
+      }
+
+      expect(nearest?.id, '2');
+      expect(nearest?.siteName, 'Near Site');
+    });
+
     group('Date Formatting Consistency', () {
       test('converts DD/MM/YYYY to ISO for API', () {
         const uiDate = '04/12/1998';

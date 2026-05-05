@@ -36,6 +36,38 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   XFile? _photo;
   Position? _position;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initLocationCheck();
+    });
+  }
+
+  Future<void> _initLocationCheck() async {
+    await _captureLocation();
+    if (_position != null) {
+      final sites = ref.read(attendanceSitesProvider).valueOrNull ?? [];
+      final profile = ref.read(guardProfileProvider).valueOrNull;
+      if (profile != null) {
+        final filtered =
+            sites.where((s) => s.district == profile.district).toList();
+        final nearest = _findNearestSite(_position!, filtered);
+        if (nearest != null && mounted) {
+          setState(() {
+            _site = nearest;
+            _dutyPoint =
+                nearest.dutyPoints.isNotEmpty ? nearest.dutyPoints.first : null;
+            _shift =
+                _dutyPoint?.shiftTemplates.isNotEmpty == true
+                    ? _dutyPoint!.shiftTemplates.first
+                    : null;
+          });
+        }
+      }
+    }
+  }
+
   Future<void> _captureLocation() async {
     final enabled = await Geolocator.isLocationServiceEnabled();
     if (!enabled) {
@@ -78,6 +110,30 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         _error = null;
       });
     }
+  }
+
+  SiteOptionModel? _findNearestSite(
+    Position position,
+    List<SiteOptionModel> sites,
+  ) {
+    if (sites.isEmpty) return null;
+    SiteOptionModel? nearest;
+    double minDistance = double.infinity;
+
+    for (final site in sites) {
+      if (site.lat == null || site.lng == null) continue;
+      final distance = Geolocator.distanceBetween(
+        position.latitude,
+        position.longitude,
+        site.lat!,
+        site.lng!,
+      );
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearest = site;
+      }
+    }
+    return nearest;
   }
 
   Future<void> _submitAttendance(GuardProfileModel profile) async {
