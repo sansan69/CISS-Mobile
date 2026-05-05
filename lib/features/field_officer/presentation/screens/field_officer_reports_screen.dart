@@ -1,8 +1,10 @@
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
@@ -12,10 +14,11 @@ import '../../../../../core/models/report_models.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/offline/draft_service.dart';
-import '../../../../../shared/widgets/metric_tile.dart';
-import '../../../../../shared/widgets/screen_scaffold.dart';
+import '../../../../../shared/widgets/brand_banner.dart';
+import '../../../../../shared/widgets/glass_card.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
+import '../../../../../shared/widgets/sync_status_badge.dart';
 import 'field_officer_work_orders_screen.dart';
 
 final FutureProvider<List<VisitReportModel>> fieldOfficerVisitReportsProvider =
@@ -24,7 +27,8 @@ final FutureProvider<List<VisitReportModel>> fieldOfficerVisitReportsProvider =
 });
 
 final FutureProvider<List<TrainingReportModel>>
-fieldOfficerTrainingReportsProvider = FutureProvider<List<TrainingReportModel>>(
+    fieldOfficerTrainingReportsProvider =
+    FutureProvider<List<TrainingReportModel>>(
   (Ref ref) {
     return ref.read(mobileRepositoryProvider).fetchTrainingReports();
   },
@@ -64,7 +68,7 @@ class _FieldOfficerReportsScreenState
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      useSafeArea: true,
+      backgroundColor: Colors.transparent,
       builder: (_) => _NewReportSheet(
         initialTab: _tab,
         workOrders: workOrders,
@@ -91,6 +95,7 @@ class _FieldOfficerReportsScreenState
     final workOrdersAsync = ref.watch(fieldOfficerWorkOrdersProvider);
     final visitAsync = ref.watch(fieldOfficerVisitReportsProvider);
     final trainingAsync = ref.watch(fieldOfficerTrainingReportsProvider);
+    final tokens = CissThemeTokens.of(context);
 
     if (workOrdersAsync.isLoading ||
         visitAsync.isLoading ||
@@ -128,109 +133,118 @@ class _FieldOfficerReportsScreenState
     final filteredVisit = _filteredVisit(visitReports);
     final filteredTraining = _filteredTraining(trainingReports);
 
-    return ScreenScaffold(
-      title: 'Reports',
-      subtitle: 'Visit and training submissions',
-      actions: <Widget>[
-        TextButton.icon(
-          onPressed: () => _openSheet(context, workOrders),
-          icon: const Icon(Icons.add_rounded, size: 18),
-          label: const Text('New'),
-        ),
-        IconButton(
-          onPressed: _refresh,
-          icon: const Icon(Icons.refresh_rounded),
-        ),
-      ],
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: MetricTile(
-                label: 'Visit reports',
-                value: visitReports.length.toString(),
-                helper: 'Total submissions',
-                icon: Icons.fact_check_outlined,
-              ),
+    return Scaffold(
+      backgroundColor: tokens.canvas,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
+        children: [
+          BrandBanner(
+            title: 'Reports',
+            subtitle: 'Field visit and training briefing center',
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SyncStatusBadge(),
+                IconButton(
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+                ),
+              ],
             ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: MetricTile(
-                label: 'Training',
-                value: trainingReports.length.toString(),
-                helper: 'Total sessions',
-                icon: Icons.school_outlined,
-              ),
-            ),
-          ],
-        ),
-        SegmentedButton<_Tab>(
-          segments: const <ButtonSegment<_Tab>>[
-            ButtonSegment<_Tab>(
-              value: _Tab.visit,
-              label: Text('Visit'),
-              icon: Icon(Icons.fact_check_outlined, size: 16),
-            ),
-            ButtonSegment<_Tab>(
-              value: _Tab.training,
-              label: Text('Training'),
-              icon: Icon(Icons.school_outlined, size: 16),
-            ),
-          ],
-          selected: <_Tab>{_tab},
-          onSelectionChanged: (Set<_Tab> next) =>
-              setState(() => _tab = next.first),
-          showSelectedIcon: false,
-        ),
-        if (_tab == _Tab.visit)
-          _StatusFilterRow(
-            options: const <(String, String)>[
-              ('all', 'All'),
-              ('submitted', 'Submitted'),
-              ('reviewed', 'Reviewed'),
-              ('draft', 'Draft'),
-            ],
-            selected: _visitFilter,
-            onChanged: (v) => setState(() => _visitFilter = v),
-          )
-        else
-          _StatusFilterRow(
-            options: const <(String, String)>[
-              ('all', 'All'),
-              ('submitted', 'Submitted'),
-              ('acknowledged', 'Acknowledged'),
-            ],
-            selected: _trainingFilter,
-            onChanged: (v) => setState(() => _trainingFilter = v),
           ),
-        if (_tab == _Tab.visit) ...<Widget>[
-          if (filteredVisit.isEmpty)
-            StateBlock(
-              icon: Icons.fact_check_outlined,
-              title: visitReports.isEmpty
-                  ? 'No visit reports yet'
-                  : 'No ${_visitFilter == 'all' ? '' : _visitFilter} reports',
-              message: visitReports.isEmpty
-                  ? 'Tap "New" to submit your first site visit report.'
-                  : 'Change the status filter to see other reports.',
-            )
-          else
-            ...filteredVisit.map(_VisitReportCard.new),
-        ] else ...<Widget>[
-          if (filteredTraining.isEmpty)
-            StateBlock(
-              icon: Icons.school_outlined,
-              title: trainingReports.isEmpty
-                  ? 'No training reports yet'
-                  : 'No ${_trainingFilter == 'all' ? '' : _trainingFilter} reports',
-              message: trainingReports.isEmpty
-                  ? 'Tap "New" to log your first training session.'
-                  : 'Change the status filter to see other reports.',
-            )
-          else
-            ...filteredTraining.map(_TrainingReportCard.new),
+          
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                SegmentedButton<_Tab>(
+                  segments: const <ButtonSegment<_Tab>>[
+                    ButtonSegment<_Tab>(
+                      value: _Tab.visit,
+                      label: Text('Visit Logs'),
+                      icon: Icon(Icons.fact_check_outlined, size: 16),
+                    ),
+                    ButtonSegment<_Tab>(
+                      value: _Tab.training,
+                      label: Text('Training'),
+                      icon: Icon(Icons.school_outlined, size: 16),
+                    ),
+                  ],
+                  selected: <_Tab>{_tab},
+                  onSelectionChanged: (Set<_Tab> next) =>
+                      setState(() => _tab = next.first),
+                  showSelectedIcon: false,
+                ),
+                const SizedBox(height: 12),
+                if (_tab == _Tab.visit)
+                  _StatusFilterRow(
+                    options: const <(String, String)>[
+                      ('all', 'All'),
+                      ('submitted', 'Submitted'),
+                      ('reviewed', 'Reviewed'),
+                    ],
+                    selected: _visitFilter,
+                    onChanged: (v) => setState(() => _visitFilter = v),
+                  )
+                else
+                  _StatusFilterRow(
+                    options: const <(String, String)>[
+                      ('all', 'All'),
+                      ('submitted', 'Submitted'),
+                      ('acknowledged', 'Acknowledged'),
+                    ],
+                    selected: _trainingFilter,
+                    onChanged: (v) => setState(() => _trainingFilter = v),
+                  ),
+              ],
+            ),
+          ),
+
+          if (_tab == _Tab.visit) ...[
+            if (filteredVisit.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 60),
+                child: StateBlock(
+                  icon: Icons.fact_check_outlined,
+                  title: 'No visit reports',
+                  message: 'Your site visit briefing notes will appear here.',
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: filteredVisit.map((r) => _VisitBriefingCard(r)).toList(),
+                ),
+              ),
+          ] else ...[
+            if (filteredTraining.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 60),
+                child: StateBlock(
+                  icon: Icons.school_outlined,
+                  title: 'No training logs',
+                  message: 'Logged field training sessions will appear here.',
+                ),
+              )
+            else
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Column(
+                  children: filteredTraining.map((r) => _TrainingBriefingCard(r)).toList(),
+                ),
+              ),
+          ],
         ],
-      ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openSheet(context, workOrders),
+        icon: const Icon(Icons.add_rounded),
+        label: Text(
+          'NEW BRIEFING',
+          style: GoogleFonts.rajdhani(fontWeight: FontWeight.w800, letterSpacing: 1),
+        ),
+      ),
     );
   }
 }
@@ -248,18 +262,30 @@ class _StatusFilterRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: options.map((opt) {
           final (value, label) = opt;
+          final isSelected = value == selected;
           return Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.xs),
+            padding: const EdgeInsets.only(right: 8),
             child: FilterChip(
-              label: Text(label),
-              selected: value == selected,
+              label: Text(
+                label.toUpperCase(),
+                style: GoogleFonts.rajdhani(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: isSelected ? tokens.primaryStrong : tokens.inkMuted,
+                ),
+              ),
+              selected: isSelected,
               onSelected: (_) => onChanged(value),
               showCheckmark: false,
+              backgroundColor: tokens.surface,
+              selectedColor: tokens.primarySoft,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.sm)),
             ),
           );
         }).toList(),
@@ -268,260 +294,159 @@ class _StatusFilterRow extends StatelessWidget {
   }
 }
 
-class _VisitReportCard extends StatelessWidget {
-  const _VisitReportCard(this.report);
-
+class _VisitBriefingCard extends StatelessWidget {
+  const _VisitBriefingCard(this.report);
   final VisitReportModel report;
 
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    final theme = Theme.of(context);
+    final isSynced = !report.id.startsWith('local-');
 
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: tokens.border),
-        boxShadow: AppShadows.card,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  report.siteName.isEmpty ? 'Visit report' : report.siteName,
-                  style: theme.textTheme.titleSmall,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              _visitStatusChip(report.status),
-            ],
-          ),
-          if (report.clientName.isNotEmpty) ...<Widget>[
-            const SizedBox(height: AppSpacing.xxs),
-            Text(
-              report.clientName,
-              style: theme.textTheme.bodySmall,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-          const SizedBox(height: AppSpacing.xs),
-          Row(
-            children: <Widget>[
-              Icon(Icons.calendar_today_outlined, size: 13, color: tokens.inkMuted),
-              const SizedBox(width: 4),
-              Text(
-                report.dateLabel.isEmpty ? 'Date unknown' : report.dateLabel,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: tokens.inkMuted,
-                ),
-              ),
-              if (report.district.isNotEmpty) ...<Widget>[
-                const SizedBox(width: AppSpacing.sm),
-                Icon(Icons.place_outlined, size: 13, color: tokens.inkMuted),
-                const SizedBox(width: 3),
-                Expanded(
-                  child: Text(
-                    report.district,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: tokens.inkMuted,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          if (report.guardsPresentCount > 0 || report.guardsAbsentCount > 0) ...<Widget>[
-            const SizedBox(height: AppSpacing.xs),
-            Row(
-              children: <Widget>[
-                Icon(Icons.groups_2_outlined, size: 13, color: tokens.inkMuted),
-                const SizedBox(width: 4),
-                Text(
-                  '${report.guardsPresentCount} present · ${report.guardsAbsentCount} absent',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: tokens.inkMuted,
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (report.summary.isNotEmpty) ...<Widget>[
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              report.summary,
-              style: theme.textTheme.bodySmall,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-          if (report.issuesFound.isNotEmpty) ...<Widget>[
-            const SizedBox(height: AppSpacing.xs),
+      margin: const EdgeInsets.only(bottom: 12),
+      child: GlassCard(
+        padding: const EdgeInsets.all(16),
+        accentColor: isSynced ? tokens.success : tokens.warning,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Icon(Icons.warning_amber_rounded, size: 13, color: tokens.warning),
-                const SizedBox(width: 4),
+              children: [
                 Expanded(
-                  child: Text(
-                    report.issuesFound,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: tokens.warning,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        report.siteName.toUpperCase(),
+                        style: GoogleFonts.rajdhani(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: tokens.ink,
+                        ),
+                      ),
+                      Text(
+                        report.clientName,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tokens.inkMuted),
+                      ),
+                    ],
                   ),
+                ),
+                if (!isSynced)
+                  const StatusChip(label: 'SYNCING', tone: StatusChipTone.warning)
+                else
+                  const Icon(Icons.verified_rounded, size: 18, color: Color(0xFF1F8F63)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.calendar_today_outlined, size: 12, color: tokens.inkMuted),
+                const SizedBox(width: 4),
+                Text(
+                  report.dateLabel,
+                  style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
+                ),
+                const SizedBox(width: 16),
+                Icon(Icons.groups_2_outlined, size: 12, color: tokens.inkMuted),
+                const SizedBox(width: 4),
+                Text(
+                  '${report.guardsPresentCount} IN / ${report.guardsAbsentCount} OUT',
+                  style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.primary),
                 ),
               ],
             ),
+            if (report.summary.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                report.summary,
+                style: Theme.of(context).textTheme.bodySmall,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+            if (report.photoUrls.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _PhotoThumbnailStrip(photoUrls: report.photoUrls),
+            ],
           ],
-          if (report.photoUrls.isNotEmpty) ...<Widget>[
-            const SizedBox(height: AppSpacing.sm),
-            _PhotoThumbnailStrip(photoUrls: report.photoUrls),
-          ],
-        ],
+        ),
       ),
     );
   }
-
-  Widget _visitStatusChip(String status) {
-    return switch (status) {
-      'reviewed' => const StatusChip(
-        label: 'Reviewed',
-        icon: Icons.verified_outlined,
-        tone: StatusChipTone.success,
-      ),
-      'draft' => const StatusChip(
-        label: 'Draft',
-        icon: Icons.edit_note_outlined,
-        tone: StatusChipTone.neutral,
-      ),
-      _ => const StatusChip(
-        label: 'Submitted',
-        icon: Icons.upload_file_outlined,
-        tone: StatusChipTone.info,
-      ),
-    };
-  }
 }
 
-class _TrainingReportCard extends StatelessWidget {
-  const _TrainingReportCard(this.report);
-
+class _TrainingBriefingCard extends StatelessWidget {
+  const _TrainingBriefingCard(this.report);
   final TrainingReportModel report;
 
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    final theme = Theme.of(context);
+    final isSynced = !report.id.startsWith('local-');
 
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: tokens.border),
-        boxShadow: AppShadows.card,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Expanded(
-                child: Text(
-                  report.topic.isEmpty ? 'Training session' : report.topic,
-                  style: theme.textTheme.titleSmall,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+      margin: const EdgeInsets.only(bottom: 12),
+      child: GlassCard(
+        padding: const EdgeInsets.all(16),
+        accentColor: tokens.accent,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        report.topic.toUpperCase(),
+                        style: GoogleFonts.rajdhani(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: tokens.ink,
+                        ),
+                      ),
+                      Text(
+                        report.siteName,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tokens.inkMuted),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              _trainingStatusChip(report.status),
-            ],
-          ),
-          if (report.siteName.isNotEmpty || report.clientName.isNotEmpty) ...<Widget>[
-            const SizedBox(height: AppSpacing.xxs),
-            Text(
-              [if (report.siteName.isNotEmpty) report.siteName, if (report.clientName.isNotEmpty) report.clientName].join(' · '),
-              style: theme.textTheme.bodySmall,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+                if (!isSynced)
+                  const StatusChip(label: 'QUEUED', tone: StatusChipTone.info)
+                else
+                  const Icon(Icons.verified_rounded, size: 18, color: Color(0xFF1F8F63)),
+              ],
             ),
-          ],
-          const SizedBox(height: AppSpacing.xs),
-          Row(
-            children: <Widget>[
-              Icon(Icons.calendar_today_outlined, size: 13, color: tokens.inkMuted),
-              const SizedBox(width: 4),
-              Text(
-                report.dateLabel.isEmpty ? 'Date unknown' : report.dateLabel,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: tokens.inkMuted,
-                ),
-              ),
-              if (report.durationMinutes > 0) ...<Widget>[
-                const SizedBox(width: AppSpacing.sm),
-                Icon(Icons.timer_outlined, size: 13, color: tokens.inkMuted),
-                const SizedBox(width: 3),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.timer_outlined, size: 12, color: tokens.inkMuted),
+                const SizedBox(width: 4),
                 Text(
-                  '${report.durationMinutes} min',
-                  style: theme.textTheme.labelSmall?.copyWith(color: tokens.inkMuted),
+                  '${report.durationMinutes} MINS',
+                  style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.accent),
+                ),
+                const SizedBox(width: 16),
+                Icon(Icons.people_alt_outlined, size: 12, color: tokens.inkMuted),
+                const SizedBox(width: 4),
+                Text(
+                  '${report.attendeeCount} ATTENDED',
+                  style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.inkMuted),
                 ),
               ],
-              if (report.attendeeCount > 0) ...<Widget>[
-                const SizedBox(width: AppSpacing.sm),
-                Icon(Icons.people_outline_rounded, size: 13, color: tokens.inkMuted),
-                const SizedBox(width: 3),
-                Text(
-                  '${report.attendeeCount} attended',
-                  style: theme.textTheme.labelSmall?.copyWith(color: tokens.inkMuted),
-                ),
-              ],
-            ],
-          ),
-          if (report.description.isNotEmpty) ...<Widget>[
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              report.description,
-              style: theme.textTheme.bodySmall,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
+            if (report.photoUrls.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _PhotoThumbnailStrip(photoUrls: report.photoUrls),
+            ],
           ],
-          if (report.photoUrls.isNotEmpty) ...<Widget>[
-            const SizedBox(height: AppSpacing.sm),
-            _PhotoThumbnailStrip(photoUrls: report.photoUrls),
-          ],
-        ],
+        ),
       ),
     );
-  }
-
-  Widget _trainingStatusChip(String status) {
-    return switch (status) {
-      'acknowledged' => const StatusChip(
-        label: 'Acknowledged',
-        icon: Icons.check_circle_outline_rounded,
-        tone: StatusChipTone.success,
-      ),
-      _ => const StatusChip(
-        label: 'Submitted',
-        icon: Icons.upload_file_outlined,
-        tone: StatusChipTone.info,
-      ),
-    };
   }
 }
 
@@ -531,50 +456,21 @@ class _PhotoThumbnailStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = CissThemeTokens.of(context);
-
     return SizedBox(
-      height: 80,
+      height: 60,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: photoUrls.length,
-        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.xs),
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, int i) => GestureDetector(
           onTap: () => _openFullScreen(context, photoUrls[i]),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(AppRadius.sm),
             child: Image.network(
               photoUrls[i],
-              width: 80,
-              height: 80,
+              width: 60,
+              height: 60,
               fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  color: tokens.surfaceStrong,
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                ),
-                child: Icon(Icons.broken_image_outlined, color: tokens.inkMuted),
-              ),
-              loadingBuilder: (_, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: tokens.surfaceStrong,
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  child: const Center(
-                    child: SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  ),
-                );
-              },
             ),
           ),
         ),
@@ -587,16 +483,8 @@ class _PhotoThumbnailStrip extends StatelessWidget {
       MaterialPageRoute<void>(
         builder: (_) => Scaffold(
           backgroundColor: Colors.black,
-          appBar: AppBar(
-            backgroundColor: Colors.black,
-            foregroundColor: Colors.white,
-            elevation: 0,
-          ),
-          body: Center(
-            child: InteractiveViewer(
-              child: Image.network(url, fit: BoxFit.contain),
-            ),
-          ),
+          appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
+          body: Center(child: InteractiveViewer(child: Image.network(url))),
         ),
       ),
     );
@@ -654,8 +542,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     super.initState();
     _tab = widget.initialTab;
     _selectedWorkOrder = widget.workOrders.isNotEmpty ? widget.workOrders.first : null;
-
-    // Add listeners for auto-save
+    
     _visitSummaryCtrl.addListener(_saveDraft);
     _visitIssuesCtrl.addListener(_saveDraft);
     _visitActionsCtrl.addListener(_saveDraft);
@@ -667,7 +554,6 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     _trainingDurationCtrl.addListener(_saveDraft);
     _trainingAttendeeCtrl.addListener(_saveDraft);
 
-    // Restore draft
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreDraft());
   }
 
@@ -721,7 +607,6 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     _visitActionsCtrl.removeListener(_saveDraft);
     _visitPresentCtrl.removeListener(_saveDraft);
     _visitAbsentCtrl.removeListener(_saveDraft);
-    
     _trainingTopicCtrl.removeListener(_saveDraft);
     _trainingDescCtrl.removeListener(_saveDraft);
     _trainingDurationCtrl.removeListener(_saveDraft);
@@ -773,9 +658,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         }
       }
     } catch (_) {
-      if (mounted) {
-        setState(() => _error = 'Could not pick photos. Please try again.');
-      }
+      if (mounted) setState(() => _error = 'Could not pick photos.');
     }
   }
 
@@ -788,9 +671,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         setState(() => _photos.add(_PhotoEntry(bytes: bytes, mimeType: mimeType)));
       }
     } catch (_) {
-      if (mounted) {
-        setState(() => _error = 'Could not capture photo. Please try again.');
-      }
+      if (mounted) setState(() => _error = 'Could not capture photo.');
     }
   }
 
@@ -836,11 +717,6 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     final date = _tab == _Tab.visit ? _visitDate : _trainingDate;
     if (date == null) {
       setState(() => _error = 'Select a date before submitting.');
-      return;
-    }
-
-    if (selected.clientId.isEmpty) {
-      setState(() => _error = 'The selected work order is missing client information. Pick a different one.');
       return;
     }
 
@@ -915,7 +791,6 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         }
         
         await ref.read(draftServiceProvider).clearDraft(_draftKey);
-        
         widget.onSubmitted();
         if (mounted) Navigator.of(context).pop();
       } catch (uploadOrSubmitError) {
@@ -932,9 +807,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
               'photoDataUrls': photoDataUrls,
             },
           );
-
           await ref.read(draftServiceProvider).clearDraft(_draftKey);
-
           widget.onSubmitted();
           if (mounted) Navigator.of(context).pop();
         } else {
@@ -956,133 +829,117 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     final tokens = CissThemeTokens.of(context);
     final theme = Theme.of(context);
 
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Center(
-              child: Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: tokens.border,
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                ),
-              ),
-            ),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    'New report',
-                    style: theme.textTheme.titleLarge?.copyWith(fontSize: 20),
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded),
-                  style: IconButton.styleFrom(
-                    backgroundColor: tokens.surfaceStrong,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            SegmentedButton<_Tab>(
-              segments: const <ButtonSegment<_Tab>>[
-                ButtonSegment<_Tab>(
-                  value: _Tab.visit,
-                  label: Text('Visit report'),
-                  icon: Icon(Icons.fact_check_outlined, size: 16),
-                ),
-                ButtonSegment<_Tab>(
-                  value: _Tab.training,
-                  label: Text('Training'),
-                  icon: Icon(Icons.school_outlined, size: 16),
-                ),
-              ],
-              selected: <_Tab>{_tab},
-              onSelectionChanged: (Set<_Tab> next) => setState(() => _tab = next.first),
-              showSelectedIcon: false,
-            ),
-            const SizedBox(height: 16),
-            if (widget.workOrders.isNotEmpty) ...<Widget>[
-              DropdownButtonFormField<WorkOrderModel>(
-                initialValue: _selectedWorkOrder,
-                decoration: const InputDecoration(
-                  labelText: 'Linked work order',
-                  prefixIcon: Icon(Icons.assignment_turned_in_outlined),
-                ),
-                items: widget.workOrders
-                    .map(
-                      (w) => DropdownMenuItem<WorkOrderModel>(
-                        value: w,
-                        child: Text(
-                          '${w.siteName.isEmpty ? 'Site' : w.siteName} · ${w.examName}',
-                          overflow: TextOverflow.ellipsis,
+    return DraggableScrollableSheet(
+      initialChildSize: 0.9,
+      maxChildSize: 0.95,
+      minChildSize: 0.5,
+      builder: (_, scrollController) => Container(
+        decoration: BoxDecoration(
+          color: tokens.surface.withValues(alpha: 0.95),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 40, height: 4,
+                      decoration: BoxDecoration(color: tokens.border, borderRadius: BorderRadius.circular(2)),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'NEW BRIEFING',
+                            style: GoogleFonts.rajdhani(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 1),
+                          ),
                         ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (v) => setState(() => _selectedWorkOrder = v),
-              ),
-              const SizedBox(height: 14),
-            ],
-            if (_tab == _Tab.visit) _buildVisitForm() else _buildTrainingForm(),
-            const SizedBox(height: 16),
-            _buildPhotoSection(tokens),
-            if (_error != null) ...<Widget>[
-              const SizedBox(height: AppSpacing.sm),
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.sm),
-                decoration: BoxDecoration(
-                  color: tokens.dangerSoft,
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                        IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    SegmentedButton<_Tab>(
+                      segments: const <ButtonSegment<_Tab>>[
+                        ButtonSegment<_Tab>(value: _Tab.visit, label: Text('Visit'), icon: Icon(Icons.fact_check_outlined, size: 16)),
+                        ButtonSegment<_Tab>(value: _Tab.training, label: Text('Training'), icon: Icon(Icons.school_outlined, size: 16)),
+                      ],
+                      selected: <_Tab>{_tab},
+                      onSelectionChanged: (Set<_Tab> next) => setState(() => _tab = next.first),
+                      showSelectedIcon: false,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
+              ),
+
+              Expanded(
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
+                  children: [
+                    if (widget.workOrders.isNotEmpty) ...[
+                      DropdownButtonFormField<WorkOrderModel>(
+                        initialValue: _selectedWorkOrder,
+                        decoration: const InputDecoration(
+                          labelText: 'Link to Work Order',
+                          prefixIcon: Icon(Icons.assignment_turned_in_outlined),
+                        ),
+                        items: widget.workOrders.map((w) => DropdownMenuItem(
+                          value: w,
+                          child: Text('${w.siteName} · ${w.examName}', overflow: TextOverflow.ellipsis),
+                        )).toList(),
+                        onChanged: (v) => setState(() => _selectedWorkOrder = v),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    if (_tab == _Tab.visit) _buildVisitForm() else _buildTrainingForm(),
+                    const SizedBox(height: 24),
+                    _buildPhotoSection(tokens),
+                  ],
+                ),
+              ),
+
+              // Action Bar
+              Container(
+                padding: EdgeInsets.fromLTRB(24, 16, 24, 16 + MediaQuery.of(context).padding.bottom),
+                decoration: BoxDecoration(color: tokens.surface, border: Border(top: BorderSide(color: tokens.border))),
                 child: Row(
-                  children: <Widget>[
-                    Icon(Icons.error_outline_rounded, color: tokens.danger, size: 16),
-                    const SizedBox(width: AppSpacing.xs),
-                    Expanded(
-                      child: Text(
-                        _error!,
-                        style: theme.textTheme.bodySmall?.copyWith(color: tokens.danger),
+                  children: [
+                    if (_error != null)
+                      Expanded(child: Text(_error!, style: theme.textTheme.bodySmall?.copyWith(color: tokens.danger), maxLines: 2))
+                    else
+                      const Spacer(),
+                    const SizedBox(width: 16),
+                    SizedBox(
+                      height: 48,
+                      child: FilledButton(
+                        onPressed: _loading ? null : _submit,
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(140, 48),
+                        ),
+                        child: _loading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('SUBMIT REPORT'),
                       ),
                     ),
                   ],
                 ),
               ),
             ],
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: _loading ? null : _submit,
-                icon: _loading
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : const Icon(Icons.send_rounded, size: 18),
-                label: Text(
-                  _tab == _Tab.visit
-                      ? 'Submit visit report'
-                      : 'Submit training report',
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -1090,139 +947,50 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
 
   Widget _buildVisitForm() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
+      children: [
         TextField(
           controller: _visitDateCtrl,
           readOnly: true,
           onTap: () => _pickDate(isVisit: true),
-          decoration: const InputDecoration(
-            labelText: 'Visit date',
-            hintText: 'Tap to select',
-            prefixIcon: Icon(Icons.calendar_month_outlined),
-            suffixIcon: Icon(Icons.arrow_drop_down_rounded),
-          ),
+          decoration: const InputDecoration(labelText: 'Visit Date', prefixIcon: Icon(Icons.calendar_today_outlined)),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         Row(
-          children: <Widget>[
-            Expanded(
-              child: TextField(
-                controller: _visitPresentCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Guards present',
-                  prefixIcon: Icon(Icons.check_circle_outline_rounded),
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: TextField(
-                controller: _visitAbsentCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Guards absent',
-                  prefixIcon: Icon(Icons.cancel_outlined),
-                ),
-              ),
-            ),
+          children: [
+            Expanded(child: TextField(controller: _visitPresentCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Guards Present'))),
+            const SizedBox(width: 16),
+            Expanded(child: TextField(controller: _visitAbsentCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Guards Absent'))),
           ],
         ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _visitSummaryCtrl,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            labelText: 'Visit summary',
-            hintText: 'Describe what you observed during this visit',
-            alignLabelWithHint: true,
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _visitIssuesCtrl,
-          maxLines: 2,
-          decoration: const InputDecoration(
-            labelText: 'Issues found',
-            hintText: 'Any compliance, safety, or operational issues',
-            alignLabelWithHint: true,
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _visitActionsCtrl,
-          maxLines: 2,
-          decoration: const InputDecoration(
-            labelText: 'Actions required',
-            hintText: 'Follow-up steps or escalations needed',
-            alignLabelWithHint: true,
-          ),
-        ),
+        const SizedBox(height: 16),
+        TextField(controller: _visitSummaryCtrl, maxLines: 4, decoration: const InputDecoration(labelText: 'Visit Summary', alignLabelWithHint: true)),
+        const SizedBox(height: 16),
+        TextField(controller: _visitIssuesCtrl, maxLines: 2, decoration: const InputDecoration(labelText: 'Issues Found')),
       ],
     );
   }
 
   Widget _buildTrainingForm() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
+      children: [
         TextField(
           controller: _trainingDateCtrl,
           readOnly: true,
           onTap: () => _pickDate(isVisit: false),
-          decoration: const InputDecoration(
-            labelText: 'Training date',
-            hintText: 'Tap to select',
-            prefixIcon: Icon(Icons.calendar_month_outlined),
-            suffixIcon: Icon(Icons.arrow_drop_down_rounded),
-          ),
+          decoration: const InputDecoration(labelText: 'Training Date', prefixIcon: Icon(Icons.calendar_today_outlined)),
         ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _trainingTopicCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Topic',
-            hintText: 'e.g. Emergency procedures, Equipment handling',
-            prefixIcon: Icon(Icons.subject_rounded),
-          ),
-        ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
+        TextField(controller: _trainingTopicCtrl, decoration: const InputDecoration(labelText: 'Training Topic')),
+        const SizedBox(height: 16),
         Row(
-          children: <Widget>[
-            Expanded(
-              child: TextField(
-                controller: _trainingDurationCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Duration (min)',
-                  prefixIcon: Icon(Icons.timer_outlined),
-                ),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: TextField(
-                controller: _trainingAttendeeCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Attendees',
-                  prefixIcon: Icon(Icons.people_outline_rounded),
-                ),
-              ),
-            ),
+          children: [
+            Expanded(child: TextField(controller: _trainingDurationCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Duration (Min)'))),
+            const SizedBox(width: 16),
+            Expanded(child: TextField(controller: _trainingAttendeeCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Attendee Count'))),
           ],
         ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _trainingDescCtrl,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            labelText: 'Description',
-            hintText: 'Key points covered, observations, outcomes',
-            alignLabelWithHint: true,
-          ),
-        ),
+        const SizedBox(height: 16),
+        TextField(controller: _trainingDescCtrl, maxLines: 4, decoration: const InputDecoration(labelText: 'Notes/Outcomes')),
       ],
     );
   }
@@ -1230,88 +998,13 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
   Widget _buildPhotoSection(CissThemeTokens tokens) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Icon(Icons.camera_alt_outlined, size: 18, color: tokens.inkMuted),
-            const SizedBox(width: AppSpacing.xs),
-            Text(
-              'Photos (${_photos.length})',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: tokens.ink,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.sm),
+      children: [
+        Text('ATTACHMENTS (${_photos.length})', style: GoogleFonts.rajdhani(fontSize: 12, fontWeight: FontWeight.w800, color: tokens.inkMuted, letterSpacing: 1)),
+        const SizedBox(height: 12),
         Wrap(
-          spacing: AppSpacing.sm,
-          runSpacing: AppSpacing.sm,
-          children: <Widget>[
-            ..._photos.asMap().entries.map((entry) {
-              final index = entry.key;
-              final photo = entry.value;
-              return Stack(
-                children: <Widget>[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                    child: Image.memory(
-                      photo.bytes,
-                      width: 80,
-                      height: 80,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                  Positioned(
-                    top: 2,
-                    right: 2,
-                    child: GestureDetector(
-                      onTap: () => _removePhoto(index),
-                      child: Container(
-                        width: 22,
-                        height: 22,
-                        decoration: const BoxDecoration(
-                          color: Colors.black54,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.close_rounded,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                      ),
-                    ),
-                  ),
-                  if (photo.uploading)
-                    const Positioned.fill(
-                      child: Center(
-                        child: SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        ),
-                      ),
-                    ),
-                  if (photo.uploadedUrl != null)
-                    Positioned(
-                      bottom: 2,
-                      right: 2,
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1F8F63),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.check_rounded, color: Colors.white, size: 14),
-                      ),
-                    ),
-                ],
-              );
-            }),
+          spacing: 12, runSpacing: 12,
+          children: [
+            ..._photos.asMap().entries.map((entry) => _PhotoPreview(index: entry.key, photo: entry.value, onRemove: _removePhoto)),
             _AddPhotoButton(onGallery: _pickPhotos, onCamera: _takePhoto),
           ],
         ),
@@ -1320,55 +1013,62 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
   }
 }
 
+class _PhotoPreview extends StatelessWidget {
+  const _PhotoPreview({required this.index, required this.photo, required this.onRemove});
+  final int index;
+  final _PhotoEntry photo;
+  final Function(int) onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(photo.bytes, width: 80, height: 80, fit: BoxFit.cover)),
+        Positioned(
+          top: 4, right: 4,
+          child: GestureDetector(
+            onTap: () => onRemove(index),
+            child: Container(
+              decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+              child: const Icon(Icons.close_rounded, size: 16, color: Colors.white),
+            ),
+          ),
+        ),
+        if (photo.uploading) const Positioned.fill(child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))),
+      ],
+    );
+  }
+}
+
 class _AddPhotoButton extends StatelessWidget {
   const _AddPhotoButton({required this.onGallery, required this.onCamera});
-
   final VoidCallback onGallery;
   final VoidCallback onCamera;
 
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-
-    return PopupMenuButton<String>(
-      onSelected: (value) {
-        if (value == 'gallery') onGallery();
-        if (value == 'camera') onCamera();
-      },
-      itemBuilder: (_) => <PopupMenuEntry<String>>[
-        PopupMenuItem<String>(
-          value: 'camera',
-          child: Row(
-            children: <Widget>[
-              Icon(Icons.camera_alt_rounded, size: 20, color: tokens.primary),
-              const SizedBox(width: AppSpacing.sm),
-              const Text('Take photo'),
-            ],
-          ),
-        ),
-        PopupMenuItem<String>(
-          value: 'gallery',
-          child: Row(
-            children: <Widget>[
-              Icon(Icons.photo_library_rounded, size: 20, color: tokens.primary),
-              const SizedBox(width: AppSpacing.sm),
-              const Text('Choose from gallery'),
-            ],
-          ),
-        ),
-      ],
+    return InkWell(
+      onTap: () => _showPicker(context),
+      borderRadius: BorderRadius.circular(8),
       child: Container(
-        width: 80,
-        height: 80,
-        decoration: BoxDecoration(
-          color: tokens.surfaceStrong,
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          border: Border.all(
-            color: tokens.border,
-            style: BorderStyle.solid,
-          ),
+        width: 80, height: 80,
+        decoration: BoxDecoration(color: tokens.surfaceStrong, borderRadius: BorderRadius.circular(8), border: Border.all(color: tokens.border)),
+        child: Icon(Icons.add_a_photo_outlined, color: tokens.inkMuted),
+      ),
+    );
+  }
+
+  void _showPicker(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(leading: const Icon(Icons.camera_alt_rounded), title: const Text('Take Photo'), onTap: () { Navigator.pop(context); onCamera(); }),
+            ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('Gallery'), onTap: () { Navigator.pop(context); onGallery(); }),
+          ],
         ),
-        child: Icon(Icons.add_rounded, color: tokens.inkMuted, size: 28),
       ),
     );
   }

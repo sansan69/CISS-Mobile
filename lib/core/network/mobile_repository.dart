@@ -662,11 +662,18 @@ class MobileRepository {
     final data = await _getJson(
       '/api/field-officer/attendance',
       queryParameters: <String, dynamic>{
-        if (date != null) 'date': date,
-        if (district != null) 'district': district,
+        if (date != null && date.isNotEmpty) 'date': date,
+        if (district != null && district.trim().isNotEmpty)
+          'district': district.trim(),
       },
     );
-    final entries = data['attendance'] as List<dynamic>? ?? const <dynamic>[];
+
+    // Check multiple possible keys for robustness
+    final entries =
+        (data['attendance'] ?? data['records'] ?? data['logs'] ?? data['data'])
+            as List<dynamic>? ??
+        const <dynamic>[];
+
     return entries
         .whereType<Map<String, dynamic>>()
         .map(FieldOfficerAttendanceEntry.fromJson)

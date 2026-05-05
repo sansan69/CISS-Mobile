@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../auth/application/auth_controller.dart';
 import '../field_officer_tab_provider.dart';
+import '../../../shared/widgets/brand_banner.dart';
+import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/branded_navigation_bar.dart';
-import '../../../shared/widgets/screen_scaffold.dart';
-import '../../../shared/widgets/section_card.dart';
 import '../../../shared/widgets/theme_mode_selector.dart';
 import '../../../shared/widgets/security_settings_card.dart';
+import '../../../shared/widgets/sync_status_badge.dart';
 import 'screens/field_officer_attendance_screen.dart';
 import 'screens/field_officer_dashboard_screen.dart';
 import 'screens/field_officer_guards_screen.dart';
@@ -105,31 +107,190 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = CissThemeTokens.of(context);
-    return ScreenScaffold(
-      title: 'More tools',
-      subtitle: 'Support, reference, and session actions',
-      children: <Widget>[
-        const ThemeModeSelector(),
-        const SecuritySettingsCard(),
-        const SectionCard(
-          title: 'Incident feed',
-          subtitle: 'Review field incidents and escalations',
-          icon: Icons.assignment_late_outlined,
-        ),
-        const SectionCard(
-          title: 'Sites',
-          subtitle: 'District sites and duty coverage',
-          icon: Icons.place_outlined,
-        ),
-        FilledButton(
-          onPressed: () => ref.read(authControllerProvider).signOut(),
-          style: FilledButton.styleFrom(
-            backgroundColor: tokens.dangerSoft,
-            foregroundColor: tokens.danger,
+    final session = ref.watch(authSessionProvider).value;
+
+    return Scaffold(
+      backgroundColor: tokens.canvas,
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
+        children: [
+          BrandBanner(
+            title: 'Vault',
+            subtitle: 'Secure tools and system settings',
+            trailing: const SyncStatusBadge(),
           ),
-          child: const Text('Sign out'),
+          
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'PREFERENCES',
+                  style: GoogleFonts.rajdhani(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2,
+                    color: tokens.inkMuted,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const ThemeModeSelector(),
+                const SizedBox(height: 12),
+                const SecuritySettingsCard(),
+                
+                const SizedBox(height: 32),
+                Text(
+                  'SYSTEM TOOLS',
+                  style: GoogleFonts.rajdhani(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2,
+                    color: tokens.inkMuted,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1.3,
+                  children: [
+                    _ToolTile(
+                      icon: Icons.assignment_late_outlined,
+                      label: 'Incidents',
+                      color: tokens.warning,
+                      onTap: () {},
+                    ),
+                    _ToolTile(
+                      icon: Icons.place_outlined,
+                      label: 'Sites',
+                      color: tokens.primary,
+                      onTap: () {},
+                    ),
+                    _ToolTile(
+                      icon: Icons.sync_rounded,
+                      label: 'Sync Logs',
+                      color: tokens.success,
+                      onTap: () {},
+                    ),
+                    _ToolTile(
+                      icon: Icons.help_outline_rounded,
+                      label: 'Support',
+                      color: tokens.accent,
+                      onTap: () {},
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 40),
+                GlassCard(
+                  accentColor: tokens.danger,
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: tokens.primarySoft,
+                            child: const Icon(Icons.person_outline_rounded, size: 28),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  session?.displayName.toUpperCase() ?? 'OFFICER',
+                                  style: GoogleFonts.rajdhani(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    color: tokens.ink,
+                                  ),
+                                ),
+                                Text(
+                                  session?.email ?? 'active session',
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton.icon(
+                          onPressed: () => ref.read(authControllerProvider).signOut(),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: tokens.danger,
+                            side: BorderSide(color: tokens.danger.withValues(alpha: 0.5)),
+                          ),
+                          icon: const Icon(Icons.logout_rounded, size: 18),
+                          label: Text(
+                            'TERMINATE SESSION',
+                            style: GoogleFonts.rajdhani(fontWeight: FontWeight.w800, letterSpacing: 1),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ToolTile extends StatelessWidget {
+  const _ToolTile({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: GlassCard(
+          padding: const EdgeInsets.all(16),
+          accentColor: color,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: color, size: 28),
+              const SizedBox(height: 12),
+              Text(
+                label.toUpperCase(),
+                style: GoogleFonts.rajdhani(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  color: tokens.ink,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ),
         ),
-      ],
+      ),
     );
   }
 }

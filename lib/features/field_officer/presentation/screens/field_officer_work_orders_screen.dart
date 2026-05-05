@@ -360,6 +360,7 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
   String _query = '';
   bool _loading = true;
   bool _saving = false;
+  String? _error;
 
   @override
   void initState() {

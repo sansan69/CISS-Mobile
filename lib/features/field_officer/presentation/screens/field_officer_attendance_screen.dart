@@ -10,8 +10,7 @@ import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/glass_card.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
-...
-            error: (_, _) => const SizedBox.shrink(),
+import 'field_officer_dashboard_screen.dart';
 
 final StateProvider<String?> attendanceSelectedDateProvider =
     StateProvider<String?>((Ref ref) => null);
@@ -130,7 +129,14 @@ class _FieldOfficerGuardAttendanceScreenState
               padding: EdgeInsets.only(top: 40),
               child: Center(child: CircularProgressIndicator()),
             ),
-            error: (_, __) => const SizedBox.shrink(),
+            error: (err, _) => Padding(
+              padding: const EdgeInsets.all(24),
+              child: StateBlock(
+                icon: Icons.error_outline_rounded,
+                title: 'Data error',
+                message: err.toString(),
+              ),
+            ),
             data: (dashboard) {
               final sites = dashboard.attendanceSites;
               
@@ -333,7 +339,7 @@ class _LiveGuardRow extends StatelessWidget {
                       : null,
                   child: (entry.photoUrl == null || entry.photoUrl!.isEmpty)
                       ? Text(
-                          entry.guardName.substring(0, 1).toUpperCase(),
+                          entry.guardName.isNotEmpty ? entry.guardName.substring(0, 1).toUpperCase() : 'G',
                           style: GoogleFonts.rajdhani(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
