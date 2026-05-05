@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../shared/widgets/brand_banner.dart';
-import '../../../../../shared/widgets/metric_tile.dart';
+import '../../../../../shared/widgets/glass_card.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
@@ -24,6 +25,7 @@ class FieldOfficerDashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final snapshot = ref.watch(fieldOfficerDashboardProvider);
+    final tokens = CissThemeTokens.of(context);
 
     return snapshot.when(
       loading: () => const Scaffold(
@@ -51,36 +53,88 @@ class FieldOfficerDashboardScreen extends ConsumerWidget {
             : data.assignedDistricts.join(', ');
 
         return Scaffold(
-          body: ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 32),
-            itemCount: 4,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemBuilder: (BuildContext context, int index) {
-              return switch (index) {
-                0 => BrandBanner(
-                    title: 'Dashboard',
-                    subtitle: '${data.name} · $districts',
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        const SyncStatusBadge(),
-                        const SizedBox(width: 4),
-                        IconButton(
-                          onPressed: () => ref.invalidate(fieldOfficerDashboardProvider),
-                          icon: Icon(
-                            Icons.refresh_rounded,
-                            color: Colors.white.withValues(alpha: 0.85),
-                          ),
-                        ),
-                      ],
+          backgroundColor: tokens.canvas,
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
+            children: <Widget>[
+              BrandBanner(
+                title: 'Command Center',
+                subtitle: '${data.name} · $districts',
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const SyncStatusBadge(),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      onPressed: () => ref.invalidate(fieldOfficerDashboardProvider),
+                      icon: const Icon(
+                        Icons.refresh_rounded,
+                        color: Colors.white70,
+                      ),
                     ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: AppSpacing.lg),
+              
+              // Command Tiles
+              SizedBox(
+                height: 160,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: <Widget>[
+                    _CommandTile(
+                      label: 'Total Guards',
+                      value: '${data.totalGuards}',
+                      icon: Icons.groups_2_outlined,
+                      accentColor: tokens.primary,
+                      helper: 'Registered in $districts',
+                    ),
+                    const SizedBox(width: 12),
+                    _DeploymentTile(
+                      active: data.activeGuards,
+                      total: data.totalGuards,
+                      accentColor: tokens.success,
+                    ),
+                    const SizedBox(width: 12),
+                    _CommandTile(
+                      label: 'Check-ins',
+                      value: '${data.attendanceSummary.checkedInToday}',
+                      icon: Icons.login_rounded,
+                      accentColor: tokens.accent,
+                      helper: 'Today\'s total activity',
+                    ),
+                  ],
+                ),
+              ),
+
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                child: Text(
+                  'OPERATIONS',
+                  style: GoogleFonts.rajdhani(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2,
+                    color: tokens.inkMuted,
                   ),
-                1 => _StatGrid(data: data),
-                2 => _QuickActionsGrid(ref: ref),
-                3 => _AttendanceCard(data: data),
-                _ => const SizedBox.shrink(),
-              };
-            },
+                ),
+              ),
+              
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _QuickActionsGrid(ref: ref),
+              ),
+
+              const SizedBox(height: 24),
+              
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _AttendanceOverview(data: data),
+              ),
+            ],
           ),
         );
       },
@@ -88,48 +142,156 @@ class FieldOfficerDashboardScreen extends ConsumerWidget {
   }
 }
 
-class _StatGrid extends StatelessWidget {
-  const _StatGrid({required this.data});
-  final FieldOfficerDashboardSnapshot data;
+class _CommandTile extends StatelessWidget {
+  const _CommandTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.accentColor,
+    required this.helper,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color accentColor;
+  final String helper;
 
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-
-    return Column(
-      children: <Widget>[
-        Row(
-          children: <Widget>[
-            Expanded(
-              child: MetricTile(
-                label: 'Total Guards',
-                value: '${data.totalGuards}',
-                helper: 'Registered in districts',
-                icon: Icons.groups_2_outlined,
-                accentColor: tokens.primary,
+    
+    return GlassCard(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      accentColor: accentColor,
+      child: SizedBox(
+        width: 160,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: accentColor, size: 20),
+                const Spacer(),
+                Text(
+                  label.toUpperCase(),
+                  style: GoogleFonts.rajdhani(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: tokens.inkMuted,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            Text(
+              value,
+              style: GoogleFonts.rajdhani(
+                fontSize: 42,
+                fontWeight: FontWeight.w800,
+                color: tokens.ink,
+                height: 1,
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            const SizedBox(height: 4),
+            Text(
+              helper,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: tokens.inkMuted,
+                fontSize: 10,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DeploymentTile extends StatelessWidget {
+  const _DeploymentTile({
+    required this.active,
+    required this.total,
+    required this.accentColor,
+  });
+
+  final int active;
+  final int total;
+  final Color accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    final double progress = total <= 0 ? 0.0 : (active / total).clamp(0, 1);
+    final int percent = (progress * 100).toInt();
+
+    return GlassCard(
+      accentColor: accentColor,
+      child: SizedBox(
+        width: 160,
+        child: Row(
+          children: [
             Expanded(
-              child: MetricTile(
-                label: 'Active Guards',
-                value: '${data.activeGuards}',
-                helper: 'Currently deployed',
-                icon: Icons.verified_outlined,
-                accentColor: tokens.success,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'DEPLOYMENT',
+                    style: GoogleFonts.rajdhani(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: tokens.inkMuted,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '$percent%',
+                    style: GoogleFonts.rajdhani(
+                      fontSize: 42,
+                      fontWeight: FontWeight.w800,
+                      color: accentColor,
+                      height: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$active of $total on duty',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: tokens.inkMuted,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CircularProgressIndicator(
+                    value: 1.0,
+                    strokeWidth: 6,
+                    color: accentColor.withValues(alpha: 0.1),
+                  ),
+                  CircularProgressIndicator(
+                    value: progress,
+                    strokeWidth: 6,
+                    color: accentColor,
+                    strokeCap: StrokeCap.round,
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.sm),
-        MetricTile(
-          label: 'Checked In Today',
-          value: '${data.attendanceSummary.checkedInToday}',
-          helper: 'Attendance recorded today',
-          icon: Icons.login_rounded,
-          accentColor: tokens.accent,
-        ),
-      ],
+      ),
     );
   }
 }
@@ -168,48 +330,14 @@ class _QuickActionsGrid extends StatelessWidget {
       ),
     ];
 
-    return Row(
-      children: <Widget>[
-        Expanded(
-          child: Column(
-            children: <Widget>[
-              _QuickActionTile(
-                action: actions[0],
-                onTap: () => ref
-                    .read(fieldOfficerTabIndexProvider.notifier)
-                    .state = actions[0].tabIndex,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              _QuickActionTile(
-                action: actions[2],
-                onTap: () => ref
-                    .read(fieldOfficerTabIndexProvider.notifier)
-                    .state = actions[2].tabIndex,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Column(
-            children: <Widget>[
-              _QuickActionTile(
-                action: actions[1],
-                onTap: () => ref
-                    .read(fieldOfficerTabIndexProvider.notifier)
-                    .state = actions[1].tabIndex,
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              _QuickActionTile(
-                action: actions[3],
-                onTap: () => ref
-                    .read(fieldOfficerTabIndexProvider.notifier)
-                    .state = actions[3].tabIndex,
-              ),
-            ],
-          ),
-        ),
-      ],
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      mainAxisSpacing: 12,
+      crossAxisSpacing: 12,
+      childAspectRatio: 1.6,
+      children: actions.map((action) => _ActionCard(action: action, ref: ref)).toList(),
     );
   }
 }
@@ -227,62 +355,51 @@ class _QuickAction {
   final int tabIndex;
 }
 
-class _QuickActionTile extends StatelessWidget {
-  const _QuickActionTile({required this.action, required this.onTap});
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({required this.action, required this.ref});
   final _QuickAction action;
-  final VoidCallback onTap;
+  final WidgetRef ref;
 
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: tokens.border),
-      ),
-      child: Material(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md,
-              vertical: AppSpacing.lg,
-            ),
-            decoration: BoxDecoration(
-              border: Border(
-                left: BorderSide(
-                  color: action.color.withValues(alpha: 0.5),
-                  width: 4,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => ref.read(fieldOfficerTabIndexProvider.notifier).state = action.tabIndex,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: GlassCard(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          accentColor: action.color,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: action.color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
                 ),
+                child: Icon(action.icon, color: action.color, size: 20),
               ),
-            ),
-            child: Row(
-              children: <Widget>[
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: action.color.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  child: Icon(action.icon, color: action.color, size: 20),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Text(
-                    action.label,
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: tokens.ink,
+              const Spacer(),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      action.label,
+                      style: GoogleFonts.rajdhani(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: tokens.ink,
+                      ),
                     ),
                   ),
-                ),
-                Icon(Icons.chevron_right_rounded, size: 20, color: tokens.inkMuted),
-              ],
-            ),
+                  Icon(Icons.arrow_forward_rounded, size: 14, color: tokens.inkMuted),
+                ],
+              ),
+            ],
           ),
         ),
       ),
@@ -290,122 +407,114 @@ class _QuickActionTile extends StatelessWidget {
   }
 }
 
-class _AttendanceCard extends StatelessWidget {
-  const _AttendanceCard({required this.data});
+class _AttendanceOverview extends ConsumerWidget {
+  const _AttendanceOverview({required this.data});
   final FieldOfficerDashboardSnapshot data;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = CissThemeTokens.of(context);
     final theme = Theme.of(context);
     final districts = data.attendanceSummary.districts;
     final sites = data.attendanceSites;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: tokens.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Container(
-            height: 4,
-            decoration: BoxDecoration(
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(AppRadius.md - 1),
-              ),
-              gradient: LinearGradient(
-                colors: <Color>[tokens.primaryStrong, tokens.primary],
-              ),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'ATTENDANCE FEED',
+          style: GoogleFonts.rajdhani(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2,
+            color: tokens.inkMuted,
           ),
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Row(
-                  children: <Widget>[
-                    Container(
-                      width: 38,
-                      height: 38,
-                      decoration: BoxDecoration(
-                        color: tokens.primarySoft,
-                        borderRadius: BorderRadius.circular(AppRadius.sm),
-                      ),
-                      child: Icon(
-                        Icons.fact_check_outlined,
-                        color: tokens.primaryStrong,
-                        size: 18,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
+        ),
+        const SizedBox(height: 12),
+        GlassCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Row(
+                  children: [
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text('Attendance overview',
-                              style: theme.textTheme.titleSmall),
+                        children: [
                           Text(
-                            data.attendanceSummary.date.isEmpty
-                                ? 'Today'
-                                : data.attendanceSummary.date,
+                            'Daily Coverage',
+                            style: GoogleFonts.rajdhani(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: tokens.ink,
+                            ),
+                          ),
+                          Text(
+                            data.attendanceSummary.date.isEmpty ? 'Today' : data.attendanceSummary.date,
                             style: theme.textTheme.bodySmall,
                           ),
                         ],
                       ),
                     ),
                     StatusChip(
-                      label: data.stateCode.isEmpty ? 'Live' : data.stateCode,
+                      label: data.stateCode.isEmpty ? 'LIVE' : data.stateCode,
                       icon: Icons.radar_rounded,
                       tone: StatusChipTone.info,
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.md),
-                if (districts.isEmpty)
-                  Text(
-                    'Attendance will appear once guards check in today.',
-                    style: theme.textTheme.bodySmall,
-                  )
-                else
-                  ...districts.map(
-                    (d) => _ProgressLine(
-                      label: d.district,
-                      checkedIn: d.checkedInToday,
-                      onDuty: d.onDutyNow,
+              ),
+              Divider(height: 1, color: tokens.border.withValues(alpha: 0.3)),
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  children: [
+                    if (districts.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        child: Text(
+                          'Waiting for morning check-ins...',
+                          style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+                        ),
+                      )
+                    else
+                      ...districts.map((d) => _ProgressLine(
+                        label: d.district,
+                        checkedIn: d.checkedInToday,
+                        onDuty: d.onDutyNow,
+                        accentColor: tokens.primary,
+                      )),
+                    
+                    if (sites.isNotEmpty) ...[
+                      const SizedBox(height: 16),
+                      ...sites.take(3).map((s) => _ProgressLine(
+                        label: s.siteName,
+                        sublabel: s.clientName,
+                        checkedIn: s.checkedInToday,
+                        onDuty: s.onDutyNow,
+                        accentColor: tokens.success,
+                      )),
+                    ],
+                  ],
+                ),
+              ),
+              if (sites.length > 3)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: TextButton(
+                    onPressed: () => ref.read(fieldOfficerTabIndexProvider.notifier).state = 3,
+                    child: Text(
+                      'View all ${sites.length} sites',
+                      style: GoogleFonts.rajdhani(fontWeight: FontWeight.w700, color: tokens.primary),
                     ),
                   ),
-                if (sites.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: AppSpacing.xs),
-                  Divider(color: tokens.border, height: 1),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    'Active sites',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: tokens.inkMuted,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  ...sites.map(
-                    (s) => _ProgressLine(
-                      label: s.siteName.isEmpty ? 'Site' : s.siteName,
-                      sublabel: s.district,
-                      checkedIn: s.checkedInToday,
-                      onDuty: s.onDutyNow,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+                ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -415,6 +524,7 @@ class _ProgressLine extends StatelessWidget {
     required this.label,
     required this.checkedIn,
     required this.onDuty,
+    required this.accentColor,
     this.sublabel,
   });
 
@@ -422,60 +532,60 @@ class _ProgressLine extends StatelessWidget {
   final String? sublabel;
   final int checkedIn;
   final int onDuty;
+  final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    final double p =
-        checkedIn <= 0 ? 0 : (onDuty / checkedIn).clamp(0, 1).toDouble();
+    final double p = checkedIn <= 0 ? 0 : (onDuty / checkedIn).clamp(0, 1).toDouble();
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
+        children: [
           Row(
-            children: <Widget>[
+            children: [
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
+                  children: [
                     Text(
-                      label.isEmpty ? 'Unassigned' : label,
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      label,
+                      style: GoogleFonts.rajdhani(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                         color: tokens.ink,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    if (sublabel != null && sublabel!.isNotEmpty)
+                    if (sublabel != null)
                       Text(
                         sublabel!,
-                        style: Theme.of(context).textTheme.bodySmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tokens.inkMuted),
                       ),
                   ],
                 ),
               ),
               Text(
-                '$onDuty on duty · $checkedIn in',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: tokens.inkMuted,
+                '$onDuty / $checkedIn',
+                style: GoogleFonts.rajdhani(
+                  fontSize: 14,
                   fontWeight: FontWeight.w700,
+                  color: accentColor,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 6),
           ClipRRect(
-            borderRadius: BorderRadius.circular(4),
+            borderRadius: BorderRadius.circular(2),
             child: LinearProgressIndicator(
-              minHeight: 5,
+              minHeight: 4,
               value: p,
-              backgroundColor: tokens.primarySoft,
-              valueColor:
-                  AlwaysStoppedAnimation<Color>(tokens.primaryStrong),
+              backgroundColor: accentColor.withValues(alpha: 0.1),
+              valueColor: AlwaysStoppedAnimation<Color>(accentColor),
             ),
           ),
         ],
