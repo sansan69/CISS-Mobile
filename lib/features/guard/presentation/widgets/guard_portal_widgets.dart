@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/theme/app_tokens.dart';
+import '../../../../core/network/ciss_error.dart';
+import '../../../../shared/widgets/portal_primitives.dart';
 import '../../../../shared/widgets/state_block.dart';
 import '../../../../shared/widgets/status_chip.dart';
 
 String guardErrorMessage(Object error) {
-  return error.toString().replaceFirst('Exception: ', '').trim();
+  return CissError.parse(error);
 }
 
 class GuardLoadingScaffold extends StatelessWidget {
@@ -82,14 +84,8 @@ class GuardFormCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: tokens.border),
-      ),
+    return PortalSurfaceCard(
+      accentColor: tokens.primary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children,
@@ -122,13 +118,8 @@ class GuardRecordCard extends StatelessWidget {
     final currentChip = chip;
     final currentTrailing = trailing;
 
-    final content = Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: tokens.border),
-      ),
+    final content = PortalSurfaceCard(
+      accentColor: tokens.primary,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -160,8 +151,8 @@ class GuardRecordCard extends StatelessWidget {
           ),
           if (currentChip != null || currentTrailing != null) ...<Widget>[
             const SizedBox(width: AppSpacing.sm),
-            if (currentChip != null) currentChip,
-            if (currentTrailing != null) currentTrailing,
+            if (currentChip case final Widget chip) chip,
+            if (currentTrailing case final Widget trailing) trailing,
           ],
         ],
       ),
