@@ -110,6 +110,129 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     }
   }
 
+  void _showSitePicker(List<SiteOptionModel> sites) {
+    final tokens = CissThemeTokens.of(context);
+    String searchQuery = '';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: tokens.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final filtered = sites
+              .where(
+                (s) =>
+                    s.siteName.toLowerCase().contains(
+                      searchQuery.toLowerCase(),
+                    ) ||
+                    s.district.toLowerCase().contains(searchQuery.toLowerCase()),
+              )
+              .toList();
+
+          return DraggableScrollableSheet(
+            initialChildSize: 0.9,
+            minChildSize: 0.5,
+            maxChildSize: 1.0,
+            expand: false,
+            builder: (context, scrollController) {
+              return Column(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: tokens.inkMuted.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TextField(
+                      autofocus: true,
+                      style: TextStyle(color: tokens.ink),
+                      decoration: InputDecoration(
+                        hintText: 'Search site name or district...',
+                        prefixIcon: Icon(
+                          Icons.search_rounded,
+                          color: tokens.inkMuted,
+                        ),
+                        filled: true,
+                        fillColor: tokens.surfaceMuted,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.md),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      onChanged: (value) {
+                        setModalState(() {
+                          searchQuery = value;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.builder(
+                      controller: scrollController,
+                      itemCount: filtered.length,
+                      padding: const EdgeInsets.only(bottom: 16),
+                      itemBuilder: (context, index) {
+                        final site = filtered[index];
+                        final isSelected = _site?.id == site.id;
+                        return ListTile(
+                          title: Text(
+                            site.siteName,
+                            style: TextStyle(
+                              color:
+                                  isSelected ? tokens.primary : tokens.ink,
+                              fontWeight:
+                                  isSelected ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                          subtitle: Text(
+                            site.district,
+                            style: TextStyle(color: tokens.inkMuted),
+                          ),
+                          trailing:
+                              isSelected
+                                  ? Icon(
+                                    Icons.check_circle_rounded,
+                                    color: tokens.primary,
+                                  )
+                                  : null,
+                          onTap: () {
+                            setState(() {
+                              _site = site;
+                              _dutyPoint =
+                                  site.dutyPoints.isNotEmpty == true
+                                      ? site.dutyPoints.first
+                                      : null;
+                              _shift =
+                                  _dutyPoint?.shiftTemplates.isNotEmpty == true
+                                      ? _dutyPoint!.shiftTemplates.first
+                                      : null;
+                            });
+                            Navigator.pop(context);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
   SiteOptionModel? _findNearestSite(
     Position position,
     List<SiteOptionModel> sites,
@@ -343,32 +466,22 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                     const SizedBox(height: 14),
                     GuardFormCard(
                       children: <Widget>[
-                        DropdownButtonFormField<SiteOptionModel>(
-                          isExpanded: true,
-                          value: _site,
-                          items: filteredSites
-                              .map(
-                                (site) => DropdownMenuItem<SiteOptionModel>(
-                                  value: site,
-                                  child: Text(
-                                    '${site.siteName} • ${site.district}',
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (site) {
-                            setState(() {
-                              _site = site;
-                              _dutyPoint = site?.dutyPoints.isNotEmpty == true
-                                  ? site!.dutyPoints.first
-                                  : null;
-                              _shift =
-                                  _dutyPoint?.shiftTemplates.isNotEmpty == true
-                                  ? _dutyPoint!.shiftTemplates.first
-                                  : null;
-                            });
-                          },
-                          decoration: const InputDecoration(labelText: 'Site'),
+                        InkWell(
+                          onTap: () => _showSitePicker(filteredSites),
+                          borderRadius: BorderRadius.circular(AppRadius.md),
+                          child: IgnorePointer(
+                            child: TextFormField(
+                              key: ValueKey(_site?.id),
+                              initialValue:
+                                  _site != null
+                                      ? '${_site!.siteName} • ${_site!.district}'
+                                      : '',
+                              decoration: const InputDecoration(
+                                labelText: 'Site',
+                                suffixIcon: Icon(Icons.search_rounded),
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<DutyPointModel>(
