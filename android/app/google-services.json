@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "1041149201339",
+    "project_id": "ciss-workforce",
+    "storage_bucket": "ciss-workforce.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1041149201339:android:7b26e030f9400f1f5b929e",
+        "android_client_info": {
+          "package_name": "co.in.ciss.ciss_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCB-xr1tID8r8ZHcUxRe8HBkg_agNTEw9s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1041149201339:android:4453c020e2eaee675b929e",
+        "android_client_info": {
+          "package_name": "com.cisskerala.ciss_workforce"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCB-xr1tID8r8ZHcUxRe8HBkg_agNTEw9s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1041149201339:android:0263f3bb007a95ab5b929e",
+        "android_client_info": {
+          "package_name": "com.kalki.cissworkforce"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCB-xr1tID8r8ZHcUxRe8HBkg_agNTEw9s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -9,7 +9,7 @@ class ThemeModeSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final current = ref.watch(themeModeControllerProvider);
+    final current = ref.watch(appSettingsControllerProvider.select((s) => s.themeMode));
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -48,7 +48,7 @@ class ThemeModeSelector extends ConsumerWidget {
             ],
             selected: <ThemeMode>{current},
             onSelectionChanged: (Set<ThemeMode> next) {
-              ref.read(themeModeControllerProvider.notifier).setMode(next.first);
+              ref.read(appSettingsControllerProvider.notifier).setThemeMode(next.first);
             },
             showSelectedIcon: false,
           ),

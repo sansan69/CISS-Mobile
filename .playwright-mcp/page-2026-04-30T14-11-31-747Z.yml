@@ -1,0 +1,147 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - heading "Superpowers Brainstorming" [level=1] [ref=e3]:
+      - link "Superpowers Brainstorming" [ref=e4] [cursor=pointer]:
+        - /url: https://github.com/obra/superpowers
+    - generic [ref=e5]: Connected
+  - generic [ref=e7]:
+    - heading "CISS Mobile Redesign" [level=2] [ref=e8]
+    - paragraph [ref=e9]: Choose the direction that best fits a professional guard and field-operations app. Click a card to mark your preferred direction.
+    - generic [ref=e10]:
+      - generic [ref=e11] [cursor=pointer]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: "Direction A: Command Slate"
+          - generic [ref=e16]:
+            - generic [ref=e18]:
+              - generic [ref=e19]: Guard Console
+              - generic [ref=e20]: Good morning, Anil
+            - generic [ref=e22]:
+              - generic [ref=e23]:
+                - generic [ref=e24]: Next shift
+                - generic [ref=e25]: Technopark Gate 2
+                - generic [ref=e26]: 08:00 AM • Day Shift
+              - generic [ref=e27]:
+                - generic [ref=e28]: Status
+                - generic [ref=e29]: On Duty
+            - generic [ref=e30]:
+              - generic [ref=e31]:
+                - generic [ref=e32]: Present
+                - generic [ref=e33]: "22"
+              - generic [ref=e34]:
+                - generic [ref=e35]: Leaves
+                - generic [ref=e36]: "3"
+              - generic [ref=e37]:
+                - generic [ref=e38]: Score
+                - generic [ref=e39]: 91%
+        - generic [ref=e40]:
+          - heading "Command Slate" [level=3] [ref=e41]
+          - paragraph [ref=e42]: Premium operations look. Dense but calm dashboard, strong hierarchy, polished dark surfaces, ideal for daily duty workflows.
+          - generic [ref=e43]:
+            - generic [ref=e44]:
+              - heading "Pros" [level=4] [ref=e45]
+              - list [ref=e46]:
+                - listitem [ref=e47]: Feels modern and executive
+                - listitem [ref=e48]: Great for dashboards and field officer tools
+            - generic [ref=e49]:
+              - heading "Cons" [level=4] [ref=e50]
+              - list [ref=e51]:
+                - listitem [ref=e52]: Needs careful contrast tuning outdoors
+                - listitem [ref=e53]: More visual system work
+      - generic [ref=e54] [cursor=pointer]:
+        - generic [ref=e56]:
+          - generic [ref=e57]: "Direction B: Clear Duty"
+          - generic [ref=e59]:
+            - generic [ref=e60]:
+              - generic [ref=e61]:
+                - generic [ref=e62]: Field Officer
+                - generic [ref=e63]: District Overview
+              - generic [ref=e64]: Live
+            - generic [ref=e65]:
+              - generic [ref=e66]: Assigned Districts
+              - generic [ref=e67]: Trivandrum • Kollam
+            - generic [ref=e68]:
+              - generic [ref=e69]:
+                - generic [ref=e70]: Active Guards
+                - generic [ref=e71]: "186"
+              - generic [ref=e72]:
+                - generic [ref=e73]: Visit Reports
+                - generic [ref=e74]: "14"
+            - generic [ref=e75]:
+              - generic [ref=e76]: Priority Item
+              - generic [ref=e77]: KIMS Night Duty Staffing Gap
+        - generic [ref=e78]:
+          - heading "Clear Duty" [level=3] [ref=e79]
+          - paragraph [ref=e80]: Bright professional enterprise style. Clean cards, spacious layouts, excellent readability, strongest fit for mixed Android user comfort.
+          - generic [ref=e81]:
+            - generic [ref=e82]:
+              - heading "Pros" [level=4] [ref=e83]
+              - list [ref=e84]:
+                - listitem [ref=e85]: Very readable and familiar
+                - listitem [ref=e86]: Easy to scale across all screens
+            - generic [ref=e87]:
+              - heading "Cons" [level=4] [ref=e88]
+              - list [ref=e89]:
+                - listitem [ref=e90]: Less dramatic brand impact
+                - listitem [ref=e91]: Needs strong accents to avoid looking generic
+      - generic [ref=e92] [cursor=pointer]:
+        - generic [ref=e94]:
+          - generic [ref=e95]: "Direction C: Tactical Panels"
+          - generic [ref=e97]:
+            - generic [ref=e98]:
+              - generic [ref=e99]: Attendance
+              - generic [ref=e100]: GPS Ready
+            - generic [ref=e101]:
+              - generic [ref=e102]: Site
+              - generic [ref=e103]: Lulu Mall Loading Bay
+            - generic [ref=e104]:
+              - generic [ref=e105]:
+                - generic [ref=e106]: Shift
+                - generic [ref=e107]: Night
+              - generic [ref=e108]:
+                - generic [ref=e109]: Proof
+                - generic [ref=e110]: Camera + GPS
+            - generic [ref=e111]: Clock In
+        - generic [ref=e112]:
+          - heading "Tactical Panels" [level=3] [ref=e113]
+          - paragraph [ref=e114]: Operational, compact, rugged style with sharper geometry. Best when the app should feel purpose-built for security field work.
+          - generic [ref=e115]:
+            - generic [ref=e116]:
+              - heading "Pros" [level=4] [ref=e117]
+              - list [ref=e118]:
+                - listitem [ref=e119]: Distinctive identity
+                - listitem [ref=e120]: Great for attendance and action flows
+            - generic [ref=e121]:
+              - heading "Cons" [level=4] [ref=e122]
+              - list [ref=e123]:
+                - listitem [ref=e124]: Can feel harsh if overused
+                - listitem [ref=e125]: Needs discipline to stay premium
+    - generic [ref=e126]:
+      - heading "Recommended App-Wide Redesign Scope" [level=3] [ref=e127]
+      - generic [ref=e128]:
+        - generic [ref=e129] [cursor=pointer]:
+          - generic [ref=e130]: "1"
+          - generic [ref=e131]:
+            - heading "Design System Refresh" [level=3] [ref=e132]
+            - paragraph [ref=e133]: Theme, typography, colors, spacing, surfaces, buttons, forms, nav bars, lists, and state patterns.
+        - generic [ref=e134] [cursor=pointer]:
+          - generic [ref=e135]: "2"
+          - generic [ref=e136]:
+            - heading "Auth & Entry Flows" [level=3] [ref=e137]
+            - paragraph [ref=e138]: Login hub, role login, permission onboarding, and empty/error/loading states.
+        - generic [ref=e139] [cursor=pointer]:
+          - generic [ref=e140]: "3"
+          - generic [ref=e141]:
+            - heading "Guard + FO Dashboards" [level=3] [ref=e142]
+            - paragraph [ref=e143]: Higher-value summaries, cleaner information hierarchy, and better fit on Android screens.
+        - generic [ref=e144] [cursor=pointer]:
+          - generic [ref=e145]: "4"
+          - generic [ref=e146]:
+            - heading "All Feature Screens" [level=3] [ref=e147]
+            - paragraph [ref=e148]: Attendance, reports, work orders, guards, profile, leave, training, incidents, and more.
+    - generic [ref=e149]:
+      - heading "My Recommendation" [level=3] [ref=e150]
+      - paragraph [ref=e151]:
+        - text: Use
+        - strong [ref=e152]: "Direction B: Clear Duty"
+        - text: as the base, then add a measured version of A’s premium polish. That gives us industry-standard clarity for Android users while still making the app feel custom and high trust.
+  - generic [ref=e153]: Click an option above, then return to the terminal

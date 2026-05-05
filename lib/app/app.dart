@@ -10,7 +10,7 @@ class CissMobileApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final themeMode = ref.watch(themeModeControllerProvider);
+    final themeMode = ref.watch(appSettingsControllerProvider.select((s) => s.themeMode));
     return MaterialApp.router(
       title: 'CISS Workforce',
       debugShowCheckedModeBanner: false,

@@ -2,21 +2,53 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
-class ThemeModeController extends StateNotifier<ThemeMode> {
-  ThemeModeController() : super(_readInitialMode());
+class AppSettingsState {
+  const AppSettingsState({
+    required this.themeMode,
+    required this.biometricsEnabled,
+  });
 
-  static const String boxName = 'app_settings';
-  static const String key = 'theme_mode';
+  final ThemeMode themeMode;
+  final bool biometricsEnabled;
 
-  static ThemeMode _readInitialMode() {
-    if (!Hive.isBoxOpen(boxName)) {
-      return ThemeMode.system;
+  AppSettingsState copyWith({
+    ThemeMode? themeMode,
+    bool? biometricsEnabled,
+  }) {
+    return AppSettingsState(
+      themeMode: themeMode ?? this.themeMode,
+      biometricsEnabled: biometricsEnabled ?? this.biometricsEnabled,
+    );
+  }
+}
+
+class AppSettingsController extends StateNotifier<AppSettingsState> {
+  AppSettingsController()
+      : super(const AppSettingsState(
+          themeMode: ThemeMode.system,
+          biometricsEnabled: false,
+        )) {
+    if (Hive.isBoxOpen(boxName)) {
+      state = _readSettings();
     }
-    final value = Hive.box(boxName).get(key);
-    return _decode(value);
   }
 
-  static ThemeMode _decode(Object? value) {
+  static const String boxName = 'app_settings';
+  static const String themeKey = 'theme_mode';
+  static const String biometricsKey = 'biometrics_enabled';
+
+  AppSettingsState _readSettings() {
+    final box = Hive.box(boxName);
+    final themeValue = box.get(themeKey);
+    final biometricsValue = box.get(biometricsKey, defaultValue: false);
+    
+    return AppSettingsState(
+      themeMode: _decodeTheme(themeValue),
+      biometricsEnabled: biometricsValue as bool,
+    );
+  }
+
+  static ThemeMode _decodeTheme(Object? value) {
     return switch (value) {
       'light' => ThemeMode.light,
       'dark' => ThemeMode.dark,
@@ -25,19 +57,26 @@ class ThemeModeController extends StateNotifier<ThemeMode> {
     };
   }
 
-  Future<void> setMode(ThemeMode mode) async {
-    state = mode;
+  Future<void> setThemeMode(ThemeMode mode) async {
+    state = state.copyWith(themeMode: mode);
     if (Hive.isBoxOpen(boxName)) {
-      await Hive.box(boxName).put(key, _encode(mode));
+      await Hive.box(boxName).put(themeKey, _encodeTheme(mode));
+    }
+  }
+
+  Future<void> setBiometricsEnabled(bool enabled) async {
+    state = state.copyWith(biometricsEnabled: enabled);
+    if (Hive.isBoxOpen(boxName)) {
+      await Hive.box(boxName).put(biometricsKey, enabled);
     }
   }
 
   Future<void> init(HiveAesCipher? cipher) async {
     await Hive.openBox(boxName, encryptionCipher: cipher);
-    state = _readInitialMode();
+    state = _readSettings();
   }
 
-  static String _encode(ThemeMode mode) {
+  static String _encodeTheme(ThemeMode mode) {
     return switch (mode) {
       ThemeMode.light => 'light',
       ThemeMode.dark => 'dark',
@@ -46,7 +85,8 @@ class ThemeModeController extends StateNotifier<ThemeMode> {
   }
 }
 
-final StateNotifierProvider<ThemeModeController, ThemeMode>
-    themeModeControllerProvider = StateNotifierProvider<ThemeModeController, ThemeMode>(
-  (Ref ref) => ThemeModeController(),
+final StateNotifierProvider<AppSettingsController, AppSettingsState>
+    appSettingsControllerProvider =
+    StateNotifierProvider<AppSettingsController, AppSettingsState>(
+  (Ref ref) => AppSettingsController(),
 );

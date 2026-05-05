@@ -10,6 +10,7 @@ import 'app/app.dart';
 import 'core/fcm/providers.dart';
 import 'core/location/background_tracking_service.dart';
 import 'core/offline/offline_queue.dart';
+import 'core/offline/draft_service.dart';
 import 'core/sync/providers.dart';
 import 'core/sync/refresh_controller.dart';
 import 'app/theme/theme_mode_controller.dart';
@@ -27,7 +28,8 @@ Future<void> main() async {
 
   await Hive.initFlutter();
   await Hive.openBox<Map>(OfflineQueue.boxName, encryptionCipher: cipher);
-  await container.read(themeModeControllerProvider.notifier).init(cipher);
+  await Hive.openBox<Map>(DraftService.boxName); // Non-encrypted for high-frequency drafts
+  await container.read(appSettingsControllerProvider.notifier).init(cipher);
 
   try {
     await Firebase.initializeApp(
