@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/attendance_models.dart';
 import '../../../../../core/models/guard_profile.dart';
+import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/location/background_tracking_service.dart';
@@ -49,8 +50,17 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     if (_position != null) {
       final sites = await ref.read(attendanceSitesProvider.future);
       final profile = await ref.read(guardProfileProvider.future);
-      final filtered =
-          sites.where((s) => s.district == profile.district).toList();
+      
+      final guardDist = profile.district.trim().toLowerCase();
+      var filtered = sites
+          .where((s) => s.district.trim().toLowerCase() == guardDist)
+          .toList();
+      
+      // Fallback: If no sites match the district, use all sites so guard isn't blocked
+      if (filtered.isEmpty) {
+        filtered = sites;
+      }
+
       final nearest = _findNearestSite(_position!, filtered);
       if (nearest != null && mounted) {
         setState(() {
@@ -147,7 +157,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                     height: 4,
                     margin: const EdgeInsets.symmetric(vertical: 12),
                     decoration: BoxDecoration(
-                      color: tokens.inkMuted.withOpacity(0.2),
+                      color: tokens.inkMuted.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -399,7 +409,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       }
     } catch (error) {
       setState(() {
-        _error = error.toString().replaceFirst('Exception: ', '');
+        _error = CissError.parse(error);
       });
     } finally {
       if (mounted) {
@@ -449,9 +459,17 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                 icon: Icons.error_outline_rounded,
               ),
               data: (sites) {
-                final filteredSites = sites
-                    .where((s) => s.district == profile.district)
+                final guardDist = profile.district.trim().toLowerCase();
+                var filteredSites = sites
+                    .where((s) => s.district.trim().toLowerCase() == guardDist)
                     .toList();
+                
+                bool isFiltered = true;
+                if (filteredSites.isEmpty) {
+                  filteredSites = sites;
+                  isFiltered = false;
+                }
+
                 final dutyPoints =
                     _site?.dutyPoints ?? const <DutyPointModel>[];
                 return Column(
@@ -464,6 +482,29 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                       icon: Icons.badge_outlined,
                     ),
                     const SizedBox(height: 14),
+                    if (!isFiltered && sites.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 14),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: tokens.warningSoft,
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.info_outline_rounded, color: tokens.warning, size: 20),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'No sites found for your district (${profile.district}). Showing all available sites.',
+                                  style: TextStyle(color: tokens.warning, fontSize: 13),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     if (_error != null && _error!.contains('Location')) ...[
                       StateBlock(
                         icon: Icons.location_off_rounded,

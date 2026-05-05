@@ -8,6 +8,7 @@ import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/incident_models.dart';
 import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/models/attendance_models.dart';
+import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/offline/draft_service.dart';
@@ -186,7 +187,7 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
       }
     } catch (error) {
       setState(() {
-        _message = error.toString().replaceFirst('Exception: ', '');
+        _message = CissError.parse(error);
       });
     } finally {
       if (mounted) setState(() => _loading = false);

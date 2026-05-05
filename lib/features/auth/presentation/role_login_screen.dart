@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/auth/saved_accounts_service.dart';
 import '../../../core/models/app_role.dart';
 import '../../../core/models/auth_session.dart';
+import '../../../core/network/ciss_error.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../../shared/widgets/brand_banner.dart';
 import '../../../shared/widgets/status_chip.dart';
@@ -51,15 +55,56 @@ class RoleLoginScreen extends ConsumerStatefulWidget {
 class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  final FocusNode _passwordFocus = FocusNode();
 
   bool _loading = false;
   String? _error;
+  List<SavedAccount> _savedAccounts = <SavedAccount>[];
+  bool _accountsLoaded = false;
+
+  String get _roleKey =>
+      widget.role == LoginRole.guard ? 'guard' : 'fieldOfficer';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedAccounts();
+  }
 
   @override
   void dispose() {
     _usernameController.dispose();
     _passwordController.dispose();
+    _passwordFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadSavedAccounts() async {
+    final accounts = await ref
+        .read(savedAccountsServiceProvider)
+        .loadForRole(_roleKey);
+    if (mounted) {
+      setState(() {
+        _savedAccounts = accounts;
+        _accountsLoaded = true;
+      });
+    }
+  }
+
+  void _fillAccount(SavedAccount account) {
+    setState(() {
+      _usernameController.text = account.loginId;
+      _passwordController.clear();
+      _error = null;
+    });
+    _passwordFocus.requestFocus();
+  }
+
+  Future<void> _removeSavedAccount(SavedAccount account) async {
+    await ref
+        .read(savedAccountsServiceProvider)
+        .removeAccount(account.role, account.loginId);
+    await _loadSavedAccounts();
   }
 
   Future<void> _submit() async {
@@ -105,7 +150,7 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
       } catch (error) {
         setState(() {
           _loading = false;
-          _error = error.toString().replaceFirst('Exception: ', '');
+          _error = CissError.parse(error);
         });
         return;
       }
@@ -115,6 +160,7 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
       _loading = true;
       _error = null;
     });
+
     try {
       late final AuthSession session;
       if (widget.role == LoginRole.guard) {
@@ -133,14 +179,13 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
       }
     } catch (error) {
       setState(() {
-        final message = error.toString().replaceFirst('Exception: ', '');
-        _error = message;
+        _error = CissError.parse(error);
       });
+      // Refresh accounts list in case session cleared
+      _loadSavedAccounts();
     } finally {
       if (mounted) {
-        setState(() {
-          _loading = false;
-        });
+        setState(() => _loading = false);
       }
     }
   }
@@ -167,6 +212,7 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
+
             Row(
               children: <Widget>[
                 IconButton(
@@ -187,6 +233,19 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
                 ),
               ],
             ),
+
+            // ── Saved accounts ─────────────────────────────────────────────
+            if (_accountsLoaded && _savedAccounts.isNotEmpty) ...<Widget>[
+              const SizedBox(height: AppSpacing.lg),
+              _SavedAccountsSection(
+                accounts: _savedAccounts,
+                tokens: tokens,
+                onTap: _fillAccount,
+                onRemove: _removeSavedAccount,
+              ),
+            ],
+
+            // ── Login form ─────────────────────────────────────────────────
             const SizedBox(height: AppSpacing.lg),
             Container(
               padding: const EdgeInsets.all(AppSpacing.xl),
@@ -202,13 +261,18 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
                     isGuard
                         ? 'Use the same credentials issued for attendance duty.'
                         : 'Use your operations account to open district tools.',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: tokens.inkMuted),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: tokens.inkMuted,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   TextField(
                     controller: _usernameController,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    keyboardType: isGuard
+                        ? TextInputType.text
+                        : TextInputType.emailAddress,
                     decoration: InputDecoration(
                       labelText: widget.usernameLabel,
                       hintText: widget.usernameHint,
@@ -222,7 +286,12 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
                   const SizedBox(height: AppSpacing.md),
                   TextField(
                     controller: _passwordController,
+                    focusNode: _passwordFocus,
                     obscureText: true,
+                    keyboardType: isGuard
+                        ? TextInputType.number
+                        : TextInputType.visiblePassword,
+                    onSubmitted: (_) => _loading ? null : _submit(),
                     decoration: InputDecoration(
                       labelText: widget.passwordLabel,
                       hintText: widget.passwordHint,
@@ -263,10 +332,14 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
                         onPressed: _loading
                             ? null
                             : () {
-                                final loginId = _usernameController.text.trim();
+                                final loginId =
+                                    _usernameController.text.trim();
                                 final bool looksLikePhone =
                                     RegExp(r'^\d{8,15}$').hasMatch(
-                                      loginId.replaceAll(RegExp(r'\D+'), ''),
+                                      loginId.replaceAll(
+                                        RegExp(r'\D+'),
+                                        '',
+                                      ),
                                     );
                                 final params = <String, String>{
                                   if (looksLikePhone && loginId.isNotEmpty)
@@ -288,15 +361,187 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
                 ],
               ),
             ),
+
             const SizedBox(height: AppSpacing.lg),
             Text(
               'System secured by CISS core services',
-              style: Theme.of(
-                context,
-              ).textTheme.labelSmall?.copyWith(color: tokens.inkMuted),
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: tokens.inkMuted,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Saved accounts section
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SavedAccountsSection extends StatelessWidget {
+  const _SavedAccountsSection({
+    required this.accounts,
+    required this.tokens,
+    required this.onTap,
+    required this.onRemove,
+  });
+
+  final List<SavedAccount> accounts;
+  final CissThemeTokens tokens;
+  final void Function(SavedAccount) onTap;
+  final void Function(SavedAccount) onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
+            children: <Widget>[
+              Icon(Icons.history_rounded, size: 14, color: tokens.inkMuted),
+              const SizedBox(width: 6),
+              Text(
+                'RECENT ACCOUNTS',
+                style: GoogleFonts.rajdhani(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                  color: tokens.inkMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+        ...accounts.map(
+          (account) => _SavedAccountTile(
+            account: account,
+            tokens: tokens,
+            onTap: () => onTap(account),
+            onRemove: () => onRemove(account),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SavedAccountTile extends StatelessWidget {
+  const _SavedAccountTile({
+    required this.account,
+    required this.tokens,
+    required this.onTap,
+    required this.onRemove,
+  });
+
+  final SavedAccount account;
+  final CissThemeTokens tokens;
+  final VoidCallback onTap;
+  final VoidCallback onRemove;
+
+  static final DateFormat _timeFmt = DateFormat('d MMM, h:mm a');
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: tokens.surface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+            child: Row(
+              children: <Widget>[
+                // Avatar
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: tokens.primarySoft,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    account.initials,
+                    style: GoogleFonts.rajdhani(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: tokens.primaryStrong,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        account.displayName,
+                        style: GoogleFonts.rajdhani(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: tokens.ink,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Row(
+                        children: <Widget>[
+                          Text(
+                            account.maskedLoginId,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: tokens.inkMuted),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            width: 3,
+                            height: 3,
+                            decoration: BoxDecoration(
+                              color: tokens.border,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _timeFmt.format(account.lastLoginAt),
+                            style: Theme.of(context).textTheme.labelSmall
+                                ?.copyWith(color: tokens.inkMuted),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // Quick-fill arrow
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: tokens.primary,
+                ),
+                const SizedBox(width: 4),
+                // Remove button
+                GestureDetector(
+                  onTap: onRemove,
+                  behavior: HitTestBehavior.opaque,
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: tokens.inkMuted,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
