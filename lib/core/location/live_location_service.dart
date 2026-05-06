@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Firestore collection: guardLocations/{employeeId}
 // Shared real-time layer for Flutter FO app + Next.js admin/client dashboards.
@@ -170,3 +171,7 @@ class LiveLocationService {
         .toList();
   }
 }
+
+final liveLocationServiceProvider = Provider<LiveLocationService>(
+  (ref) => LiveLocationService(),
+);

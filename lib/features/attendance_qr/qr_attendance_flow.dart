@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -11,7 +12,9 @@ import '../../../app/theme/app_tokens.dart';
 import '../../../core/haptics.dart';
 import '../../../core/models/attendance_models.dart';
 import '../../../core/network/providers.dart';
+import '../../../core/sync/providers.dart';
 import '../../../core/qr/qr_parser.dart';
+import '../../../core/utils/date_format.dart';
 import '../../../shared/widgets/camera_capture_screen.dart';
 import '../../../core/location/live_location_service.dart';
 
@@ -35,8 +38,10 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
   String _attendanceStatus = 'In';
   DateTime? _attendanceTime;
   String? _photoPath;
+  String? _photoDataUrl; // base64 data URL for offline queue
 
   MobileScannerController? _scannerController;
+  DateTime? _lastScannedAt;
 
   @override
   void initState() {
@@ -82,9 +87,15 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
         MobileScanner(
           controller: _scannerController,
           onDetect: (capture) {
+            // Debounce: ignore repeated detections of the same QR within 3s
             if (_loading) return;
+            if (_lastScannedAt != null &&
+                DateTime.now().difference(_lastScannedAt!).inSeconds < 3) {
+              return;
+            }
             final barcode = capture.barcodes.firstOrNull;
             if (barcode?.rawValue == null) return;
+            _lastScannedAt = DateTime.now();
             _onQrDetected(barcode!.rawValue!);
           },
         ),
@@ -161,7 +172,10 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                       ),
                       const SizedBox(height: 12),
                       TextButton(
-                        onPressed: () => setState(() => _error = null),
+                        onPressed: () => setState(() {
+                          _error = null;
+                          _lastScannedAt = null;
+                        }),
                         child: const Text('Try again',
                             style: TextStyle(color: Colors.white)),
                       ),
@@ -186,6 +200,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
         setState(() {
           _error = 'Could not read QR code. Please try again.';
           _loading = false;
+          _lastScannedAt = null;
         });
         return;
       }
@@ -227,6 +242,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
         _error = 'Could not verify guard. '
             '${e.toString().replaceFirst('Exception: ', '')}';
         _loading = false;
+        _lastScannedAt = null;
       });
     }
   }
@@ -377,7 +393,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                   onPressed: _capturePhoto,
                   icon: const Icon(Icons.camera_alt_rounded, size: 20),
                   label: Text(
-                    'CAPTURE PHOTO',
+                    'CAPTURE PHOTO (optional)',
                     style: GoogleFonts.rajdhani(
                         fontWeight: FontWeight.w700, letterSpacing: 1),
                   ),
@@ -453,6 +469,16 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
       MaterialPageRoute(builder: (_) => const CameraCaptureScreen()),
     );
     if (result != null && mounted) {
+      // Pre-encode photo for offline queue support
+      try {
+        final file = File(result);
+        final bytes = await file.readAsBytes();
+        _photoDataUrl = await ref
+            .read(mobileRepositoryProvider)
+            .encodeFileToDataUrl(bytes, 'image/jpeg');
+      } catch (_) {
+        _photoDataUrl = null;
+      }
       setState(() => _photoPath = result);
     }
   }
@@ -468,18 +494,25 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
     try {
       final repo = ref.read(mobileRepositoryProvider);
 
+      // Capture GPS position for location data in payload
+      Position? pos;
+      try {
+        pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 5),
+          ),
+        );
+      } catch (_) {}
+
       // Upload photo if taken
       String? photoUrl;
-      if (_photoPath != null) {
+      if (_photoPath != null && _photoDataUrl != null) {
         try {
-          final file = File(_photoPath!);
-          final bytes = await file.readAsBytes();
-          final dataUrl =
-              await repo.encodeFileToDataUrl(bytes, 'image/jpeg');
           final uploadResult = await repo.uploadAttendancePhoto(
             path:
                 'attendance-qr/${employee.id}/${DateTime.now().millisecondsSinceEpoch}.jpg',
-            dataUrl: dataUrl,
+            dataUrl: _photoDataUrl!,
           );
           photoUrl = uploadResult['url'] as String?;
         } catch (_) {
@@ -499,8 +532,15 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
 
       final now = DateTime.now();
 
-      // Match the same payload shape as GuardAttendanceScreen._submitAttendance
-      await repo.submitAttendance({
+      // Compute distance from site if we have both coordinates
+      double distanceMeters = 0;
+      if (pos != null && site.lat != null && site.lng != null) {
+        distanceMeters = Geolocator.distanceBetween(
+          pos.latitude, pos.longitude, site.lat!, site.lng!,
+        );
+      }
+
+      final payload = <String, dynamic>{
         'employeeId': employee.employeeCode ?? employee.id,
         'employeeName': employee.fullName,
         'employeeDocId': employee.id,
@@ -522,11 +562,24 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
             'lat': site.lat,
             'lng': site.lng,
           },
+        // GPS location data (matches GuardAttendanceScreen payload shape)
+        if (pos != null)
+          'locationCoords': <String, dynamic>{
+            'lat': pos.latitude,
+            'lon': pos.longitude,
+            'accuracyMeters': pos.accuracy,
+          },
+        if (pos != null) 'gpsAccuracyMeters': pos.accuracy,
+        if (pos != null) 'locationAccuracyMeters': pos.accuracy,
+        'distanceMeters': distanceMeters,
+        'geofenceRadiusAtTime': site.geofenceRadiusMeters,
         'sourceCollection': site.sourceCollection,
         'photoCapturedAt': now.toUtc().toIso8601String(),
         'deviceInfo': <String, dynamic>{'userAgent': 'flutter-mobile-qr'},
         if (photoUrl != null) 'photoUrl': photoUrl,
-      });
+      };
+
+      await repo.submitAttendance(payload);
 
       if (!mounted) return;
       setState(() {
@@ -537,13 +590,65 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
 
       // Write to Firestore for live tracking
       if (_attendanceStatus == 'In') {
-        _writeLiveLocation();
+        _writeLiveLocation(pos);
       } else {
-        final employee = _employee;
-        if (employee != null) {
-          LiveLocationService().markOut(employee.employeeCode ?? employee.id);
-        }
+        LiveLocationService().markOut(employee.employeeCode ?? employee.id);
       }
+    } on DioException catch (e) {
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.sendTimeout ||
+          e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.connectionError) {
+        // Offline: queue for sync
+        try {
+          await ref.read(offlineQueueProvider).enqueue(
+            path: '/api/attendance/submit',
+            method: 'POST',
+            body: {
+              'employeeId': employee.employeeCode ?? employee.id,
+              'employeeName': employee.fullName,
+              'employeeDocId': employee.id,
+              'employeePhoneNumber': employee.phoneNumber ?? '',
+              'employeeClientName': employee.clientName ?? '',
+              'status': _attendanceStatus,
+              'district': site.district,
+              'clientName': site.clientName,
+              'siteId': site.id,
+              'siteName': site.siteName,
+              'sourceCollection': site.sourceCollection,
+              'deviceInfo': <String, dynamic>{'userAgent': 'flutter-mobile-qr'},
+              if (_photoDataUrl != null) 'photoDataUrl': _photoDataUrl,
+            },
+          );
+
+          if (!mounted) return;
+          // Still write to Firestore so FO can see the guard
+          if (_attendanceStatus == 'In') {
+            _writeLiveLocation(null);
+          }
+
+          setState(() {
+            _loading = false;
+            _attendanceTime = DateTime.now();
+            _photoPath = null;
+            _photoDataUrl = null;
+            _error = null;
+            _step = _QrFlowStep.confirmation;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Offline: Attendance queued for sync.')),
+          );
+        } catch (_) {
+          if (!mounted) return;
+          setState(() => _loading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to queue. Please try again.')),
+          );
+        }
+        return;
+      }
+      rethrow;
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -559,24 +664,14 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // Confirmation
+  // Live Location
   // ═══════════════════════════════════════════════════════════════════════════
 
-  Future<void> _writeLiveLocation() async {
+  Future<void> _writeLiveLocation(Position? pos) async {
     final employee = _employee;
     final site = _selectedSite;
     if (employee == null || site == null) return;
     try {
-      Position? pos;
-      try {
-        pos = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            timeLimit: Duration(seconds: 5),
-          ),
-        );
-      } catch (_) {}
-
       await LiveLocationService().setLocation(GuardLocationData(
         employeeId: employee.employeeCode ?? employee.id,
         guardName: employee.fullName,
@@ -599,6 +694,10 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Confirmation
+  // ═══════════════════════════════════════════════════════════════════════════
+
   Widget _buildConfirmation() {
     final tokens = CissThemeTokens.of(context);
     final employee = _employee!;
@@ -610,7 +709,7 @@ CISS Workforce — Attendance Confirmed
 Guard:         ${employee.fullName}
 Employee ID:   ${employee.employeeCode ?? employee.id}
 Site:          ${site.siteName}
-Date/Time:     ${_formatDateTime(_attendanceTime!)}
+Date/Time:     ${formatAttendanceDateTime(_attendanceTime!)}
 Status:        ${_attendanceStatus.toUpperCase()}
 ────────────────────────────────────
 Verified by CISS Workforce Platform''';
@@ -707,17 +806,6 @@ Verified by CISS Workforce Platform''';
         ),
       ),
     );
-  }
-
-  String _formatDateTime(DateTime dt) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final am = dt.hour < 12 ? 'AM' : 'PM';
-    final min = dt.minute.toString().padLeft(2, '0');
-    return '${dt.day} ${months[dt.month - 1]} ${dt.year}, $h:$min $am';
   }
 }
 
@@ -827,7 +915,7 @@ class _ConfirmationCard extends StatelessWidget {
           _row(context, 'Guard', employee.fullName),
           _row(context, 'ID', employee.employeeCode ?? '—'),
           _row(context, 'Site', site.siteName),
-          _row(context, 'Time', _formatTime(time)),
+          _row(context, 'Time', formatAttendanceDateTime(time)),
           const SizedBox(height: 8),
           Container(
             padding:
@@ -871,16 +959,5 @@ class _ConfirmationCard extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  String _formatTime(DateTime dt) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final am = dt.hour < 12 ? 'AM' : 'PM';
-    final min = dt.minute.toString().padLeft(2, '0');
-    return '${dt.day} ${months[dt.month - 1]} ${dt.year}, $h:$min $am';
   }
 }

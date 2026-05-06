@@ -444,9 +444,17 @@ class _LiveDot extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasLive = location != null && location!.status == 'In';
-    final color = hasLive
-        ? (location!.isOutOfZone ? Colors.red : const Color(0xFF4CAF50))
-        : fallbackColor;
+    final isStale = hasLive &&
+        DateTime.now().difference(location!.updatedAt).inMinutes > 10;
+
+    final Color color;
+    if (!hasLive) {
+      color = fallbackColor;
+    } else if (isStale) {
+      color = Colors.orange;
+    } else {
+      color = location!.isOutOfZone ? Colors.red : const Color(0xFF4CAF50);
+    }
 
     return Container(
       width: 12,
@@ -455,7 +463,7 @@ class _LiveDot extends StatelessWidget {
         color: color,
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white, width: 2),
-        boxShadow: hasLive
+        boxShadow: hasLive && !isStale
             ? [
                 BoxShadow(
                   color: color.withValues(alpha: 0.5),

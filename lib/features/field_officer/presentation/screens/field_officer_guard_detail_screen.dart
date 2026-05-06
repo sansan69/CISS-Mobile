@@ -33,6 +33,7 @@ class _FieldOfficerGuardDetailScreenState
   bool _followGuard = true;
   final MapController _mapController = MapController();
   bool _hasPendingPosition = false;
+  bool _tilesFailed = false;
 
   @override
   void initState() {
@@ -122,6 +123,11 @@ class _FieldOfficerGuardDetailScreenState
                     urlTemplate:
                         'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'com.ciss.mobile',
+                    errorTileCallback: (tile, error, stackTrace) {
+                      if (!_tilesFailed) {
+                        setState(() => _tilesFailed = true);
+                      }
+                    },
                   ),
                   // Guard marker
                   if (hasCoords)
@@ -167,6 +173,26 @@ class _FieldOfficerGuardDetailScreenState
               ),
             ),
           ),
+
+          // Tile error banner
+          if (_tilesFailed)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.orange.shade100,
+              child: Row(
+                children: [
+                  const Icon(Icons.warning_amber_rounded, size: 18, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Map tiles unavailable. Guard location still visible.',
+                      style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Info card
           Container(
