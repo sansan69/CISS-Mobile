@@ -149,6 +149,7 @@ class _LoginHubScreenState extends State<LoginHubScreen>
                         infographic: _InfographicType.guard,
                         introDelay: const Duration(milliseconds: 360),
                         onTap: () => context.go('/login/guard'),
+                      onLongPress: () => context.go('/qr-attendance'),
                       ),
                     ),
                   ),
@@ -215,6 +216,7 @@ class _RoleCard extends StatefulWidget {
     required this.infographic,
     required this.introDelay,
     required this.onTap,
+    this.onLongPress,
   });
 
   final String title;
@@ -225,6 +227,7 @@ class _RoleCard extends StatefulWidget {
   final _InfographicType infographic;
   final Duration introDelay;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   @override
   State<_RoleCard> createState() => _RoleCardState();
@@ -270,6 +273,7 @@ class _RoleCardState extends State<_RoleCard>
         widget.onTap();
       },
       onTapCancel: () => setState(() => _pressed = false),
+      onLongPress: widget.onLongPress,
       child: AnimatedScale(
         scale: _pressed ? 0.974 : 1.0,
         duration: const Duration(milliseconds: 110),

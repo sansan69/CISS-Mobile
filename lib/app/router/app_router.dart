@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/presentation/role_login_screen.dart';
 import '../../features/auth/presentation/auth_gate_screen.dart';
 import '../../features/auth/presentation/guard_pin_setup_screen.dart';
 import '../../features/auth/presentation/login_hub_screen.dart';
 import '../../features/auth/presentation/permission_onboarding_screen.dart';
-import '../../features/auth/presentation/role_login_screen.dart';
-import '../../features/field_officer/presentation/field_officer_shell.dart';
-import '../../features/guard/presentation/guard_shell.dart';
+import '../../features/attendance_qr/qr_attendance_flow.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -56,15 +55,9 @@ final GoRouter appRouter = GoRouter(
       },
     ),
     GoRoute(
-      path: '/guard',
+      path: '/qr-attendance',
       builder: (BuildContext context, GoRouterState state) {
-        return const GuardShell();
-      },
-    ),
-    GoRoute(
-      path: '/field-officer',
-      builder: (BuildContext context, GoRouterState state) {
-        return const FieldOfficerShell();
+        return const QrAttendanceFlow();
       },
     ),
   ],
