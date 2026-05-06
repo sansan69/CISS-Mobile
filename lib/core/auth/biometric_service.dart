@@ -18,10 +18,17 @@ class BiometricService {
 
   Future<bool> authenticate({required String localizedReason}) async {
     try {
-      return await _auth.authenticate(
+      final canCheck = await _auth.canCheckBiometrics;
+      if (!canCheck) return false;
+
+      final didAuthenticate = await _auth.authenticate(
         localizedReason: localizedReason,
       );
+      return didAuthenticate;
     } on PlatformException catch (_) {
+      return false;
+    } catch (_) {
+      // Catch-all for any unexpected errors (e.g. plugin not registered)
       return false;
     }
   }
