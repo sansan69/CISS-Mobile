@@ -14,6 +14,7 @@ import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/location/background_tracking_service.dart';
 import '../../../../../core/location/live_location_service.dart';
+import '../../../../../core/fcm/notification_service.dart';
 import '../../../../../shared/widgets/camera_capture_screen.dart';
 import '../../../../../shared/widgets/section_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
@@ -378,6 +379,13 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           }
           // Write initial location to Firestore for live tracking
           _writeLiveLocation(profile, _status);
+          // Notify field officers
+          NotificationService.triggerSystemNotification(
+            type: 'attendance_marked',
+            title: 'Guard ${_status == 'In' ? 'Checked In' : 'Checked Out'}',
+            body: '${profile.fullName} marked ${_status.toLowerCase()} at ${_site!.siteName}',
+            data: {'employeeId': profile.employeeId, 'siteId': _site!.id},
+          );
         } else {
           BackgroundTrackingService.stop();
           // Mark OUT in Firestore

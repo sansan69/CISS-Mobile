@@ -17,6 +17,7 @@ import '../../../core/qr/qr_parser.dart';
 import '../../../core/utils/date_format.dart';
 import '../../../shared/widgets/camera_capture_screen.dart';
 import '../../../core/location/live_location_service.dart';
+import '../../../core/fcm/notification_service.dart';
 
 enum _QrFlowStep { scan, action, confirmation }
 
@@ -594,6 +595,14 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
       } else {
         LiveLocationService().markOut(employee.employeeCode ?? employee.id);
       }
+
+      // Notify field officers
+      NotificationService.triggerSystemNotification(
+        type: 'attendance_marked',
+        title: 'Guard ${_attendanceStatus == 'In' ? 'Checked In' : 'Checked Out'}',
+        body: '${employee.fullName} marked ${_attendanceStatus.toLowerCase()} at ${_selectedSite!.siteName}',
+        data: {'employeeId': employee.employeeCode ?? employee.id},
+      );
     } on DioException catch (e) {
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.sendTimeout ||

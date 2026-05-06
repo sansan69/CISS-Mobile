@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/cache/preload_controller.dart';
+import '../../../core/haptics.dart';
 import '../../auth/application/auth_controller.dart';
 import '../field_officer_tab_provider.dart';
 import '../../../shared/widgets/brand_banner.dart';
@@ -11,6 +13,8 @@ import '../../../shared/widgets/branded_navigation_bar.dart';
 import '../../../shared/widgets/theme_mode_selector.dart';
 import '../../../shared/widgets/security_settings_card.dart';
 import '../../../shared/widgets/sync_status_badge.dart';
+import '../../../core/fcm/notification_service.dart';
+import '../../shared/notification_inbox_screen.dart';
 import 'screens/field_officer_attendance_screen.dart';
 import 'screens/field_officer_dashboard_screen.dart';
 import 'screens/field_officer_guards_screen.dart';
@@ -65,14 +69,37 @@ class _FieldOfficerShellState extends ConsumerState<FieldOfficerShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // Preload ALL field officer data eagerly after login.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(preloadControllerProvider).preloadAllFieldOfficer();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final index = ref.watch(fieldOfficerTabIndexProvider);
+
+    // Keep all FO data providers alive so tab switching is instant.
+    ref.watch(fieldOfficerDashboardProvider);
+    ref.watch(fieldOfficerWorkOrdersProvider);
+    ref.watch(fieldOfficerGuardsProvider);
+    ref.watch(fieldOfficerGuardAttendanceProvider);
+    ref.watch(fieldOfficerVisitReportsProvider);
+    ref.watch(fieldOfficerTrainingReportsProvider);
+
     return Scaffold(
-      body: _tabs[index].screen,
+      body: IndexedStack(
+        index: index,
+        children: _tabs.map((t) => t.screen).toList(),
+      ),
       bottomNavigationBar: BrandedNavigationBar(
         selectedIndex: index,
-        onSelected: (int i) =>
-            ref.read(fieldOfficerTabIndexProvider.notifier).state = i,
+        onSelected: (int i) {
+          Haptics.selection();
+          ref.read(fieldOfficerTabIndexProvider.notifier).state = i;
+        },
         items: _tabs
             .map(
               (_FieldOfficerTab tab) => BrandedNavigationItem(
@@ -111,7 +138,8 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: tokens.canvas,
-      body: ListView(
+      body: SafeArea(
+        child: ListView(
         padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
         children: [
           BrandBanner(
@@ -119,7 +147,7 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
             subtitle: 'Secure tools and system settings',
             trailing: const SyncStatusBadge(),
           ),
-          
+
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -137,8 +165,10 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                 const SizedBox(height: 12),
                 const ThemeModeSelector(),
                 const SizedBox(height: 12),
+                _NotificationTile(),
+                const SizedBox(height: 12),
                 const SecuritySettingsCard(),
-                
+
                 const SizedBox(height: 32),
                 Text(
                   'SYSTEM TOOLS',
@@ -195,7 +225,10 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                           CircleAvatar(
                             radius: 28,
                             backgroundColor: tokens.primarySoft,
-                            child: const Icon(Icons.person_outline_rounded, size: 28),
+                            child: const Icon(
+                              Icons.person_outline_rounded,
+                              size: 28,
+                            ),
                           ),
                           const SizedBox(width: 16),
                           Expanded(
@@ -203,7 +236,8 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  session?.displayName.toUpperCase() ?? 'OFFICER',
+                                  session?.displayName.toUpperCase() ??
+                                      'OFFICER',
                                   style: GoogleFonts.rajdhani(
                                     fontSize: 20,
                                     fontWeight: FontWeight.w800,
@@ -212,7 +246,8 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                                 ),
                                 Text(
                                   session?.email ?? 'active session',
-                                  style: Theme.of(context).textTheme.labelSmall,
+                                  style:
+                                      Theme.of(context).textTheme.labelSmall,
                                 ),
                               ],
                             ),
@@ -224,15 +259,23 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                         width: double.infinity,
                         height: 48,
                         child: OutlinedButton.icon(
-                          onPressed: () => ref.read(authControllerProvider).signOut(),
+                          onPressed: () {
+                            Haptics.heavy();
+                            ref.read(authControllerProvider).signOut();
+                          },
                           style: OutlinedButton.styleFrom(
                             foregroundColor: tokens.danger,
-                            side: BorderSide(color: tokens.danger.withValues(alpha: 0.5)),
+                            side: BorderSide(
+                              color: tokens.danger.withValues(alpha: 0.5),
+                            ),
                           ),
                           icon: const Icon(Icons.logout_rounded, size: 18),
                           label: Text(
                             'TERMINATE SESSION',
-                            style: GoogleFonts.rajdhani(fontWeight: FontWeight.w800, letterSpacing: 1),
+                            style: GoogleFonts.rajdhani(
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1,
+                            ),
                           ),
                         ),
                       ),
@@ -244,6 +287,7 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }
@@ -290,6 +334,29 @@ class _ToolTile extends StatelessWidget {
             ],
           ),
         ),
+        ),
+    );
+  }
+}
+
+class _NotificationTile extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = CissThemeTokens.of(context);
+    final unreadAsync = ref.watch(NotificationService.unreadCountProvider);
+    final count = unreadAsync.valueOrNull ?? 0;
+
+    return GlassCard(
+      child: ListTile(
+        leading: Icon(Icons.notifications_outlined, color: tokens.primary),
+        title: Text('Notifications', style: GoogleFonts.rajdhani(fontWeight: FontWeight.w700)),
+        subtitle: Text(count > 0 ? '$count unread' : 'No new alerts'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const NotificationInboxScreen()),
+          );
+        },
       ),
     );
   }

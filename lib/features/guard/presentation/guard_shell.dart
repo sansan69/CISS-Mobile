@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/cache/preload_controller.dart';
+import '../../../core/haptics.dart';
 import '../../auth/application/auth_controller.dart';
 import '../guard_tab_provider.dart';
 import '../../../shared/widgets/branded_navigation_bar.dart';
 import '../../../shared/widgets/screen_scaffold.dart';
 import '../../../shared/widgets/section_card.dart';
+import '../../../core/fcm/notification_service.dart';
 import '../../../shared/widgets/theme_mode_selector.dart';
+import '../../shared/notification_inbox_screen.dart';
 import 'screens/guard_attendance_screen.dart';
 import 'screens/guard_dashboard_screen.dart';
 import 'screens/guard_evaluations_screen.dart';
@@ -59,14 +63,40 @@ class _GuardShellState extends ConsumerState<GuardShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    // Preload ALL guard data eagerly after login so tab switching is instant.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(preloadControllerProvider).preloadAllGuard();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final index = ref.watch(guardTabIndexProvider);
+
+    // Keep all guard data providers alive so tab switching is instant.
+    // These watches ensure the providers never auto-dispose.
+    ref.watch(guardDashboardProvider);
+    ref.watch(attendanceSitesProvider);
+    ref.watch(guardProfileProvider);
+    ref.watch(guardTrainingProvider);
+    ref.watch(guardPayslipsProvider);
+    ref.watch(guardEvaluationsProvider);
+    ref.watch(guardIncidentsProvider);
+    ref.watch(guardLeaveProvider);
+
     return Scaffold(
-      body: _tabs[index].screen,
+      body: IndexedStack(
+        index: index,
+        children: _tabs.map((t) => t.screen).toList(),
+      ),
       bottomNavigationBar: BrandedNavigationBar(
         selectedIndex: index,
-        onSelected: (int i) =>
-            ref.read(guardTabIndexProvider.notifier).state = i,
+        onSelected: (int i) {
+          Haptics.selection();
+          ref.read(guardTabIndexProvider.notifier).state = i;
+        },
         items: _tabs
             .map(
               (_GuardTab tab) => BrandedNavigationItem(
@@ -105,7 +135,20 @@ class GuardMoreScreen extends ConsumerWidget {
       title: 'More tools',
       subtitle: 'Profile, leave, incident, and support actions',
       children: <Widget>[
-const ThemeModeSelector(),
+        const ThemeModeSelector(),
+        SectionCard(
+          title: 'Notifications',
+          subtitle: 'View alerts, updates, and broadcasts',
+          icon: Icons.notifications_outlined,
+          trailing: _NotificationBadge(),
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const NotificationInboxScreen(),
+              ),
+            );
+          },
+        ),
         SectionCard(
           title: 'Profile',
           subtitle: 'Personal and employment details',
@@ -153,7 +196,10 @@ const ThemeModeSelector(),
           },
         ),
         FilledButton(
-          onPressed: () => ref.read(authControllerProvider).signOut(),
+          onPressed: () {
+            Haptics.heavy();
+            ref.read(authControllerProvider).signOut();
+          },
           style: FilledButton.styleFrom(
             backgroundColor: tokens.dangerSoft,
             foregroundColor: tokens.danger,
@@ -161,6 +207,30 @@ const ThemeModeSelector(),
           child: const Text('Sign out'),
         ),
       ],
+    );
+  }
+}
+
+class _NotificationBadge extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final unreadAsync = ref.watch(NotificationService.unreadCountProvider);
+    return unreadAsync.when(
+      data: (count) => count > 0
+          ? Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.red,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$count',
+                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+            )
+          : const SizedBox.shrink(),
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }
