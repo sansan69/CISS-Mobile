@@ -12,6 +12,8 @@ import '../../app/router/app_router.dart';
 import '../../features/field_officer/field_officer_tab_provider.dart';
 import '../../features/guard/guard_tab_provider.dart';
 import '../network/providers.dart';
+import '../models/app_role.dart';
+import '../../features/auth/application/auth_controller.dart';
 
 class NotificationService {
   NotificationService(this._ref);
@@ -91,8 +93,33 @@ class NotificationService {
       if (initialMessage != null) {
         _handleMessageClick(initialMessage);
       }
+
+      // Subscribe to role-based topic for broadcasts
+      await _subscribeToRoleTopic();
     }
   }
+
+  /// Subscribe to the appropriate FCM topic based on the user's role.
+  /// Called after auth session is resolved.
+  Future<void> _subscribeToRoleTopic() async {
+    try {
+      final session = _ref.read(authSessionProvider).value;
+      if (session == null) return;
+
+      if (session.role == AppRole.guard) {
+        await _fcm.subscribeToTopic('guards');
+        await _fcm.unsubscribeFromTopic('field_officers');
+      } else if (session.role == AppRole.fieldOfficer) {
+        await _fcm.subscribeToTopic('field_officers');
+        await _fcm.unsubscribeFromTopic('guards');
+      }
+    } catch (_) {
+      // Non-critical — topic subscription can be retried
+    }
+  }
+
+  /// Re-subscribe to topic when role changes (e.g. after login).
+  Future<void> refreshTopicSubscription() => _subscribeToRoleTopic();
 
   // ── Foreground: show local notification ──────────────────────────────
 
