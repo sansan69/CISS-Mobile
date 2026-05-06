@@ -6,11 +6,15 @@ import 'package:intl/intl.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../core/network/providers.dart';
+import '../../../../../core/network/ciss_error.dart';
 import '../../../auth/application/auth_controller.dart';
 import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/glass_card.dart';
+import '../../../../../shared/widgets/portal_primitives.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
+import '../../../../../core/location/live_location_service.dart';
+import 'field_officer_guard_detail_screen.dart';
 import 'field_officer_dashboard_screen.dart';
 
 final StateProvider<String?> attendanceSelectedDateProvider =
@@ -139,7 +143,7 @@ class _FieldOfficerGuardAttendanceScreenState
               child: StateBlock(
                 icon: Icons.error_outline_rounded,
                 title: 'Data error',
-                message: err.toString(),
+                message: CissError.parse(err),
               ),
             ),
             data: (dashboard) {
@@ -149,17 +153,9 @@ class _FieldOfficerGuardAttendanceScreenState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (sites.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                      child: Text(
-                        'SITE SUMMARIES',
-                        style: GoogleFonts.rajdhani(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.5,
-                          color: tokens.inkMuted,
-                        ),
-                      ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
+                      child: PortalSectionHeading(title: 'Site Summaries'),
                     ),
                     SizedBox(
                       height: 100,
@@ -181,17 +177,9 @@ class _FieldOfficerGuardAttendanceScreenState
                     const SizedBox(height: 24),
                   ],
 
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                    child: Text(
-                      'INDIVIDUAL RECORDS',
-                      style: GoogleFonts.rajdhani(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.5,
-                        color: tokens.inkMuted,
-                      ),
-                    ),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: PortalSectionHeading(title: 'Individual Records'),
                   ),
 
                   entriesAsync.when(
@@ -206,7 +194,7 @@ class _FieldOfficerGuardAttendanceScreenState
                       child: StateBlock(
                         icon: Icons.error_outline_rounded,
                         title: 'Sync issue',
-                        message: err.toString(),
+                        message: CissError.parse(err),
                       ),
                     ),
                     data: (entries) {
@@ -235,8 +223,34 @@ class _FieldOfficerGuardAttendanceScreenState
 
                       return Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Column(
-                          children: filtered.map((e) => _LiveGuardRow(e)).toList(),
+                        child: StreamBuilder<List<GuardLocationData>>(
+                          stream: LiveLocationService().streamActiveLocations(),
+                          builder: (context, locSnap) {
+                            final locations = locSnap.data ?? const <GuardLocationData>[];
+                            return Column(
+                              children: filtered.map((e) {
+                                final loc = locations.cast<GuardLocationData?>().firstWhere(
+                                  (l) => l?.employeeId == e.employeeId,
+                                  orElse: () => null,
+                                );
+                                return _LiveGuardRow(
+                                  e,
+                                  location: loc,
+                                  onTap: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder: (_) => FieldOfficerGuardDetailScreen(
+                                          employeeId: e.employeeId,
+                                          guardName: e.guardName,
+                                          siteName: e.siteName,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              }).toList(),
+                            );
+                          },
                         ),
                       );
                     },
@@ -318,8 +332,10 @@ class _SiteFilterChip extends StatelessWidget {
 }
 
 class _LiveGuardRow extends StatelessWidget {
-  const _LiveGuardRow(this.entry);
+  const _LiveGuardRow(this.entry, {this.location, this.onTap});
   final FieldOfficerAttendanceEntry entry;
+  final GuardLocationData? location;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -329,7 +345,12 @@ class _LiveGuardRow extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      child: GlassCard(
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          child: GlassCard(
         padding: const EdgeInsets.all(12),
         accentColor: glow,
         child: Row(
@@ -356,15 +377,7 @@ class _LiveGuardRow extends StatelessWidget {
                 Positioned(
                   right: 0,
                   bottom: 0,
-                  child: Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: glow,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: tokens.surface, width: 2),
-                    ),
-                  ),
+                  child: _LiveDot(location: location, fallbackColor: glow),
                 ),
               ],
             ),
@@ -415,6 +428,42 @@ class _LiveGuardRow extends StatelessWidget {
             ),
           ],
         ),
+      ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LiveDot extends StatelessWidget {
+  const _LiveDot({this.location, required this.fallbackColor});
+
+  final GuardLocationData? location;
+  final Color fallbackColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasLive = location != null && location!.status == 'In';
+    final color = hasLive
+        ? (location!.isOutOfZone ? Colors.red : const Color(0xFF4CAF50))
+        : fallbackColor;
+
+    return Container(
+      width: 12,
+      height: 12,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+        boxShadow: hasLive
+            ? [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.5),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
       ),
     );
   }

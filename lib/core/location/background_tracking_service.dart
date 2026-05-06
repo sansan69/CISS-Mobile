@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BackgroundTrackingService {
   static bool _configured = false;
@@ -143,6 +144,22 @@ void onStart(ServiceInstance service) async {
           'timestamp': DateTime.now().toIso8601String(),
         }),
       );
+
+      // ── Firestore live location update ──────────────────────────────────
+      try {
+        await FirebaseFirestore.instance
+            .collection('guardLocations')
+            .doc(siteContext!['employeeId'] as String)
+            .update({
+          'lat': position.latitude,
+          'lng': position.longitude,
+          'accuracy': position.accuracy,
+          'isOutOfZone': isOut,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } catch (fsErr) {
+        debugPrint('Firestore location update error: $fsErr');
+      }
 
       if (service is AndroidServiceInstance) {
         service.setForegroundNotificationInfo(

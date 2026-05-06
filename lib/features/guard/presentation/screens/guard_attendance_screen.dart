@@ -1,16 +1,20 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
+import '../../../../../core/haptics.dart';
 import '../../../../../core/models/attendance_models.dart';
 import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/location/background_tracking_service.dart';
+import '../../../../../core/location/live_location_service.dart';
+import '../../../../../shared/widgets/camera_capture_screen.dart';
 import '../../../../../shared/widgets/section_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
@@ -27,14 +31,13 @@ class GuardAttendanceScreen extends ConsumerStatefulWidget {
 }
 
 class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
-  final ImagePicker _picker = ImagePicker();
   SiteOptionModel? _site;
   DutyPointModel? _dutyPoint;
   ShiftTemplateModel? _shift;
   String _status = 'In';
   String? _error;
   bool _busy = false;
-  XFile? _photo;
+  String? _photoPath;
   Position? _position;
 
   @override
@@ -108,13 +111,16 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   }
 
   Future<void> _capturePhoto() async {
-    final picked = await _picker.pickImage(
-      source: ImageSource.camera,
-      imageQuality: 85,
+    final path = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const CameraCaptureScreen(),
+      ),
     );
-    if (picked != null) {
+    if (path != null && mounted) {
+      Haptics.light();
       setState(() {
-        _photo = picked;
+        _photoPath = path;
         _error = null;
       });
     }
@@ -279,7 +285,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       );
       return;
     }
-    if (_photo == null) {
+    if (_photoPath == null) {
       setState(() => _error = 'Please capture a photo for attendance.');
       return;
     }
@@ -294,11 +300,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     });
 
     try {
-      final bytes = await _photo!.readAsBytes();
-      final mimeType = _photo!.mimeType ?? 'image/jpeg';
+      final file = File(_photoPath!);
+      final bytes = await file.readAsBytes();
       final dataUrl = await ref
           .read(mobileRepositoryProvider)
-          .encodeFileToDataUrl(bytes, mimeType);
+          .encodeFileToDataUrl(bytes, 'image/jpeg');
 
       final dutyPoint =
           _dutyPoint ??
@@ -370,13 +376,18 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           } else {
             debugPrint('Tracking skipped: site coordinates missing.');
           }
+          // Write initial location to Firestore for live tracking
+          _writeLiveLocation(profile, _status);
         } else {
           BackgroundTrackingService.stop();
+          // Mark OUT in Firestore
+          LiveLocationService().markOut(profile.employeeId);
         }
 
         if (mounted) {
-          setState(() {
-            _photo = null;
+          Haptics.heavy();
+        setState(() {
+            _photoPath = null;
             _error = 'Attendance submitted successfully.';
           });
         }
@@ -398,10 +409,15 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
             },
           );
           if (mounted) {
-            setState(() {
-              _photo = null;
-              _error = 'Offline: Attendance queued for sync.';
-            });
+            Haptics.medium();
+            // Still write to Firestore so FO can see live location
+            _writeLiveLocation(profile, _status);
+            if (mounted) {
+              setState(() {
+                _photoPath = null;
+                _error = 'Offline: Attendance queued for sync.';
+              });
+            }
           }
         } else {
           rethrow;
@@ -417,6 +433,32 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           _busy = false;
         });
       }
+    }
+  }
+
+  Future<void> _writeLiveLocation(GuardProfileModel profile, String status) async {
+    final site = _site;
+    if (site == null || _position == null) return;
+    try {
+      await LiveLocationService().setLocation(GuardLocationData(
+        employeeId: profile.employeeId,
+        guardName: profile.fullName,
+        siteId: site.id,
+        siteName: site.siteName,
+        clientName: profile.clientName,
+        district: profile.district,
+        lat: _position!.latitude,
+        lng: _position!.longitude,
+        accuracy: _position!.accuracy,
+        isOutOfZone: false,
+        status: status,
+        updatedAt: DateTime.now(),
+        siteLat: site.lat,
+        siteLng: site.lng,
+        geofenceRadius: site.geofenceRadiusMeters.toDouble(),
+      ));
+    } catch (e) {
+      debugPrint('LiveLocation write error: $e');
     }
   }
 
@@ -539,7 +581,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<DutyPointModel>(
                           isExpanded: true,
-                          value: _dutyPoint,
+                          initialValue: _dutyPoint,
                           items: dutyPoints
                               .map(
                                 (dutyPoint) => DropdownMenuItem<DutyPointModel>(
@@ -569,7 +611,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<ShiftTemplateModel>(
                           isExpanded: true,
-                          value: _shift,
+                          initialValue: _shift,
                           items:
                               (_dutyPoint?.shiftTemplates ??
                                       const <ShiftTemplateModel>[])
@@ -623,11 +665,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                             ),
                             OutlinedButton.icon(
                               onPressed: _capturePhoto,
-                              icon: const Icon(Icons.photo_camera_outlined),
+                              icon: const Icon(Icons.camera_alt_rounded),
                               label: Text(
-                                _photo == null
+                                _photoPath == null
                                     ? 'Capture Photo'
-                                    : 'Photo selected',
+                                    : 'Photo captured',
                               ),
                             ),
                           ],
@@ -656,10 +698,12 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                             ),
                           ),
                         const SizedBox(height: 12),
-                        ElevatedButton(
-                          onPressed: _busy
-                              ? null
-                              : () => _submitAttendance(profile),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: _busy
+                                ? null
+                                : () => _submitAttendance(profile),
                           child: _busy
                               ? const SizedBox(
                                   width: 18,
@@ -671,6 +715,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                               : Text(
                                   'Submit ${_status == 'In' ? 'Check-In' : 'Check-Out'}',
                                 ),
+                          ),
                         ),
                         const SizedBox(height: 16),
                       ],

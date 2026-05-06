@@ -13,6 +13,7 @@ import '../../../core/models/attendance_models.dart';
 import '../../../core/network/providers.dart';
 import '../../../core/qr/qr_parser.dart';
 import '../../../shared/widgets/camera_capture_screen.dart';
+import '../../../core/location/live_location_service.dart';
 
 enum _QrFlowStep { scan, action, confirmation }
 
@@ -533,6 +534,16 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
         _attendanceTime = now;
         _step = _QrFlowStep.confirmation;
       });
+
+      // Write to Firestore for live tracking
+      if (_attendanceStatus == 'In') {
+        _writeLiveLocation();
+      } else {
+        final employee = _employee;
+        if (employee != null) {
+          LiveLocationService().markOut(employee.employeeCode ?? employee.id);
+        }
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
@@ -550,6 +561,43 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
   // ═══════════════════════════════════════════════════════════════════════════
   // Confirmation
   // ═══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _writeLiveLocation() async {
+    final employee = _employee;
+    final site = _selectedSite;
+    if (employee == null || site == null) return;
+    try {
+      Position? pos;
+      try {
+        pos = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 5),
+          ),
+        );
+      } catch (_) {}
+
+      await LiveLocationService().setLocation(GuardLocationData(
+        employeeId: employee.employeeCode ?? employee.id,
+        guardName: employee.fullName,
+        siteId: site.id,
+        siteName: site.siteName,
+        clientName: employee.clientName ?? '',
+        district: site.district,
+        lat: pos?.latitude ?? 0,
+        lng: pos?.longitude ?? 0,
+        accuracy: pos?.accuracy ?? 0,
+        isOutOfZone: false,
+        status: _attendanceStatus,
+        updatedAt: DateTime.now(),
+        siteLat: site.lat,
+        siteLng: site.lng,
+        geofenceRadius: site.geofenceRadiusMeters.toDouble(),
+      ));
+    } catch (e) {
+      debugPrint('QR LiveLocation write error: $e');
+    }
+  }
 
   Widget _buildConfirmation() {
     final tokens = CissThemeTokens.of(context);
