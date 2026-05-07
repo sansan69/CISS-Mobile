@@ -6,7 +6,9 @@ import '../../../../../core/models/attendance_models.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../shared/widgets/metric_tile.dart';
+import '../../../../../shared/widgets/portal_primitives.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
+import '../../../../../core/cache/skeleton_widgets.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
@@ -14,6 +16,7 @@ import '../../guard_tab_provider.dart';
 import '../widgets/guard_portal_widgets.dart';
 import 'guard_incidents_screen.dart';
 import 'guard_leave_screen.dart';
+import 'guard_patrol_screen.dart';
 
 final FutureProvider<GuardDashboardSnapshot> guardDashboardProvider =
     FutureProvider<GuardDashboardSnapshot>((Ref ref) {
@@ -28,8 +31,7 @@ class GuardDashboardScreen extends ConsumerWidget {
     final snapshot = ref.watch(guardDashboardProvider);
 
     return snapshot.when(
-      loading: () =>
-          const GuardLoadingScaffold(label: 'Loading guard dashboard...'),
+      loading: () => const SkeletonPage(cardCount: 4),
       error: (Object error, _) => GuardErrorScaffold(
         title: 'Could not load dashboard',
         error: error,
@@ -53,6 +55,8 @@ class GuardDashboardScreen extends ConsumerWidget {
           children: <Widget>[
             // ── Shift status header ───────────────────────────────────────
             _ShiftStatusCard(data: data),
+
+            const _PatrolStatusCard(),
 
             // ── Quick actions ─────────────────────────────────────────────
             _QuickActions(ref: ref, context: context),
@@ -152,13 +156,8 @@ class _ShiftStatusCard extends StatelessWidget {
     final tokens = CissThemeTokens.of(context);
     final hasShift = data.nextShiftLabel != null;
 
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: tokens.border),
-      ),
+    return PortalSurfaceCard(
+      accentColor: hasShift ? tokens.success : tokens.primary,
       child: Row(
         children: <Widget>[
           Expanded(
@@ -198,6 +197,84 @@ class _ShiftStatusCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PatrolStatusCard extends ConsumerWidget {
+  const _PatrolStatusCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final patrolAsync = ref.watch(guardPatrolStatusProvider);
+    final tokens = CissThemeTokens.of(context);
+
+    return patrolAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, _) => const SizedBox.shrink(),
+      data: (status) {
+        if (!status.enabled) return const SizedBox.shrink();
+        final activeDuty = status.activeDuty;
+        return PortalSurfaceCard(
+          accentColor: status.hourlyRequirement.dueNow
+              ? tokens.danger
+              : tokens.primary,
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const GuardPatrolScreen(),
+              ),
+            );
+          },
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Patrol monitoring',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: tokens.inkMuted,
+                            fontWeight: FontWeight.w500,
+                          ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      activeDuty == null
+                          ? 'Available after duty check-in'
+                          : status.hourlyRequirement.enabled
+                              ? (status.hourlyRequirement.dueNow
+                                  ? 'Hourly night photo due now'
+                                  : 'Next photo at ${status.hourlyRequirement.nextDueAt == null ? 'scheduled time' : status.hourlyRequirement.nextDueAt!.substring(11, 16)}')
+                              : '${status.patrolPoints.length} patrol point${status.patrolPoints.length == 1 ? '' : 's'} configured',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: tokens.ink,
+                          ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      activeDuty == null
+                          ? 'Open patrol after starting attendance.'
+                          : '${activeDuty.siteName}${activeDuty.dutyPointName != null ? ' • ${activeDuty.dutyPointName}' : ''}',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              StatusChip(
+                label: status.hourlyRequirement.dueNow ? 'Due' : 'Open',
+                tone: status.hourlyRequirement.dueNow
+                    ? StatusChipTone.danger
+                    : StatusChipTone.success,
+                icon: status.hourlyRequirement.dueNow
+                    ? Icons.alarm_on_rounded
+                    : Icons.route_outlined,
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -242,6 +319,16 @@ class _QuickActions extends StatelessWidget {
         ),
       ),
       _Action(
+        icon: Icons.route_outlined,
+        label: 'Patrol',
+        color: tokens.accent,
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const GuardPatrolScreen(),
+          ),
+        ),
+      ),
+      _Action(
         icon: Icons.account_balance_wallet_rounded,
         label: 'Payslip',
         color: tokens.warning,
@@ -250,16 +337,12 @@ class _QuickActions extends StatelessWidget {
       ),
     ];
 
-    return Container(
+    return PortalSurfaceCard(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.sm,
         vertical: AppSpacing.sm,
       ),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: tokens.border),
-      ),
+      accentColor: tokens.primary,
       child: Row(
         children: actions
             .map(
@@ -335,13 +418,8 @@ class _NextShiftCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: tokens.primarySoft,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: tokens.primary.withValues(alpha: 0.2)),
-      ),
+    return PortalSurfaceCard(
+      accentColor: tokens.primary,
       child: Row(
         children: <Widget>[
           Container(
@@ -398,13 +476,8 @@ class _RecentActivityList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: tokens.border),
-      ),
+    return PortalSurfaceCard(
+      accentColor: tokens.primary,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[

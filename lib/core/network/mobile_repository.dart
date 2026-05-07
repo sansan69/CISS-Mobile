@@ -12,6 +12,7 @@ import '../models/guard_profile.dart';
 import '../models/incident_models.dart';
 import '../models/leave_models.dart';
 import '../models/mobile_dashboard_models.dart';
+import '../models/patrol_models.dart';
 import '../models/payroll_models.dart';
 import '../models/report_models.dart';
 import '../models/training_models.dart';
@@ -25,6 +26,8 @@ class MobileRepository {
 
   ApiClient get apiClient => _apiClient;
 
+  static const String _mobileNotificationsPath = '/api/mobile/notifications';
+
   Future<String?> _token() async => _auth.currentUser?.getIdToken(false);
 
   Future<Map<String, String>> authHeaders() async => _authHeaders();
@@ -36,6 +39,54 @@ class MobileRepository {
       // Non-critical: failure here shouldn't block the app, but log it.
       debugPrint('Error updating FCM token: $error');
     }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchNotifications() async {
+    final data = await _getJson(_mobileNotificationsPath);
+    final rawNotifications =
+        (data['notifications'] as List<dynamic>? ?? const <dynamic>[]);
+
+    return rawNotifications
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Future<int> fetchUnreadNotificationCount() async {
+    final data = await _getJson(_mobileNotificationsPath);
+    return (data['unreadCount'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<void> markNotificationAsRead(String notifId) async {
+    await _postJson(_mobileNotificationsPath, <String, dynamic>{
+      'action': 'markRead',
+      'notifId': notifId,
+    });
+  }
+
+  Future<void> markAllNotificationsAsRead() async {
+    await _postJson(_mobileNotificationsPath, const <String, dynamic>{
+      'action': 'markAllRead',
+    });
+  }
+
+  Future<void> createSystemNotification({
+    required String type,
+    required String title,
+    required String body,
+    required String role,
+    String? district,
+    Map<String, String>? data,
+  }) async {
+    await _postJson(_mobileNotificationsPath, <String, dynamic>{
+      'action': 'createSystem',
+      'type': type,
+      'title': title,
+      'body': body,
+      'role': role,
+      if (district != null && district.trim().isNotEmpty) 'district': district,
+      if (data != null && data.isNotEmpty) 'data': data,
+    });
   }
 
   Future<Map<String, dynamic>> _getJson(
@@ -151,6 +202,7 @@ class MobileRepository {
         employeeDocId: claims['employeeDocId'] as String?,
         clientId: claims['clientId'] as String?,
         clientName: claims['clientName'] as String?,
+        district: claims['district'] as String?,
         stateCode: claims['stateCode'] as String?,
       );
     }
@@ -200,6 +252,7 @@ class MobileRepository {
               .toList(),
       clientId: data['clientId'] as String?,
       clientName: data['clientName'] as String?,
+      district: data['district'] as String?,
       stateCode: data['stateCode'] as String?,
     );
   }
@@ -539,6 +592,17 @@ class MobileRepository {
         .toList();
   }
 
+  Future<GuardPatrolStatusModel> fetchGuardPatrolStatus() async {
+    final data = await _getJson('/api/guard/patrol');
+    return GuardPatrolStatusModel.fromJson(data);
+  }
+
+  Future<Map<String, dynamic>> submitGuardPatrolActivity(
+    Map<String, dynamic> payload,
+  ) async {
+    return _postJson('/api/guard/patrol', payload);
+  }
+
   Future<Map<String, dynamic>> fetchLeaveOverview() async {
     return _getJson('/api/guard/leave');
   }
@@ -601,12 +665,24 @@ class MobileRepository {
               .toList(),
       totalGuards: (data['totalGuards'] as num?)?.toInt() ?? 0,
       activeGuards: (data['activeGuards'] as num?)?.toInt() ?? 0,
+      totalSitesInScope: (data['totalSitesInScope'] as num?)?.toInt() ?? 0,
       attendanceSummary: FieldOfficerAttendanceSummary.fromJson(
         data['attendanceSummary'] as Map<String, dynamic>?,
       ),
+      todayOverview: FieldOfficerTodayOverview.fromJson(
+        data['todayOverview'] as Map<String, dynamic>?,
+      ),
+      todaySites: (data['todaySites'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map(FieldOfficerTodaySiteBrief.fromJson)
+          .toList(),
       attendanceSites:
           (data['attendanceSites'] as List<dynamic>? ?? const <dynamic>[])
-              .map((item) => FieldOfficerAttendanceSite.fromJson(item as Map<String, dynamic>))
+              .map(
+                (item) => FieldOfficerAttendanceSite.fromJson(
+                  item as Map<String, dynamic>,
+                ),
+              )
               .toList(),
       upcomingWorkOrders: upcoming,
       recentVisitReports: visitReports,
@@ -621,6 +697,22 @@ class MobileRepository {
     return rows
         .whereType<Map<String, dynamic>>()
         .map(WorkOrderModel.fromJson)
+        .toList();
+  }
+
+  Future<List<FieldOfficerSiteOption>> fetchFieldOfficerSites({
+    String? district,
+  }) async {
+    final data = await _getJson(
+      '/api/field-officer/sites',
+      queryParameters: (district != null && district.trim().isNotEmpty)
+          ? <String, dynamic>{'district': district.trim()}
+          : null,
+    );
+    final rows = data['sites'] as List<dynamic>? ?? const <dynamic>[];
+    return rows
+        .whereType<Map<String, dynamic>>()
+        .map(FieldOfficerSiteOption.fromJson)
         .toList();
   }
 

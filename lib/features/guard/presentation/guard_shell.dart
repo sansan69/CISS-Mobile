@@ -18,6 +18,7 @@ import 'screens/guard_evaluations_screen.dart';
 import 'screens/guard_incidents_screen.dart';
 import 'screens/guard_leave_screen.dart';
 import 'screens/guard_payslips_screen.dart';
+import 'screens/guard_patrol_screen.dart';
 import 'screens/guard_profile_screen.dart';
 import 'screens/guard_training_screen.dart';
 
@@ -85,6 +86,7 @@ class _GuardShellState extends ConsumerState<GuardShell> {
     ref.watch(guardEvaluationsProvider);
     ref.watch(guardIncidentsProvider);
     ref.watch(guardLeaveProvider);
+    ref.watch(guardPatrolStatusProvider);
 
     return Scaffold(
       body: IndexedStack(
@@ -145,6 +147,18 @@ class GuardMoreScreen extends ConsumerWidget {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => const NotificationInboxScreen(),
+              ),
+            );
+          },
+        ),
+        SectionCard(
+          title: 'Patrol',
+          subtitle: 'Hourly night checks and patrol rounds',
+          icon: Icons.route_outlined,
+          onTap: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const GuardPatrolScreen(),
               ),
             );
           },
@@ -230,7 +244,7 @@ class _NotificationBadge extends ConsumerWidget {
             )
           : const SizedBox.shrink(),
       loading: () => const SizedBox.shrink(),
-      error: (_, __) => const SizedBox.shrink(),
+      error: (error, stackTrace) => const SizedBox.shrink(),
     );
   }
 }
