@@ -17,7 +17,7 @@ import '../../../core/qr/qr_parser.dart';
 import '../../../core/utils/date_format.dart';
 import '../../../shared/widgets/camera_capture_screen.dart';
 import '../../../core/location/live_location_service.dart';
-import '../../../core/fcm/notification_service.dart';
+import '../../../core/fcm/providers.dart';
 
 enum _QrFlowStep { scan, action, confirmation }
 
@@ -525,11 +525,11 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
           ? site.dutyPoints.first
           : null;
       final shift =
-          dutyPoint?.shiftTemplates.isNotEmpty == true
-              ? dutyPoint!.shiftTemplates.first
-              : site.shiftTemplates.isNotEmpty
-                  ? site.shiftTemplates.first
-                  : null;
+          resolveActiveShiftTemplate(
+            dutyPoint?.shiftTemplates.isNotEmpty == true
+                ? dutyPoint!.shiftTemplates
+                : site.shiftTemplates,
+          );
 
       final now = DateTime.now();
 
@@ -564,21 +564,24 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
             'lng': site.lng,
           },
         // GPS location data (matches GuardAttendanceScreen payload shape)
-        if (pos != null)
+        if (pos case final currentPos?)
           'locationCoords': <String, dynamic>{
-            'lat': pos.latitude,
-            'lon': pos.longitude,
-            'accuracyMeters': pos.accuracy,
+            'lat': currentPos.latitude,
+            'lon': currentPos.longitude,
+            'accuracyMeters': currentPos.accuracy,
           },
-        if (pos != null) 'gpsAccuracyMeters': pos.accuracy,
-        if (pos != null) 'locationAccuracyMeters': pos.accuracy,
+        if (pos case final currentPos?) 'gpsAccuracyMeters': currentPos.accuracy,
+        if (pos case final currentPos?)
+          'locationAccuracyMeters': currentPos.accuracy,
         'distanceMeters': distanceMeters,
         'geofenceRadiusAtTime': site.geofenceRadiusMeters,
         'sourceCollection': site.sourceCollection,
         'photoCapturedAt': now.toUtc().toIso8601String(),
         'deviceInfo': <String, dynamic>{'userAgent': 'flutter-mobile-qr'},
-        if (photoUrl != null) 'photoUrl': photoUrl,
       };
+      if (photoUrl != null) {
+        payload['photoUrl'] = photoUrl;
+      }
 
       await repo.submitAttendance(payload);
 
@@ -597,10 +600,12 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
       }
 
       // Notify field officers
-      NotificationService.triggerSystemNotification(
+      await ref.read(notificationServiceProvider).triggerSystemNotification(
         type: 'attendance_marked',
         title: 'Guard ${_attendanceStatus == 'In' ? 'Checked In' : 'Checked Out'}',
         body: '${employee.fullName} marked ${_attendanceStatus.toLowerCase()} at ${_selectedSite!.siteName}',
+        role: 'fieldOfficer',
+        district: site.district,
         data: {'employeeId': employee.employeeCode ?? employee.id},
       );
     } on DioException catch (e) {

@@ -14,7 +14,7 @@ import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/location/background_tracking_service.dart';
 import '../../../../../core/location/live_location_service.dart';
-import '../../../../../core/fcm/notification_service.dart';
+import '../../../../../core/fcm/providers.dart';
 import '../../../../../shared/widgets/camera_capture_screen.dart';
 import '../../../../../shared/widgets/section_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
@@ -312,11 +312,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           (_site!.dutyPoints.length == 1 ? _site!.dutyPoints.first : null);
       final shift =
           _shift ??
-          (dutyPoint?.shiftTemplates.isNotEmpty == true
-              ? dutyPoint!.shiftTemplates.first
-              : _site!.shiftTemplates.isNotEmpty
-              ? _site!.shiftTemplates.first
-              : null);
+          resolveActiveShiftTemplate(
+            dutyPoint?.shiftTemplates.isNotEmpty == true
+                ? dutyPoint!.shiftTemplates
+                : _site!.shiftTemplates,
+          );
 
       final payload = <String, dynamic>{
         'employeeId': profile.employeeId,
@@ -373,6 +373,9 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
               lng: _site!.lng!,
               radiusMeters: _site!.geofenceRadiusMeters.toDouble(),
               employeeId: profile.employeeId,
+              guardName: profile.fullName,
+              clientName: profile.clientName,
+              district: profile.district,
             );
           } else {
             debugPrint('Tracking skipped: site coordinates missing.');
@@ -380,10 +383,12 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           // Write initial location to Firestore for live tracking
           _writeLiveLocation(profile, _status);
           // Notify field officers
-          NotificationService.triggerSystemNotification(
+          await ref.read(notificationServiceProvider).triggerSystemNotification(
             type: 'attendance_marked',
             title: 'Guard ${_status == 'In' ? 'Checked In' : 'Checked Out'}',
             body: '${profile.fullName} marked ${_status.toLowerCase()} at ${_site!.siteName}',
+            role: 'fieldOfficer',
+            district: profile.district,
             data: {'employeeId': profile.employeeId, 'siteId': _site!.id},
           );
         } else {

@@ -21,6 +21,44 @@ class ShiftTemplateModel {
   }
 }
 
+int? _shiftMinutes(String value) {
+  final parts = value.split(':');
+  if (parts.length != 2) return null;
+  final hour = int.tryParse(parts[0]);
+  final minute = int.tryParse(parts[1]);
+  if (hour == null || minute == null) return null;
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return hour * 60 + minute;
+}
+
+ShiftTemplateModel? resolveActiveShiftTemplate(
+  Iterable<ShiftTemplateModel> shiftTemplates, {
+  DateTime? at,
+}) {
+  final shifts = shiftTemplates.toList(growable: false);
+  if (shifts.isEmpty) return null;
+
+  final now = at ?? DateTime.now();
+  final totalMinutes = now.hour * 60 + now.minute;
+
+  for (final shift in shifts) {
+    final start = _shiftMinutes(shift.startTime);
+    final end = _shiftMinutes(shift.endTime);
+    if (start == null || end == null) continue;
+
+    final crossesMidnight = start >= end;
+    final inShift = crossesMidnight
+        ? totalMinutes >= start || totalMinutes < end
+        : totalMinutes >= start && totalMinutes < end;
+
+    if (inShift) {
+      return shift;
+    }
+  }
+
+  return shifts.first;
+}
+
 class DutyPointModel {
   const DutyPointModel({
     required this.id,
