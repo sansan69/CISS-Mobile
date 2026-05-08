@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -27,6 +28,7 @@ class MobileRepository {
   ApiClient get apiClient => _apiClient;
 
   static const String _mobileNotificationsPath = '/api/mobile/notifications';
+  static const String _mobileTokenPath = '/api/mobile/token';
 
   Future<String?> _token() async => _auth.currentUser?.getIdToken(false);
 
@@ -34,40 +36,78 @@ class MobileRepository {
 
   Future<void> updateFcmToken(String token) async {
     try {
-      await _postJson('/api/mobile/token', <String, String>{'fcmToken': token});
+      await _postJson(_mobileTokenPath, <String, String>{'fcmToken': token});
     } catch (error) {
+      if (await _saveFcmTokenDirectly(token)) {
+        debugPrint(
+          'Saved FCM token directly because $_mobileTokenPath is unavailable: $error',
+        );
+        return;
+      }
+
       // Non-critical: failure here shouldn't block the app, but log it.
       debugPrint('Error updating FCM token: $error');
     }
   }
 
   Future<List<Map<String, dynamic>>> fetchNotifications() async {
-    final data = await _getJson(_mobileNotificationsPath);
-    final rawNotifications =
-        (data['notifications'] as List<dynamic>? ?? const <dynamic>[]);
+    try {
+      final data = await _getJson(_mobileNotificationsPath);
+      final rawNotifications =
+          (data['notifications'] as List<dynamic>? ?? const <dynamic>[]);
 
-    return rawNotifications
-        .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
-        .toList();
+      return rawNotifications
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    } catch (error) {
+      try {
+        return _fetchNotificationsDirectly();
+      } catch (_) {
+        rethrow;
+      }
+    }
   }
 
   Future<int> fetchUnreadNotificationCount() async {
-    final data = await _getJson(_mobileNotificationsPath);
-    return (data['unreadCount'] as num?)?.toInt() ?? 0;
+    try {
+      final data = await _getJson(_mobileNotificationsPath);
+      return (data['unreadCount'] as num?)?.toInt() ?? 0;
+    } catch (error) {
+      try {
+        final notifications = await _fetchNotificationsDirectly();
+        return notifications.where((item) => item['read'] != true).length;
+      } catch (_) {
+        rethrow;
+      }
+    }
   }
 
   Future<void> markNotificationAsRead(String notifId) async {
-    await _postJson(_mobileNotificationsPath, <String, dynamic>{
-      'action': 'markRead',
-      'notifId': notifId,
-    });
+    try {
+      await _postJson(_mobileNotificationsPath, <String, dynamic>{
+        'action': 'markRead',
+        'notifId': notifId,
+      });
+    } catch (error) {
+      if (await _markNotificationAsReadDirectly(notifId)) {
+        return;
+      }
+      rethrow;
+    }
   }
 
   Future<void> markAllNotificationsAsRead() async {
-    await _postJson(_mobileNotificationsPath, const <String, dynamic>{
-      'action': 'markAllRead',
-    });
+    try {
+      await _postJson(_mobileNotificationsPath, const <String, dynamic>{
+        'action': 'markAllRead',
+      });
+    } catch (error) {
+      if (await _markAllNotificationsAsReadDirectly()) {
+        return;
+      }
+      rethrow;
+    }
   }
 
   Future<void> createSystemNotification({
@@ -179,6 +219,13 @@ class MobileRepository {
     final claims = token.claims ?? <String, dynamic>{};
     final role = _roleFromClaims(claims);
     if (role != null) {
+      if (role == AppRole.guard) {
+        final guardSession = await _resolveGuardSessionFromProfile(user);
+        if (guardSession != null) {
+          return guardSession;
+        }
+      }
+
       return _buildSessionFromClaims(user: user, claims: claims, role: role);
     }
 
@@ -257,6 +304,26 @@ class MobileRepository {
     );
   }
 
+  Future<AuthSession?> _resolveGuardSessionFromProfile(User user) async {
+    try {
+      final profile = await fetchGuardProfile();
+      return AuthSession(
+        role: AppRole.guard,
+        displayName: profile.fullName.isNotEmpty
+            ? profile.fullName
+            : (user.displayName ?? user.email ?? 'Guard'),
+        primaryId: profile.employeeId.isNotEmpty ? profile.employeeId : user.uid,
+        uid: user.uid,
+        email: user.email,
+        employeeDocId: profile.id.isNotEmpty ? profile.id : null,
+        clientName: profile.clientName.isNotEmpty ? profile.clientName : null,
+        district: profile.district.isNotEmpty ? profile.district : null,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   AppRole? _roleFromClaims(Map<String, dynamic>? claims) {
     return _roleFromWire(claims?['role']);
   }
@@ -282,6 +349,132 @@ class MobileRepository {
       }
     }
     return error.toString().replaceFirst('Exception: ', '');
+  }
+
+  Future<bool> _saveFcmTokenDirectly(String token) async {
+    final user = _auth.currentUser;
+    if (user == null || token.trim().isEmpty) {
+      return false;
+    }
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('fcmTokens')
+          .doc('${user.uid}_mobile')
+          .set(<String, dynamic>{
+            'uid': user.uid,
+            'token': token.trim(),
+            'platform': 'mobile',
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchNotificationsDirectly() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return const <Map<String, dynamic>>[];
+    }
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('notifications')
+        .where('recipientUid', isEqualTo: user.uid)
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .get();
+
+    return snapshot.docs
+        .map((doc) => _serializeNotificationDocument(doc))
+        .toList();
+  }
+
+  Future<bool> _markNotificationAsReadDirectly(String notifId) async {
+    final user = _auth.currentUser;
+    if (user == null || notifId.trim().isEmpty) {
+      return false;
+    }
+
+    try {
+      final docRef = FirebaseFirestore.instance
+          .collection('notifications')
+          .doc(notifId.trim());
+      final snapshot = await docRef.get();
+      final data = snapshot.data();
+      if (!snapshot.exists || data == null || data['recipientUid'] != user.uid) {
+        return false;
+      }
+
+      await docRef.update(<String, dynamic>{
+        'read': true,
+        'readAt': FieldValue.serverTimestamp(),
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _markAllNotificationsAsReadDirectly() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return false;
+    }
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('notifications')
+          .where('recipientUid', isEqualTo: user.uid)
+          .limit(50)
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        return true;
+      }
+
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in snapshot.docs) {
+        if (doc.data()['read'] == true) continue;
+        batch.update(doc.reference, <String, dynamic>{
+          'read': true,
+          'readAt': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Map<String, dynamic> _serializeNotificationDocument(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    final createdAt = data['createdAt'];
+    final readAt = data['readAt'];
+
+    return <String, dynamic>{
+      'id': doc.id,
+      'type': data['type'] ?? 'broadcast',
+      'title': data['title'] ?? '',
+      'body': data['body'] ?? '',
+      'read': data['read'] == true,
+      'createdAt': createdAt is Timestamp
+          ? createdAt.toDate().toIso8601String()
+          : createdAt?.toString(),
+      'readAt': readAt is Timestamp
+          ? readAt.toDate().toIso8601String()
+          : readAt?.toString(),
+      'recipientUid': data['recipientUid'],
+      'recipientRole': data['recipientRole'],
+      'recipientDistrict': data['recipientDistrict'],
+      'data': data['data'] is Map
+          ? Map<String, dynamic>.from(data['data'] as Map)
+          : null,
+    };
   }
 
   String _extractFirebaseAuthError(FirebaseAuthException error) {

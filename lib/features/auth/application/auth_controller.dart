@@ -1,22 +1,122 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/auth/saved_accounts_service.dart';
+import '../../../core/fcm/providers.dart';
 import '../../../core/models/auth_session.dart';
 import '../../../core/models/guard_pin_status.dart';
 import '../../../core/network/providers.dart';
 
-final StreamProvider<AuthSession?> authSessionProvider =
-    StreamProvider<AuthSession?>((Ref ref) async* {
-      final auth = ref.watch(firebaseAuthProvider);
-      await for (final User? user in auth.idTokenChanges()) {
-        if (user == null) {
-          yield null;
-          continue;
-        }
+// ─────────────────────────────────────────────────────────────────────────────
+// Session notifier — owns the logged-in session state.
+//
+// It listens to Firebase idTokenChanges() so it reacts to sign-in / sign-out /
+// token refresh automatically. It also exposes setSession() so the
+// AuthController can inject the already-resolved session after a fresh login
+// (instead of invalidating the provider and triggering a redundant second
+// network call).
+// ─────────────────────────────────────────────────────────────────────────────
 
-        yield await ref.read(mobileRepositoryProvider).resolveCurrentSession();
+class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
+  StreamSubscription<User?>? _authSubscription;
+  AuthSession? _cachedSession;
+
+  @override
+  Future<AuthSession?> build() async {
+    final auth = ref.watch(firebaseAuthProvider);
+
+    // Cancel any previous listener (idempotent on rebuild).
+    _authSubscription?.cancel();
+
+    // Fast path: if we have a cached session and the Firebase user matches,
+    // return it instantly. The listener will refresh in the background.
+    final user = auth.currentUser;
+    if (user == null) {
+      _cachedSession = null;
+      return null;
+    }
+
+    if (_cachedSession != null && _cachedSession!.uid == user.uid) {
+      // Schedule a background refresh without blocking the UI.
+      _scheduleBackgroundRefresh();
+      return _cachedSession;
+    }
+
+    // Listen to auth changes for the lifetime of this notifier.
+    _authSubscription = auth.idTokenChanges().listen((User? changedUser) async {
+      if (changedUser == null) {
+        _cachedSession = null;
+        state = const AsyncData(null);
+        return;
+      }
+
+      // If the user hasn't changed and we have a cached session, skip.
+      if (_cachedSession != null && _cachedSession!.uid == changedUser.uid) {
+        return;
+      }
+
+      try {
+        final session = await ref
+            .read(mobileRepositoryProvider)
+            .resolveCurrentSession();
+        _cachedSession = session;
+        state = AsyncData(session);
+      } catch (error, stack) {
+        // Keep the cached session alive if backend is temporarily down.
+        if (_cachedSession != null) {
+          state = AsyncData(_cachedSession);
+        } else {
+          state = AsyncError(error, stack);
+        }
       }
     });
+
+    // Block only on first-ever resolution; warm starts use the fast path above.
+    final session = await ref
+        .read(mobileRepositoryProvider)
+        .resolveCurrentSession();
+    _cachedSession = session;
+    return session;
+  }
+
+  void _scheduleBackgroundRefresh() {
+    // Refresh in the background without blocking.
+    ref.read(mobileRepositoryProvider).resolveCurrentSession().then((session) {
+      if (session != null) {
+        _cachedSession = session;
+        // Only update state if it hasn't changed to null in the meantime.
+        if (state.valueOrNull != null) {
+          state = AsyncData(session);
+        }
+      }
+    }).catchError((_) {
+      // Silent — the cached session is still valid.
+    });
+  }
+
+  /// Inject a session after a fresh login — avoids a redundant backend call.
+  void setSession(AuthSession session) {
+    _cachedSession = session;
+    state = AsyncData(session);
+  }
+
+  /// Clear the session (used on sign-out before the auth listener fires).
+  void clearSession() {
+    _cachedSession = null;
+    state = const AsyncData(null);
+  }
+}
+
+final authSessionProvider =
+    AsyncNotifierProvider<AuthSessionNotifier, AuthSession?>(
+  AuthSessionNotifier.new,
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Auth controller — orchestrates login / logout actions.
+// ─────────────────────────────────────────────────────────────────────────────
 
 class AuthController {
   AuthController(this._ref);
@@ -27,10 +127,27 @@ class AuthController {
     required String loginIdOrPhone,
     required String pin,
   }) async {
+    // 1. Authenticate with Firebase via the custom token from the backend.
     final session = await _ref
         .read(mobileRepositoryProvider)
         .signInGuard(loginIdOrPhone: loginIdOrPhone, pin: pin);
-    _ref.invalidate(authSessionProvider);
+
+    // 2. Inject the resolved session directly — no provider invalidation.
+    _ref.read(authSessionProvider.notifier).setSession(session);
+    unawaited(
+      _ref.read(notificationServiceProvider).refreshTopicSubscription(),
+    );
+
+    // 3. Persist the account for quick login next time.
+    unawaited(_ref.read(savedAccountsServiceProvider).saveAccount(
+      SavedAccount(
+        role: 'guard',
+        loginId: loginIdOrPhone.trim(),
+        displayName: session.displayName,
+        lastLoginAt: DateTime.now(),
+      ),
+    ));
+
     return session;
   }
 
@@ -60,16 +177,39 @@ class AuthController {
     required String email,
     required String password,
   }) async {
+    // 1. Authenticate with Firebase directly.
     final session = await _ref
         .read(mobileRepositoryProvider)
         .signInFieldOfficer(email: email, password: password);
-    _ref.invalidate(authSessionProvider);
+
+    // 2. Inject the resolved session directly.
+    _ref.read(authSessionProvider.notifier).setSession(session);
+    unawaited(
+      _ref.read(notificationServiceProvider).refreshTopicSubscription(),
+    );
+
+    // 3. Persist the account.
+    unawaited(_ref.read(savedAccountsServiceProvider).saveAccount(
+      SavedAccount(
+        role: 'fieldOfficer',
+        loginId: email.trim(),
+        displayName: session.displayName,
+        lastLoginAt: DateTime.now(),
+      ),
+    ));
+
     return session;
   }
 
   Future<void> signOut() async {
+    await _ref.read(notificationServiceProvider).clearTopicSubscriptions();
+
+    // Clear the session immediately so the UI reacts before the auth listener.
+    _ref.read(authSessionProvider.notifier).clearSession();
+
+    // Sign out from Firebase. The idTokenChanges listener will also fire
+    // null, but we've already cleared the state — it's a no-op double-clear.
     await _ref.read(mobileRepositoryProvider).signOut();
-    _ref.invalidate(authSessionProvider);
   }
 }
 

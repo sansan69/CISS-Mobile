@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'dart:convert';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -22,32 +22,50 @@ class NotificationService {
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotifications =
       FlutterLocalNotificationsPlugin();
+  final Set<String> _subscribedTopics = <String>{};
+  Timer? _sessionRetryTimer;
 
-  // Stream of notifications for UI badges
-  static final unreadCountProvider = StreamProvider<int>((ref) {
-    return FirebaseFirestore.instance
-        .collection('notifications')
-        .where('read', isEqualTo: false)
-        .snapshots()
-        .map((snap) => snap.docs.length);
-  });
+  void _ensureSessionRetryLoop() {
+    _sessionRetryTimer ??= Timer.periodic(
+      const Duration(seconds: 1),
+      (_) {
+        final session = _ref.read(authSessionProvider).value;
+        if (session != null) {
+          unawaited(refreshTopicSubscription());
+          _sessionRetryTimer?.cancel();
+          _sessionRetryTimer = null;
+        }
+      },
+    );
+  }
 
-  // Stream of all notifications for inbox
-  static final notificationsProvider =
+  static Stream<T> _poll<T>(
+    Future<T> Function() load, {
+    Duration interval = const Duration(seconds: 30),
+  }) async* {
+    yield await load();
+    yield* Stream.periodic(interval).asyncMap((_) => load());
+  }
+
+  static final _notificationsSnapshotProvider =
       StreamProvider<List<Map<String, dynamic>>>((ref) {
-    return FirebaseFirestore.instance
-        .collection('notifications')
-        .orderBy('createdAt', descending: true)
-        .limit(50)
-        .snapshots()
-        .map((snap) => snap.docs.map((doc) {
-              final data = doc.data();
-              data['id'] = doc.id;
-              return data;
-            }).toList());
+        final repo = ref.watch(mobileRepositoryProvider);
+        return _poll(repo.fetchNotifications);
+      });
+
+  static final unreadCountProvider = StreamProvider<int>((ref) {
+    final repo = ref.watch(mobileRepositoryProvider);
+    return _poll(repo.fetchUnreadNotificationCount);
   });
+
+  static final notificationsProvider =
+      Provider<AsyncValue<List<Map<String, dynamic>>>>((ref) {
+        return ref.watch(_notificationsSnapshotProvider);
+      });
 
   Future<void> init() async {
+    _ensureSessionRetryLoop();
+
     // ── Local notification setup ───────────────────────────────────────
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -104,15 +122,38 @@ class NotificationService {
   Future<void> _subscribeToRoleTopic() async {
     try {
       final session = _ref.read(authSessionProvider).value;
-      if (session == null) return;
-
-      if (session.role == AppRole.guard) {
-        await _fcm.subscribeToTopic('guards');
-        await _fcm.unsubscribeFromTopic('field_officers');
-      } else if (session.role == AppRole.fieldOfficer) {
-        await _fcm.subscribeToTopic('field_officers');
-        await _fcm.unsubscribeFromTopic('guards');
+      if (session == null) {
+        await clearTopicSubscriptions();
+        return;
       }
+
+      final desiredTopics = <String>{
+        if (session.role == AppRole.guard) 'guards',
+        if (session.role == AppRole.fieldOfficer) 'field_officers',
+        if (session.role == AppRole.guard &&
+            (session.district ?? '').trim().isNotEmpty)
+          _buildDistrictTopic('guard', session.district!.trim()),
+        if (session.role == AppRole.fieldOfficer)
+          ...session.assignedDistricts
+              .where((district) => district.trim().isNotEmpty)
+              .map((district) => _buildDistrictTopic('fieldOfficer', district)),
+      };
+
+      final topicsToUnsubscribe = _subscribedTopics.difference(desiredTopics);
+      final topicsToSubscribe = desiredTopics.difference(_subscribedTopics);
+
+      for (final topic in topicsToUnsubscribe) {
+        await _fcm.unsubscribeFromTopic(topic);
+      }
+      for (final topic in topicsToSubscribe) {
+        await _fcm.subscribeToTopic(topic);
+      }
+
+      _subscribedTopics
+        ..clear()
+        ..addAll(desiredTopics);
+      _sessionRetryTimer?.cancel();
+      _sessionRetryTimer = null;
     } catch (_) {
       // Non-critical — topic subscription can be retried
     }
@@ -120,6 +161,15 @@ class NotificationService {
 
   /// Re-subscribe to topic when role changes (e.g. after login).
   Future<void> refreshTopicSubscription() => _subscribeToRoleTopic();
+
+  Future<void> clearTopicSubscriptions() async {
+    _sessionRetryTimer?.cancel();
+    _sessionRetryTimer = null;
+    for (final topic in _subscribedTopics) {
+      await _fcm.unsubscribeFromTopic(topic);
+    }
+    _subscribedTopics.clear();
+  }
 
   // ── Foreground: show local notification ──────────────────────────────
 
@@ -166,13 +216,9 @@ class NotificationService {
     final type = data['type'] as String?;
     if (type == null) return;
 
-    // Try to mark notification as read if notifId is present
     final notifId = data['notifId'] as String?;
     if (notifId != null) {
-      FirebaseFirestore.instance
-          .collection('notifications')
-          .doc(notifId)
-          .update({'read': true, 'readAt': FieldValue.serverTimestamp()});
+      unawaited(markAsRead(notifId));
     }
 
     switch (type) {
@@ -195,11 +241,21 @@ class NotificationService {
         _navigateFieldOfficer(2);
         break;
       case 'broadcast':
-        _navigateGuard(0);
+        _navigateHomeForCurrentRole();
         break;
       default:
         break;
     }
+  }
+
+  String _buildDistrictTopic(String role, String district) {
+    final slug = district
+        .trim()
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    final prefix = role == 'guard' ? 'guards' : 'field_officers';
+    return '${prefix}_district_$slug';
   }
 
   void _navigateGuard(int tabIndex) {
@@ -212,47 +268,47 @@ class NotificationService {
     rootNavigatorKey.currentContext?.go('/');
   }
 
+  void _navigateHomeForCurrentRole() {
+    final session = _ref.read(authSessionProvider).value;
+    if (session?.role == AppRole.fieldOfficer) {
+      _navigateFieldOfficer(0);
+      return;
+    }
+    _navigateGuard(0);
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────
 
-  /// Mark a notification as read
-  static Future<void> markAsRead(String notifId) async {
-    await FirebaseFirestore.instance
-        .collection('notifications')
-        .doc(notifId)
-        .update({'read': true, 'readAt': FieldValue.serverTimestamp()});
+  Future<void> markAsRead(String notifId) async {
+    await _ref.read(mobileRepositoryProvider).markNotificationAsRead(notifId);
+    _ref.invalidate(_notificationsSnapshotProvider);
+    _ref.invalidate(unreadCountProvider);
   }
 
-  /// Mark all notifications as read
-  static Future<void> markAllAsRead() async {
-    final batch = FirebaseFirestore.instance.batch();
-    final snap = await FirebaseFirestore.instance
-        .collection('notifications')
-        .where('read', isEqualTo: false)
-        .get();
-    for (final doc in snap.docs) {
-      batch.update(doc.reference, {
-        'read': true,
-        'readAt': FieldValue.serverTimestamp(),
-      });
-    }
-    await batch.commit();
+  Future<void> markAllAsRead() async {
+    await _ref.read(mobileRepositoryProvider).markAllNotificationsAsRead();
+    _ref.invalidate(_notificationsSnapshotProvider);
+    _ref.invalidate(unreadCountProvider);
   }
 
-  /// Trigger a system notification (called from attendance screen, etc.)
-  static Future<void> triggerSystemNotification({
+  Future<void> triggerSystemNotification({
     required String type,
     required String title,
     required String body,
+    required String role,
+    String? district,
     Map<String, String>? data,
   }) async {
-    await FirebaseFirestore.instance.collection('notifications').add({
-      'type': type,
-      'title': title,
-      'body': body,
-      'data': data,
-      'read': false,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    await _ref.read(mobileRepositoryProvider).createSystemNotification(
+          type: type,
+          title: title,
+          body: body,
+          role: role,
+          district: district,
+          data: data,
+        );
+    _ref.invalidate(_notificationsSnapshotProvider);
+    _ref.invalidate(unreadCountProvider);
   }
 }
 

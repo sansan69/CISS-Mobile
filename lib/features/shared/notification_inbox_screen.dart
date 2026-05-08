@@ -1,10 +1,10 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/fcm/providers.dart';
 import '../../../core/fcm/notification_service.dart';
 
 class NotificationInboxScreen extends ConsumerWidget {
@@ -23,7 +23,8 @@ class NotificationInboxScreen extends ConsumerWidget {
         backgroundColor: tokens.canvas,
         actions: [
           TextButton(
-            onPressed: () => NotificationService.markAllAsRead(),
+            onPressed: () =>
+                ref.read(notificationServiceProvider).markAllAsRead(),
             child: Text('Mark all read',
                 style: GoogleFonts.rajdhani(
                     fontWeight: FontWeight.w700, fontSize: 13)),
@@ -52,12 +53,15 @@ class NotificationInboxScreen extends ConsumerWidget {
           return ListView.separated(
             padding: const EdgeInsets.symmetric(vertical: 8),
             itemCount: notifs.length,
-            separatorBuilder: (_, __) =>
+            separatorBuilder: (context, index) =>
                 Divider(height: 1, color: tokens.border),
             itemBuilder: (_, i) {
               final n = notifs[i];
               final isRead = n['read'] == true;
-              final createdAt = (n['createdAt'] as Timestamp?)?.toDate();
+              final createdAtRaw = n['createdAt'] as String?;
+              final createdAt = createdAtRaw != null
+                  ? DateTime.tryParse(createdAtRaw)
+                  : null;
               final type = (n['type'] as String?) ?? 'broadcast';
 
               return ListTile(
@@ -101,7 +105,9 @@ class NotificationInboxScreen extends ConsumerWidget {
                     : null,
                 onTap: () {
                   if (!isRead) {
-                    NotificationService.markAsRead(n['id'] as String);
+                    ref
+                        .read(notificationServiceProvider)
+                        .markAsRead(n['id'] as String);
                   }
                 },
               );

@@ -12,6 +12,7 @@ class AuthSession {
     this.assignedDistricts = const <String>[],
     this.clientId,
     this.clientName,
+    this.district,
     this.stateCode,
   });
 
@@ -25,5 +26,6 @@ class AuthSession {
   final List<String> assignedDistricts;
   final String? clientId;
   final String? clientName;
+  final String? district;
   final String? stateCode;
 }

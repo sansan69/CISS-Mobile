@@ -44,7 +44,9 @@ class GuardProfileModel {
       gender: json['gender'] as String?,
       joiningDate: json['joiningDate'] as String?,
       resourceIdNumber: json['resourceIdNumber'] as String?,
-      profilePhotoUrl: json['profilePhotoUrl'] as String?,
+      profilePhotoUrl:
+          (json['profilePhotoUrl'] as String?) ??
+          (json['profilePictureUrl'] as String?),
       address: json['address'] as String?,
     );
   }
