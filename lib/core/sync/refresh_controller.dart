@@ -10,7 +10,6 @@ import '../../features/field_officer/presentation/screens/field_officer_work_ord
 import '../../features/guard/presentation/screens/guard_attendance_screen.dart';
 import '../../features/guard/presentation/screens/guard_dashboard_screen.dart';
 import '../../features/guard/presentation/screens/guard_incidents_screen.dart';
-import '../../features/guard/presentation/screens/guard_leave_screen.dart';
 import '../../features/guard/presentation/screens/guard_profile_screen.dart';
 
 /// Periodically invalidates key dashboard and list providers to keep data fresh.
@@ -36,23 +35,31 @@ class RefreshController {
   }
 
   void _refreshAll() {
-    // Guard Portal
-    _ref.invalidate(guardDashboardProvider);
-    _ref.invalidate(attendanceSitesProvider);
-    _ref.invalidate(guardProfileProvider);
-    _ref.invalidate(guardIncidentsProvider);
-    _ref.invalidate(guardLeaveProvider);
+    // Stagger invalidations to avoid thundering herd.
+    final providers = <ProviderBase<Object?>>[
+      guardDashboardProvider,
+      attendanceSitesProvider,
+      guardProfileProvider,
+      guardIncidentsProvider,
+      fieldOfficerDashboardProvider,
+      fieldOfficerGuardAttendanceProvider,
+      fieldOfficerGuardsProvider,
+      fieldOfficerWorkOrdersProvider,
+      fieldOfficerVisitReportsProvider,
+      fieldOfficerTrainingReportsProvider,
+    ];
 
-    // Field Officer Portal
-    _ref.invalidate(fieldOfficerDashboardProvider);
-    _ref.invalidate(fieldOfficerGuardAttendanceProvider);
-    _ref.invalidate(fieldOfficerGuardsProvider);
-    _ref.invalidate(fieldOfficerWorkOrdersProvider);
-    _ref.invalidate(fieldOfficerVisitReportsProvider);
-    _ref.invalidate(fieldOfficerTrainingReportsProvider);
+    for (var i = 0; i < providers.length; i++) {
+      Timer(Duration(milliseconds: i * 200), () {
+        _ref.invalidate(providers[i]);
+      });
+    }
   }
 }
 
 final refreshControllerProvider = Provider<RefreshController>((ref) {
-  return RefreshController(ref);
+  final controller = RefreshController(ref);
+  controller.start();
+  ref.onDispose(() => controller.stop());
+  return controller;
 });

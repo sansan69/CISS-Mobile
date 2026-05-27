@@ -13,6 +13,7 @@ import '../../features/field_officer/field_officer_tab_provider.dart';
 import '../../features/guard/guard_tab_provider.dart';
 import '../network/providers.dart';
 import '../models/app_role.dart';
+import '../sync/providers.dart';
 import '../../features/auth/application/auth_controller.dart';
 
 class NotificationService {
@@ -26,17 +27,14 @@ class NotificationService {
   Timer? _sessionRetryTimer;
 
   void _ensureSessionRetryLoop() {
-    _sessionRetryTimer ??= Timer.periodic(
-      const Duration(seconds: 1),
-      (_) {
-        final session = _ref.read(authSessionProvider).value;
-        if (session != null) {
-          unawaited(refreshTopicSubscription());
-          _sessionRetryTimer?.cancel();
-          _sessionRetryTimer = null;
-        }
-      },
-    );
+    _sessionRetryTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
+      final session = _ref.read(authSessionProvider).value;
+      if (session != null) {
+        unawaited(refreshTopicSubscription());
+        _sessionRetryTimer?.cancel();
+        _sessionRetryTimer = null;
+      }
+    });
   }
 
   static Stream<T> _poll<T>(
@@ -67,18 +65,16 @@ class NotificationService {
     _ensureSessionRetryLoop();
 
     // ── Local notification setup ───────────────────────────────────────
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
       requestSoundPermission: false,
     );
     await _localNotifications.initialize(
-      const InitializationSettings(
-        android: androidSettings,
-        iOS: iosSettings,
-      ),
+      const InitializationSettings(android: androidSettings, iOS: iosSettings),
       onDidReceiveNotificationResponse: _onLocalNotificationTap,
     );
 
@@ -90,16 +86,22 @@ class NotificationService {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      final queue = _ref.read(offlineQueueProvider);
       final token = await _fcm.getToken();
       if (token != null) {
-        await _ref.read(mobileRepositoryProvider).updateFcmToken(token);
+        await _ref.read(mobileRepositoryProvider).updateFcmToken(token, queue);
       }
 
       _fcm.onTokenRefresh.listen((String newToken) async {
-        await _ref.read(mobileRepositoryProvider).updateFcmToken(newToken);
+        final queue = _ref.read(offlineQueueProvider);
+        await _ref
+            .read(mobileRepositoryProvider)
+            .updateFcmToken(newToken, queue);
       });
 
-      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      FirebaseMessaging.onBackgroundMessage(
+        _firebaseMessagingBackgroundHandler,
+      );
 
       // Foreground messages — show local notification
       FirebaseMessaging.onMessage.listen(_onForegroundMessage);
@@ -228,7 +230,8 @@ class NotificationService {
         _navigateGuard(1);
         break;
       case 'leave_status':
-        _navigateGuard(2);
+      case 'leave_approved':
+        _navigateGuard(0);
         break;
       case 'new_training':
       case 'training_assigned':
@@ -280,13 +283,17 @@ class NotificationService {
   // ── Helpers ──────────────────────────────────────────────────────────
 
   Future<void> markAsRead(String notifId) async {
-    await _ref.read(mobileRepositoryProvider).markNotificationAsRead(notifId);
+    final queue = _ref.read(offlineQueueProvider);
+    await _ref
+        .read(mobileRepositoryProvider)
+        .markNotificationAsRead(notifId, queue);
     _ref.invalidate(_notificationsSnapshotProvider);
     _ref.invalidate(unreadCountProvider);
   }
 
   Future<void> markAllAsRead() async {
-    await _ref.read(mobileRepositoryProvider).markAllNotificationsAsRead();
+    final queue = _ref.read(offlineQueueProvider);
+    await _ref.read(mobileRepositoryProvider).markAllNotificationsAsRead(queue);
     _ref.invalidate(_notificationsSnapshotProvider);
     _ref.invalidate(unreadCountProvider);
   }
@@ -299,7 +306,9 @@ class NotificationService {
     String? district,
     Map<String, String>? data,
   }) async {
-    await _ref.read(mobileRepositoryProvider).createSystemNotification(
+    await _ref
+        .read(mobileRepositoryProvider)
+        .createSystemNotification(
           type: type,
           title: title,
           body: body,

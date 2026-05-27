@@ -11,12 +11,12 @@ import '../models/auth_session.dart';
 import '../models/guard_pin_status.dart';
 import '../models/guard_profile.dart';
 import '../models/incident_models.dart';
-import '../models/leave_models.dart';
 import '../models/mobile_dashboard_models.dart';
 import '../models/patrol_models.dart';
 import '../models/payroll_models.dart';
 import '../models/report_models.dart';
 import '../models/training_models.dart';
+import '../offline/offline_queue.dart';
 import 'api_client.dart';
 
 class MobileRepository {
@@ -34,7 +34,7 @@ class MobileRepository {
 
   Future<Map<String, String>> authHeaders() async => _authHeaders();
 
-  Future<void> updateFcmToken(String token) async {
+  Future<void> updateFcmToken(String token, [OfflineQueue? queue]) async {
     try {
       await _postJson(_mobileTokenPath, <String, String>{'fcmToken': token});
     } catch (error) {
@@ -42,6 +42,16 @@ class MobileRepository {
         debugPrint(
           'Saved FCM token directly because $_mobileTokenPath is unavailable: $error',
         );
+        return;
+      }
+
+      if (queue != null && shouldQueueOffline(error)) {
+        await queue.enqueue(
+          path: _mobileTokenPath,
+          method: 'POST',
+          body: <String, String>{'fcmToken': token},
+        );
+        debugPrint('Enqueued FCM token update offline due to network error.');
         return;
       }
 
@@ -83,7 +93,10 @@ class MobileRepository {
     }
   }
 
-  Future<void> markNotificationAsRead(String notifId) async {
+  Future<void> markNotificationAsRead(
+    String notifId, [
+    OfflineQueue? queue,
+  ]) async {
     try {
       await _postJson(_mobileNotificationsPath, <String, dynamic>{
         'action': 'markRead',
@@ -93,17 +106,33 @@ class MobileRepository {
       if (await _markNotificationAsReadDirectly(notifId)) {
         return;
       }
+      if (queue != null && shouldQueueOffline(error)) {
+        await queue.enqueue(
+          path: _mobileNotificationsPath,
+          method: 'POST',
+          body: <String, dynamic>{'action': 'markRead', 'notifId': notifId},
+        );
+        return;
+      }
       rethrow;
     }
   }
 
-  Future<void> markAllNotificationsAsRead() async {
+  Future<void> markAllNotificationsAsRead([OfflineQueue? queue]) async {
     try {
       await _postJson(_mobileNotificationsPath, const <String, dynamic>{
         'action': 'markAllRead',
       });
     } catch (error) {
       if (await _markAllNotificationsAsReadDirectly()) {
+        return;
+      }
+      if (queue != null && shouldQueueOffline(error)) {
+        await queue.enqueue(
+          path: _mobileNotificationsPath,
+          method: 'POST',
+          body: const <String, dynamic>{'action': 'markAllRead'},
+        );
         return;
       }
       rethrow;
@@ -179,18 +208,51 @@ class MobileRepository {
         data: body,
         options: Options(headers: await _authHeaders()),
       );
-      return Map<String, dynamic>.from(response.data as Map);
+      final data = response.data;
+      if (data == null) return const <String, dynamic>{};
+      return Map<String, dynamic>.from(data as Map);
     } catch (error) {
+      if (_isOfflineDioError(error)) rethrow;
       throw Exception(_extractApiError(error));
     }
   }
 
+  bool shouldQueueOffline(Object error) {
+    if (error is DioException) {
+      if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.receiveTimeout ||
+          error.type == DioExceptionType.connectionError) {
+        return true;
+      }
+      if (error.type == DioExceptionType.unknown) {
+        final errorString = error.toString().toLowerCase();
+        if (errorString.contains('socketexception') ||
+            errorString.contains('handshakeexception') ||
+            errorString.contains('connection failed') ||
+            errorString.contains('network_error')) {
+          return true;
+        }
+      }
+      if (error.type == DioExceptionType.badResponse) {
+        final statusCode = error.response?.statusCode;
+        if (statusCode != null && statusCode >= 500 && statusCode < 600) {
+          return true;
+        }
+      }
+    }
+    final errorStr = error.toString().toLowerCase();
+    if (errorStr.contains('socketexception') ||
+        errorStr.contains('handshakeexception') ||
+        errorStr.contains('network_error') ||
+        errorStr.contains('connection timed out')) {
+      return true;
+    }
+    return false;
+  }
+
   bool _isOfflineDioError(Object error) {
-    return error is DioException &&
-        (error.type == DioExceptionType.connectionTimeout ||
-            error.type == DioExceptionType.sendTimeout ||
-            error.type == DioExceptionType.receiveTimeout ||
-            error.type == DioExceptionType.connectionError);
+    return shouldQueueOffline(error);
   }
 
   Future<Map<String, String>> _authHeaders() async {
@@ -274,34 +336,46 @@ class MobileRepository {
     final user = _auth.currentUser;
     if (user == null) return null;
 
-    final data = await _getJson('/api/mobile/session');
-    final role = _roleFromWire(data['role']);
-    if (role == null) {
-      return null;
-    }
+    try {
+      final response = await _apiClient.dio.get<dynamic>(
+        '/api/mobile/session',
+        options: Options(
+          headers: await _authHeaders(),
+          connectTimeout: const Duration(seconds: 4),
+          receiveTimeout: const Duration(seconds: 5),
+        ),
+      );
+      final data = Map<String, dynamic>.from(response.data as Map);
+      final role = _roleFromWire(data['role']);
+      if (role == null) {
+        return null;
+      }
 
-    return AuthSession(
-      role: role,
-      displayName: (data['displayName'] as String?)?.trim().isNotEmpty == true
-          ? data['displayName'] as String
-          : (user.displayName ?? user.email ?? role.label),
-      primaryId: (data['primaryId'] as String?)?.trim().isNotEmpty == true
-          ? data['primaryId'] as String
-          : user.uid,
-      uid: (data['uid'] as String?)?.trim().isNotEmpty == true
-          ? data['uid'] as String
-          : user.uid,
-      email: data['email'] as String? ?? user.email,
-      employeeDocId: data['employeeDocId'] as String?,
-      assignedDistricts:
-          (data['assignedDistricts'] as List<dynamic>? ?? const <dynamic>[])
-              .whereType<String>()
-              .toList(),
-      clientId: data['clientId'] as String?,
-      clientName: data['clientName'] as String?,
-      district: data['district'] as String?,
-      stateCode: data['stateCode'] as String?,
-    );
+      return AuthSession(
+        role: role,
+        displayName: (data['displayName'] as String?)?.trim().isNotEmpty == true
+            ? data['displayName'] as String
+            : (user.displayName ?? user.email ?? role.label),
+        primaryId: (data['primaryId'] as String?)?.trim().isNotEmpty == true
+            ? data['primaryId'] as String
+            : user.uid,
+        uid: (data['uid'] as String?)?.trim().isNotEmpty == true
+            ? data['uid'] as String
+            : user.uid,
+        email: data['email'] as String? ?? user.email,
+        employeeDocId: data['employeeDocId'] as String?,
+        assignedDistricts:
+            (data['assignedDistricts'] as List<dynamic>? ?? const <dynamic>[])
+                .whereType<String>()
+                .toList(),
+        clientId: data['clientId'] as String?,
+        clientName: data['clientName'] as String?,
+        district: data['district'] as String?,
+        stateCode: data['stateCode'] as String?,
+      );
+    } catch (error) {
+      throw Exception(_extractApiError(error));
+    }
   }
 
   Future<AuthSession?> _resolveGuardSessionFromProfile(User user) async {
@@ -312,7 +386,9 @@ class MobileRepository {
         displayName: profile.fullName.isNotEmpty
             ? profile.fullName
             : (user.displayName ?? user.email ?? 'Guard'),
-        primaryId: profile.employeeId.isNotEmpty ? profile.employeeId : user.uid,
+        primaryId: profile.employeeId.isNotEmpty
+            ? profile.employeeId
+            : user.uid,
         uid: user.uid,
         email: user.email,
         employeeDocId: profile.id.isNotEmpty ? profile.id : null,
@@ -403,7 +479,9 @@ class MobileRepository {
           .doc(notifId.trim());
       final snapshot = await docRef.get();
       final data = snapshot.data();
-      if (!snapshot.exists || data == null || data['recipientUid'] != user.uid) {
+      if (!snapshot.exists ||
+          data == null ||
+          data['recipientUid'] != user.uid) {
         return false;
       }
 
@@ -606,11 +684,6 @@ class MobileRepository {
 
   Future<GuardDashboardSnapshot> fetchGuardDashboard() async {
     final data = await _getJson('/api/guard/dashboard');
-    final leaveBalance = data['leaveBalance'] is Map<String, dynamic>
-        ? _parseLeaveBalance(
-            Map<String, dynamic>.from(data['leaveBalance'] as Map),
-          )
-        : null;
     final recentAttendance =
         (data['recentAttendance'] as List<dynamic>? ?? const <dynamic>[])
             .whereType<Map<String, dynamic>>()
@@ -648,7 +721,6 @@ class MobileRepository {
                     as num)
                 .toInt()
           : 0,
-      leaveBalance: leaveBalance,
       latestEvalScore: data['latestEvalScore'] as num?,
       latestEvalPeriod: data['latestEvalPeriod'] as String?,
       nextShiftLabel: nextShift?['shiftLabel'] as String?,
@@ -701,8 +773,15 @@ class MobileRepository {
                   hint['lastStatus'] == 'In' || hint['lastStatus'] == 'Out'
                   ? hint['lastStatus'] as String
                   : null,
+              lastSiteId: hint['lastSiteId'] as String?,
               lastDutyPointId: hint['lastDutyPointId'] as String?,
               lastShiftCode: hint['lastShiftCode'] as String?,
+              openSessionId: hint['openSessionId'] as String?,
+              recommendedStatus:
+                  hint['recommendedStatus'] == 'In' ||
+                      hint['recommendedStatus'] == 'Out'
+                  ? hint['recommendedStatus'] as String
+                  : null,
             ),
     );
   }
@@ -794,22 +873,6 @@ class MobileRepository {
     Map<String, dynamic> payload,
   ) async {
     return _postJson('/api/guard/patrol', payload);
-  }
-
-  Future<Map<String, dynamic>> fetchLeaveOverview() async {
-    return _getJson('/api/guard/leave');
-  }
-
-  Future<Map<String, dynamic>> createLeaveRequest(
-    Map<String, dynamic> payload,
-  ) async {
-    return _postJson('/api/guard/leave', payload);
-  }
-
-  Future<Map<String, dynamic>> cancelLeaveRequest(String requestId) async {
-    return _patchJson('/api/guard/leave', <String, dynamic>{
-      'requestId': requestId,
-    });
   }
 
   Future<List<IncidentModel>> fetchGuardIncidents() async {
@@ -934,6 +997,9 @@ class MobileRepository {
     required String workOrderId,
     required List<Map<String, dynamic>> assignedGuards,
   }) async {
+    if (workOrderId.trim().isEmpty) {
+      throw StateError('Work order ID is missing.');
+    }
     await _patchJson(
       '/api/field-officer/work-orders/$workOrderId',
       <String, dynamic>{'assignedGuards': assignedGuards},
@@ -1006,23 +1072,6 @@ class MobileRepository {
       'visitReports': visits['reports'] ?? <dynamic>[],
       'trainingReports': trainings['reports'] ?? <dynamic>[],
     };
-  }
-
-  LeaveBalanceModel _parseLeaveBalance(Map<String, dynamic> json) {
-    final casual = json['casual'] is Map<String, dynamic>
-        ? Map<String, dynamic>.from(json['casual'] as Map)
-        : const <String, dynamic>{};
-    // We only need one summary card in the mobile shell right now.
-    final balance =
-        (casual['balance'] as num?)?.toInt() ??
-        (json['earned'] is Map<String, dynamic>
-            ? ((json['earned'] as Map)['balance'] as num?)?.toInt() ?? 0
-            : 0);
-    return LeaveBalanceModel(
-      entitled: (casual['entitled'] as num?)?.toInt() ?? 0,
-      taken: (casual['taken'] as num?)?.toInt() ?? 0,
-      balance: balance,
-    );
   }
 
   Future<String> encodeFileToDataUrl(List<int> bytes, String mimeType) async {

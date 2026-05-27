@@ -15,12 +15,11 @@ import '../../../../../shared/widgets/sync_status_badge.dart';
 import '../../guard_tab_provider.dart';
 import '../widgets/guard_portal_widgets.dart';
 import 'guard_incidents_screen.dart';
-import 'guard_leave_screen.dart';
 import 'guard_patrol_screen.dart';
 
 final FutureProvider<GuardDashboardSnapshot> guardDashboardProvider =
     FutureProvider<GuardDashboardSnapshot>((Ref ref) {
-      return ref.read(mobileRepositoryProvider).fetchGuardDashboard();
+      return ref.watch(mobileRepositoryProvider).fetchGuardDashboard();
     });
 
 class GuardDashboardScreen extends ConsumerWidget {
@@ -40,7 +39,6 @@ class GuardDashboardScreen extends ConsumerWidget {
       data: (GuardDashboardSnapshot data) {
         final String displayName =
             data.employeeName.isNotEmpty ? data.employeeName : data.employeeId;
-        final int leaveBalance = data.leaveBalance?.balance ?? 0;
 
         return ScreenScaffold(
           title: 'Dashboard',
@@ -107,10 +105,10 @@ class GuardDashboardScreen extends ConsumerWidget {
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: MetricTile(
-                    label: 'Leave balance',
-                    value: '$leaveBalance day${leaveBalance == 1 ? '' : 's'}',
-                    helper: 'Approved remaining',
-                    icon: Icons.event_available_outlined,
+                    label: 'Working days',
+                    value: '${data.workingDays}',
+                    helper: 'Expected shifts',
+                    icon: Icons.calendar_month_outlined,
                     accentColor: Theme.of(context)
                         .extension<CissThemeTokens>()!
                         .warning,
@@ -299,14 +297,11 @@ class _QuickActions extends StatelessWidget {
             ref.read(guardTabIndexProvider.notifier).state = 1,
       ),
       _Action(
-        icon: Icons.event_available_rounded,
-        label: 'Apply Leave',
+        icon: Icons.school_rounded,
+        label: 'Training',
         color: tokens.success,
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => const GuardLeaveScreen(),
-          ),
-        ),
+        onTap: () =>
+            ref.read(guardTabIndexProvider.notifier).state = 2,
       ),
       _Action(
         icon: Icons.report_gmailerrorred_rounded,

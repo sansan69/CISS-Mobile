@@ -16,7 +16,6 @@ import 'screens/guard_attendance_screen.dart';
 import 'screens/guard_dashboard_screen.dart';
 import 'screens/guard_evaluations_screen.dart';
 import 'screens/guard_incidents_screen.dart';
-import 'screens/guard_leave_screen.dart';
 import 'screens/guard_payslips_screen.dart';
 import 'screens/guard_patrol_screen.dart';
 import 'screens/guard_profile_screen.dart';
@@ -85,7 +84,6 @@ class _GuardShellState extends ConsumerState<GuardShell> {
     ref.watch(guardPayslipsProvider);
     ref.watch(guardEvaluationsProvider);
     ref.watch(guardIncidentsProvider);
-    ref.watch(guardLeaveProvider);
     ref.watch(guardPatrolStatusProvider);
 
     return Scaffold(
@@ -135,7 +133,7 @@ class GuardMoreScreen extends ConsumerWidget {
     final tokens = CissThemeTokens.of(context);
     return ScreenScaffold(
       title: 'More tools',
-      subtitle: 'Profile, leave, incident, and support actions',
+      subtitle: 'Profile, incident, training, and support actions',
       children: <Widget>[
         const ThemeModeSelector(),
         SectionCard(
@@ -175,16 +173,7 @@ class GuardMoreScreen extends ConsumerWidget {
             );
           },
         ),
-        SectionCard(
-          title: 'Leave',
-          subtitle: 'Apply and review leave requests',
-          icon: Icons.event_available_rounded,
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(builder: (_) => const GuardLeaveScreen()),
-            );
-          },
-        ),
+
         SectionCard(
           title: 'Evaluations',
           subtitle: 'Quiz and performance records',
@@ -228,18 +217,22 @@ class GuardMoreScreen extends ConsumerWidget {
 class _NotificationBadge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = CissThemeTokens.of(context);
     final unreadAsync = ref.watch(NotificationService.unreadCountProvider);
     return unreadAsync.when(
       data: (count) => count > 0
           ? Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.red,
+                color: tokens.danger,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
                 '$count',
-                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             )
           : const SizedBox.shrink(),
