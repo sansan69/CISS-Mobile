@@ -2,8 +2,10 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -11,6 +13,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/report_models.dart';
+import '../../../../../core/network/mobile_repository.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/offline/draft_service.dart';
@@ -180,6 +183,7 @@ class _FieldOfficerReportsScreenState
                   _StatusFilterRow(
                     options: const <(String, String)>[
                       ('all', 'All'),
+                      ('draft', 'Draft'),
                       ('submitted', 'Submitted'),
                       ('reviewed', 'Reviewed'),
                     ],
@@ -190,6 +194,7 @@ class _FieldOfficerReportsScreenState
                   _StatusFilterRow(
                     options: const <(String, String)>[
                       ('all', 'All'),
+                      ('draft', 'Draft'),
                       ('submitted', 'Submitted'),
                       ('acknowledged', 'Acknowledged'),
                     ],
@@ -526,9 +531,12 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
   final _trainingAttendeeCtrl = TextEditingController(text: '0');
 
   final List<_PhotoEntry> _photos = <_PhotoEntry>[];
+  final List<_PhotoEntry> _clientReportPhotos = <_PhotoEntry>[];
   final ImagePicker _picker = ImagePicker();
   final Uuid _uuid = const Uuid();
 
+  String _reportStatus = 'submitted'; // 'draft' | 'submitted'
+  Map<String, double>? _visitLocation;
   bool _loading = false;
   String? _error;
 
@@ -656,6 +664,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           final mimeType = xfile.mimeType ?? 'image/jpeg';
           setState(() => _photos.add(_PhotoEntry(bytes: bytes, mimeType: mimeType)));
         }
+        await _captureLocation();
       }
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not pick photos.');
@@ -669,18 +678,45 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         final bytes = await picked.readAsBytes();
         final mimeType = picked.mimeType ?? 'image/jpeg';
         setState(() => _photos.add(_PhotoEntry(bytes: bytes, mimeType: mimeType)));
+        await _captureLocation();
       }
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not capture photo.');
     }
   }
 
+  Future<void> _pickClientReport() async {
+    try {
+      final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
+      if (picked != null && mounted) {
+        final bytes = await picked.readAsBytes();
+        final mimeType = picked.mimeType ?? 'application/pdf';
+        setState(() => _clientReportPhotos.add(_PhotoEntry(bytes: bytes, mimeType: mimeType)));
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not pick report file.');
+    }
+  }
+
+  Future<void> _captureLocation() async {
+    if (_visitLocation != null) return;
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 5)),
+      );
+      if (mounted) {
+        setState(() => _visitLocation = {'lat': pos.latitude, 'lng': pos.longitude});
+      }
+    } catch (_) {}
+  }
+
   void _removePhoto(int index) {
     setState(() => _photos.removeAt(index));
   }
 
-  Future<List<String>> _uploadPhotos() async {
+  Future<List<String>> _uploadPhotos({required String folder}) async {
     final urls = <String>[];
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
     for (final entry in _photos) {
       if (entry.uploadedUrl != null) {
         urls.add(entry.uploadedUrl!);
@@ -689,7 +725,8 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
       setState(() => entry.uploading = true);
       try {
         final ext = entry.mimeType.split('/').last;
-        final path = 'reports/${_uuid.v4()}.$ext';
+        final safeName = '${timestamp}_photo_${urls.length}.$ext';
+        final path = 'foReports/$folder/${FirebaseAuth.instance.currentUser!.uid}/$safeName';
         final dataUrl = await ref
             .read(mobileRepositoryProvider)
             .encodeFileToDataUrl(entry.bytes.toList(), entry.mimeType);
@@ -740,11 +777,12 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         'siteId': selected.siteId,
         'siteName': selected.siteName,
         'district': selected.district,
-        'status': 'submitted',
+        'status': _reportStatus,
       };
 
       Map<String, dynamic> payload;
       String path;
+      String photoFolder;
       if (_tab == _Tab.visit) {
         final summary = _visitSummaryCtrl.text.trim();
         if (summary.isEmpty) {
@@ -755,6 +793,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           return;
         }
         path = '/api/field-officer/visit-reports';
+        photoFolder = 'visitReports';
         payload = {
           ...common,
           'visitDate': _apiFmt.format(date),
@@ -766,6 +805,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         };
       } else {
         path = '/api/field-officer/training-reports';
+        photoFolder = 'trainingReports';
         payload = {
           ...common,
           'trainingDate': _apiFmt.format(date),
@@ -777,11 +817,37 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         };
       }
 
+      if (_visitLocation != null) {
+        payload['visitLocation'] = _visitLocation;
+      }
+
       try {
-        final photoUrls = await _uploadPhotos();
+        final photoUrls = await _uploadPhotos(folder: photoFolder);
+
+        // Upload client report for training reports
+        String? clientReportUrl;
+        if (_tab == _Tab.training && _clientReportPhotos.isNotEmpty) {
+          final timestamp = DateTime.now().millisecondsSinceEpoch;
+          for (final entry in _clientReportPhotos) {
+            try {
+              final ext = entry.mimeType.split('/').last;
+              final safeName = '${timestamp}_client_report.$ext';
+              final path = 'foReports/trainingReportFiles/${FirebaseAuth.instance.currentUser!.uid}/$safeName';
+              final dataUrl = await ref
+                  .read(mobileRepositoryProvider)
+                  .encodeFileToDataUrl(entry.bytes.toList(), entry.mimeType);
+              final result = await ref
+                  .read(mobileRepositoryProvider)
+                  .uploadReportPhoto(path: path, dataUrl: dataUrl);
+              clientReportUrl = result['url'] as String?;
+            } catch (_) {}
+          }
+        }
+
         final finalPayload = {
           ...payload,
           'photoUrls': photoUrls,
+          if (clientReportUrl != null) 'clientReportUrl': clientReportUrl,
         };
         
         if (_tab == _Tab.visit) {
@@ -901,6 +967,8 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                     if (_tab == _Tab.visit) _buildVisitForm() else _buildTrainingForm(),
                     const SizedBox(height: 24),
                     _buildPhotoSection(tokens),
+                    const SizedBox(height: 16),
+                    _buildStatusToggle(),
                   ],
                 ),
               ),
@@ -932,7 +1000,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                                   color: Colors.white,
                                 ),
                               )
-                            : const Text('SUBMIT REPORT'),
+                            : Text(_reportStatus == 'draft' ? 'SAVE DRAFT' : 'SUBMIT REPORT'),
                       ),
                     ),
                   ],
@@ -1008,6 +1076,42 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
             _AddPhotoButton(onGallery: _pickPhotos, onCamera: _takePhoto),
           ],
         ),
+        if (_tab == _Tab.training) ...[
+          const SizedBox(height: 24),
+          Text('CLIENT REPORT', style: GoogleFonts.rajdhani(fontSize: 12, fontWeight: FontWeight.w800, color: tokens.inkMuted, letterSpacing: 1)),
+          const SizedBox(height: 6),
+          Text('Upload client-signed training report or certificate (PDF/JPG)', style: TextStyle(fontSize: 11, color: tokens.inkMuted)),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12, runSpacing: 12,
+            children: [
+              ..._clientReportPhotos.asMap().entries.map((entry) => _PhotoPreview(index: entry.key, photo: entry.value, onRemove: (i) => setState(() => _clientReportPhotos.removeAt(i)))),
+              if (_clientReportPhotos.isEmpty)
+                _AddReportButton(onTap: _pickClientReport),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildStatusToggle() {
+    return Row(
+      children: [
+        Expanded(
+          child: SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'submitted', label: Text('Submit'), icon: Icon(Icons.send_rounded, size: 16)),
+              ButtonSegment(value: 'draft', label: Text('Save Draft'), icon: Icon(Icons.save_outlined, size: 16)),
+            ],
+            selected: {_reportStatus},
+            onSelectionChanged: (v) => setState(() => _reportStatus = v.first),
+            showSelectedIcon: false,
+            style: ButtonStyle(
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -1069,6 +1173,25 @@ class _AddPhotoButton extends StatelessWidget {
             ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('Gallery'), onTap: () { Navigator.pop(context); onGallery(); }),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _AddReportButton extends StatelessWidget {
+  const _AddReportButton({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        width: 80, height: 80,
+        decoration: BoxDecoration(color: tokens.surfaceStrong, borderRadius: BorderRadius.circular(8), border: Border.all(color: tokens.accent)),
+        child: Icon(Icons.description_outlined, color: tokens.accent),
       ),
     );
   }

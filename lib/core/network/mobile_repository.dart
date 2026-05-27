@@ -723,8 +723,9 @@ class MobileRepository {
     required String dataUrl,
   }) async {
     final response = await _apiClient.dio.post<dynamic>(
-      '/api/public/attendance/upload',
+      '/api/field-officer/upload',
       data: <String, dynamic>{'path': path, 'photoDataUrl': dataUrl},
+      options: Options(headers: await _authHeaders()),
     );
     return Map<String, dynamic>.from(response.data as Map);
   }

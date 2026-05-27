@@ -11,6 +11,7 @@ class VisitReportModel {
     required this.guardsAbsentCount,
     required this.status,
     this.photoUrls = const <String>[],
+    this.visitLocation,
   });
 
   final String id;
@@ -29,7 +30,18 @@ class VisitReportModel {
   /// Firebase Storage URLs for visit photos
   final List<String> photoUrls;
 
+  /// GPS location where the report was filed
+  final Map<String, double>? visitLocation;
+
   factory VisitReportModel.fromJson(Map<String, dynamic> json) {
+    Map<String, double>? location;
+    if (json['visitLocation'] is Map) {
+      final raw = Map<String, dynamic>.from(json['visitLocation'] as Map);
+      location = {
+        'lat': (raw['lat'] as num?)?.toDouble() ?? 0,
+        'lng': (raw['lng'] as num?)?.toDouble() ?? 0,
+      };
+    }
     return VisitReportModel(
       id: (json['id'] as String?) ?? '',
       siteName: (json['siteName'] as String?) ?? '',
@@ -48,6 +60,7 @@ class VisitReportModel {
               ?.whereType<String>()
               .toList() ??
           const <String>[],
+      visitLocation: location,
     );
   }
 }
@@ -65,6 +78,9 @@ class TrainingReportModel {
     required this.durationMinutes,
     required this.status,
     this.photoUrls = const <String>[],
+    this.attachmentUrls = const <String>[],
+    this.clientReportUrl,
+    this.visitLocation,
   });
 
   final String id;
@@ -77,13 +93,30 @@ class TrainingReportModel {
   final int attendeeCount;
   final int durationMinutes;
 
-  /// "submitted" | "acknowledged"
+  /// "draft" | "submitted" | "acknowledged"
   final String status;
 
   /// Firebase Storage URLs for training photos
   final List<String> photoUrls;
 
+  /// Additional file attachments (PDFs, docs)
+  final List<String> attachmentUrls;
+
+  /// Client-signed training report/certificate URL
+  final String? clientReportUrl;
+
+  /// GPS location where the training was conducted
+  final Map<String, double>? visitLocation;
+
   factory TrainingReportModel.fromJson(Map<String, dynamic> json) {
+    Map<String, double>? location;
+    if (json['visitLocation'] is Map) {
+      final raw = Map<String, dynamic>.from(json['visitLocation'] as Map);
+      location = {
+        'lat': (raw['lat'] as num?)?.toDouble() ?? 0,
+        'lng': (raw['lng'] as num?)?.toDouble() ?? 0,
+      };
+    }
     return TrainingReportModel(
       id: (json['id'] as String?) ?? '',
       siteName: (json['siteName'] as String?) ?? '',
@@ -102,6 +135,12 @@ class TrainingReportModel {
               ?.whereType<String>()
               .toList() ??
           const <String>[],
+      attachmentUrls: (json['attachmentUrls'] as List<dynamic>?)
+              ?.whereType<String>()
+              .toList() ??
+          const <String>[],
+      clientReportUrl: json['clientReportUrl'] as String?,
+      visitLocation: location,
     );
   }
 }
@@ -154,7 +193,7 @@ class WorkOrderModel {
       dateLabel: (json['date'] as String?) ?? '',
       totalManpowerLabel: total is num
           ? total.toString()
-          : '${male is num ? male : 0}M · ${female is num ? female : 0}F',
+          : '${male is num ? male : 0}M \u00b7 ${female is num ? female : 0}F',
       totalManpower: total is num
           ? total.toInt()
           : ((male is num ? male.toInt() : 0) +
