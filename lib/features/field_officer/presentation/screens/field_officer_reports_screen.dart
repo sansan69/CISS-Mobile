@@ -951,7 +951,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                   children: [
                     if (widget.workOrders.isNotEmpty) ...[
                       DropdownButtonFormField<WorkOrderModel>(
-                        initialValue: _selectedWorkOrder,
+                        value: _selectedWorkOrder,
                         decoration: const InputDecoration(
                           labelText: 'Link to Work Order',
                           prefixIcon: Icon(Icons.assignment_turned_in_outlined),

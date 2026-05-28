@@ -16,8 +16,8 @@ if (keystoreFile.exists()) {
 
 android {
     namespace = "co.in.ciss.ciss_mobile"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    compileSdk = 36
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         isCoreLibraryDesugaringEnabled = true

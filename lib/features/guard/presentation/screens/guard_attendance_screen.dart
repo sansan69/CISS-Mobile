@@ -373,9 +373,6 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
               lng: _site!.lng!,
               radiusMeters: _site!.geofenceRadiusMeters.toDouble(),
               employeeId: profile.employeeId,
-              guardName: profile.fullName,
-              clientName: profile.clientName,
-              district: profile.district,
             );
           } else {
             debugPrint('Tracking skipped: site coordinates missing.');
@@ -594,7 +591,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<DutyPointModel>(
                           isExpanded: true,
-                          initialValue: _dutyPoint,
+                          value: _dutyPoint,
                           items: dutyPoints
                               .map(
                                 (dutyPoint) => DropdownMenuItem<DutyPointModel>(
@@ -624,7 +621,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<ShiftTemplateModel>(
                           isExpanded: true,
-                          initialValue: _shift,
+                          value: _shift,
                           items:
                               (_dutyPoint?.shiftTemplates ??
                                       const <ShiftTemplateModel>[])

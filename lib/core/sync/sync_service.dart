@@ -86,10 +86,20 @@ class SyncService {
       if (body.containsKey('photoDataUrls')) {
         final dataUrls = List<String>.from(body.remove('photoDataUrls') as List);
         final photoUrls = <String>[];
+        // Detect FO report paths for correct upload folder
+        final isVisitReport = request.path.contains('visit-reports');
+        final isTrainingReport = request.path.contains('training-reports');
+        final ts = DateTime.now().millisecondsSinceEpoch;
         for (var i = 0; i < dataUrls.length; i++) {
-          final uploadPath =
-              'reports/${DateTime.now().millisecondsSinceEpoch}_$i.jpg';
-          final result = await _repository.uploadAttendancePhoto(
+          final String uploadPath;
+          if (isVisitReport || isTrainingReport) {
+            final folder = isVisitReport ? 'visitReports' : 'trainingReports';
+            final uid = _repository.apiClient.dio.options.headers['Authorization']?.toString() ?? '';
+            uploadPath = 'foReports/$folder/offline_sync/${ts}_$i.jpg';
+          } else {
+            uploadPath = 'reports/${ts}_$i.jpg';
+          }
+          final result = await _repository.uploadReportPhoto(
             path: uploadPath,
             dataUrl: dataUrls[i],
           );

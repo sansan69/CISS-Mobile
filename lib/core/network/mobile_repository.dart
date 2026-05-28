@@ -859,17 +859,10 @@ class MobileRepository {
               .toList(),
       totalGuards: (data['totalGuards'] as num?)?.toInt() ?? 0,
       activeGuards: (data['activeGuards'] as num?)?.toInt() ?? 0,
-      totalSitesInScope: (data['totalSitesInScope'] as num?)?.toInt() ?? 0,
       attendanceSummary: FieldOfficerAttendanceSummary.fromJson(
         data['attendanceSummary'] as Map<String, dynamic>?,
       ),
-      todayOverview: FieldOfficerTodayOverview.fromJson(
-        data['todayOverview'] as Map<String, dynamic>?,
-      ),
-      todaySites: (data['todaySites'] as List<dynamic>? ?? const <dynamic>[])
-          .whereType<Map<String, dynamic>>()
-          .map(FieldOfficerTodaySiteBrief.fromJson)
-          .toList(),
+      recentVisitReports: visitReports,
       attendanceSites:
           (data['attendanceSites'] as List<dynamic>? ?? const <dynamic>[])
               .map(
@@ -879,7 +872,6 @@ class MobileRepository {
               )
               .toList(),
       upcomingWorkOrders: upcoming,
-      recentVisitReports: visitReports,
       recentTrainingReports: trainingReports,
       recentWorkOrders: recentWorkOrders,
     );

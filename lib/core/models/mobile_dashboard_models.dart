@@ -142,6 +142,32 @@ class FieldOfficerAttendanceSite {
   }
 }
 
+class FieldOfficerSiteOption {
+  const FieldOfficerSiteOption({
+    required this.id,
+    required this.siteName,
+    required this.district,
+    required this.clientName,
+    required this.clientId,
+  });
+
+  final String id;
+  final String siteName;
+  final String district;
+  final String clientName;
+  final String clientId;
+
+  factory FieldOfficerSiteOption.fromJson(Map<String, dynamic> json) {
+    return FieldOfficerSiteOption(
+      id: (json['id'] as String?) ?? '',
+      siteName: (json['siteName'] as String?) ?? '',
+      district: (json['district'] as String?) ?? '',
+      clientName: (json['clientName'] as String?) ?? '',
+      clientId: (json['clientId'] as String?) ?? '',
+    );
+  }
+}
+
 class FieldOfficerAttendanceEntry {
   const FieldOfficerAttendanceEntry({
     required this.id,
