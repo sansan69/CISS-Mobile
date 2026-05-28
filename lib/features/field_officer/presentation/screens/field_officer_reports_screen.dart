@@ -60,6 +60,10 @@ class _FieldOfficerReportsScreenState
   _Tab _tab = _Tab.visit;
   String _visitFilter = 'all';
   String _trainingFilter = 'all';
+  String _monthFilter = '';
+  String _clientFilter = '';
+  String _districtFilter = '';
+  bool _showFilters = false;
 
   void _refresh() {
     ref.invalidate(fieldOfficerWorkOrdersProvider);
@@ -84,13 +88,25 @@ class _FieldOfficerReportsScreenState
   }
 
   List<VisitReportModel> _filteredVisit(List<VisitReportModel> all) {
-    if (_visitFilter == 'all') return all;
-    return all.where((r) => r.status == _visitFilter).toList();
+    var filtered = all;
+    if (_visitFilter != 'all') filtered = filtered.where((r) => r.status == _visitFilter).toList();
+    if (_clientFilter.isNotEmpty) filtered = filtered.where((r) => r.clientName.toLowerCase().contains(_clientFilter.toLowerCase())).toList();
+    if (_districtFilter.isNotEmpty) filtered = filtered.where((r) => r.district.toLowerCase().contains(_districtFilter.toLowerCase())).toList();
+    if (_monthFilter.isNotEmpty) {
+      filtered = filtered.where((r) => r.dateLabel.startsWith(_monthFilter)).toList();
+    }
+    return filtered;
   }
 
   List<TrainingReportModel> _filteredTraining(List<TrainingReportModel> all) {
-    if (_trainingFilter == 'all') return all;
-    return all.where((r) => r.status == _trainingFilter).toList();
+    var filtered = all;
+    if (_trainingFilter != 'all') filtered = filtered.where((r) => r.status == _trainingFilter).toList();
+    if (_clientFilter.isNotEmpty) filtered = filtered.where((r) => r.clientName.toLowerCase().contains(_clientFilter.toLowerCase())).toList();
+    if (_districtFilter.isNotEmpty) filtered = filtered.where((r) => r.district.toLowerCase().contains(_districtFilter.toLowerCase())).toList();
+    if (_monthFilter.isNotEmpty) {
+      filtered = filtered.where((r) => r.dateLabel.startsWith(_monthFilter)).toList();
+    }
+    return filtered;
   }
 
   @override
@@ -201,6 +217,85 @@ class _FieldOfficerReportsScreenState
                     selected: _trainingFilter,
                     onChanged: (v) => setState(() => _trainingFilter = v),
                   ),
+              ],
+            ),
+          ),
+
+          // Filter bar
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Column(
+              children: [
+                InkWell(
+                  onTap: () => setState(() => _showFilters = !_showFilters),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(_showFilters ? Icons.filter_list_off : Icons.filter_list, size: 16, color: tokens.inkMuted),
+                        const SizedBox(width: 4),
+                        Text(
+                          _showFilters ? 'Hide Filters' : 'Show Filters',
+                          style: GoogleFonts.rajdhani(fontSize: 12, fontWeight: FontWeight.w700, color: tokens.inkMuted),
+                        ),
+                        if (_monthFilter.isNotEmpty || _clientFilter.isNotEmpty || _districtFilter.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(color: tokens.primarySoft, borderRadius: BorderRadius.circular(4)),
+                            child: Text('Active', style: GoogleFonts.rajdhani(fontSize: 9, fontWeight: FontWeight.w800, color: tokens.primary)),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                if (_showFilters) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            labelText: 'Month', prefixIcon: Icon(Icons.calendar_month, size: 18),
+                            isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                          ),
+                          controller: TextEditingController(text: _monthFilter),
+                          onChanged: (v) => setState(() => _monthFilter = v),
+                          keyboardType: TextInputType.datetime,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            labelText: 'Client', prefixIcon: Icon(Icons.business, size: 18),
+                            isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                          ),
+                          controller: TextEditingController(text: _clientFilter),
+                          onChanged: (v) => setState(() => _clientFilter = v),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: TextField(
+                          decoration: const InputDecoration(
+                            labelText: 'District', prefixIcon: Icon(Icons.map, size: 18),
+                            isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                          ),
+                          controller: TextEditingController(text: _districtFilter),
+                          onChanged: (v) => setState(() => _districtFilter = v),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
               ],
             ),
           ),
