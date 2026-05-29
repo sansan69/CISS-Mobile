@@ -24,10 +24,13 @@ jobs:
       
       - run: flutter pub get
       
-      # Override local SDK paths for CI
+      # Override local SDK paths for CI (delete Termux-specific paths)
       - run: |
+          rm -f android/local.properties
           echo "sdk.dir=${ANDROID_HOME}" > android/local.properties
           echo "flutter.sdk=${FLUTTER_ROOT}" >> android/local.properties
+          # Remove Termux-specific AAPT2 override
+          sed -i '/android.aapt2/d' android/gradle.properties
       
       - run: flutter build apk --release --split-per-abi
       
