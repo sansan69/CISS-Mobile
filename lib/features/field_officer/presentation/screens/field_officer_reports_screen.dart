@@ -6,7 +6,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
@@ -238,14 +237,14 @@ class _FieldOfficerReportsScreenState
                         const SizedBox(width: 4),
                         Text(
                           _showFilters ? 'Hide Filters' : 'Show Filters',
-                          style: GoogleFonts.rajdhani(fontSize: 12, fontWeight: FontWeight.w700, color: tokens.inkMuted),
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: tokens.inkMuted),
                         ),
                         if (_monthFilter.isNotEmpty || _clientFilter.isNotEmpty || _districtFilter.isNotEmpty) ...[
                           const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(color: tokens.primarySoft, borderRadius: BorderRadius.circular(4)),
-                            child: Text('Active', style: GoogleFonts.rajdhani(fontSize: 9, fontWeight: FontWeight.w800, color: tokens.primary)),
+                            child: Text('Active', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: tokens.primary)),
                           ),
                         ],
                       ],
@@ -342,7 +341,7 @@ class _FieldOfficerReportsScreenState
         icon: const Icon(Icons.add_rounded),
         label: Text(
           'NEW BRIEFING',
-          style: GoogleFonts.rajdhani(fontWeight: FontWeight.w800, letterSpacing: 1),
+          style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1),
         ),
       ),
     );
@@ -374,7 +373,7 @@ class _StatusFilterRow extends StatelessWidget {
             child: FilterChip(
               label: Text(
                 label.toUpperCase(),
-                style: GoogleFonts.rajdhani(
+                style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
                   color: isSelected ? tokens.primaryStrong : tokens.inkMuted,
@@ -420,7 +419,7 @@ class _VisitBriefingCard extends StatelessWidget {
                     children: [
                       Text(
                         report.siteName.toUpperCase(),
-                        style: GoogleFonts.rajdhani(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
                           color: tokens.ink,
@@ -458,21 +457,21 @@ class _VisitBriefingCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(
                   report.dateLabel,
-                  style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
                 ),
                 const SizedBox(width: 12),
                 Icon(Icons.map, size: 12, color: tokens.inkMuted),
                 const SizedBox(width: 4),
                 Text(
                   report.district,
-                  style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
                 ),
                 const SizedBox(width: 12),
                 Icon(Icons.groups_2_outlined, size: 12, color: tokens.inkMuted),
                 const SizedBox(width: 4),
                 Text(
                   '${report.guardsPresentCount} IN / ${report.guardsAbsentCount} OUT',
-                  style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.primary),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.primary),
                 ),
               ],
             ),
@@ -502,7 +501,7 @@ class _VisitBriefingCard extends StatelessWidget {
                     Expanded(
                       child: Text(
                         report.issuesFound,
-                        style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.ink),
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.ink),
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -519,7 +518,7 @@ class _VisitBriefingCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 '📍 ${report.visitLocation!['lat']?.toStringAsFixed(5) ?? '?'}, ${report.visitLocation!['lng']?.toStringAsFixed(5) ?? '?'}',
-                style: GoogleFonts.rajdhani(fontSize: 10, fontWeight: FontWeight.w500, color: tokens.inkMuted),
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: tokens.inkMuted),
               ),
             ],
           ],
@@ -554,7 +553,7 @@ class _TrainingBriefingCard extends StatelessWidget {
                     children: [
                       Text(
                         report.topic.toUpperCase(),
-                        style: GoogleFonts.rajdhani(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
                           color: tokens.ink,
@@ -587,28 +586,28 @@ class _TrainingBriefingCard extends StatelessWidget {
                 const SizedBox(width: 4),
                 Text(
                   report.dateLabel,
-                  style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
                 ),
                 const SizedBox(width: 12),
                 Icon(Icons.map, size: 12, color: tokens.inkMuted),
                 const SizedBox(width: 4),
                 Text(
                   report.district,
-                  style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
                 ),
                 const SizedBox(width: 12),
                 Icon(Icons.timer_outlined, size: 12, color: tokens.inkMuted),
                 const SizedBox(width: 4),
                 Text(
                   '${report.durationMinutes} MINS',
-                  style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.accent),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.accent),
                 ),
                 const SizedBox(width: 12),
                 Icon(Icons.people_alt_outlined, size: 12, color: tokens.inkMuted),
                 const SizedBox(width: 4),
                 Text(
                   '${report.attendeeCount} ATTENDED',
-                  style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.inkMuted),
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.inkMuted),
                 ),
               ],
             ),
@@ -639,7 +638,7 @@ class _TrainingBriefingCard extends StatelessWidget {
                       const SizedBox(width: 6),
                       Text(
                         'Client Report',
-                        style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.primary),
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.primary),
                       ),
                     ],
                   ),
@@ -654,7 +653,7 @@ class _TrainingBriefingCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 '📍 ${report.visitLocation!['lat']?.toStringAsFixed(5) ?? '?'}, ${report.visitLocation!['lng']?.toStringAsFixed(5) ?? '?'}',
-                style: GoogleFonts.rajdhani(fontSize: 10, fontWeight: FontWeight.w500, color: tokens.inkMuted),
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: tokens.inkMuted),
               ),
             ],
           ],
@@ -1132,7 +1131,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                         Expanded(
                           child: Text(
                             'NEW BRIEFING',
-                            style: GoogleFonts.rajdhani(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 1),
+                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 1),
                           ),
                         ),
                         IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
@@ -1276,7 +1275,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('ATTACHMENTS (${_photos.length})', style: GoogleFonts.rajdhani(fontSize: 12, fontWeight: FontWeight.w800, color: tokens.inkMuted, letterSpacing: 1)),
+        Text('ATTACHMENTS (${_photos.length})', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: tokens.inkMuted, letterSpacing: 1)),
         const SizedBox(height: 12),
         Wrap(
           spacing: 12, runSpacing: 12,
@@ -1287,7 +1286,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         ),
         if (_tab == _Tab.training) ...[
           const SizedBox(height: 24),
-          Text('CLIENT REPORT', style: GoogleFonts.rajdhani(fontSize: 12, fontWeight: FontWeight.w800, color: tokens.inkMuted, letterSpacing: 1)),
+          Text('CLIENT REPORT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: tokens.inkMuted, letterSpacing: 1)),
           const SizedBox(height: 6),
           Text('Upload client-signed training report or certificate (PDF/JPG)', style: TextStyle(fontSize: 11, color: tokens.inkMuted)),
           const SizedBox(height: 12),

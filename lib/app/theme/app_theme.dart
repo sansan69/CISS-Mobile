@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'app_tokens.dart';
 
@@ -32,14 +31,12 @@ ThemeData buildCissTheme(Brightness brightness) {
     onErrorContainer: tokens.danger,
   );
 
-  final baseTextTheme = GoogleFonts.interTextTheme(
-    const TextTheme(),
-  ).apply(
+  final baseTextTheme = const TextTheme().apply(
     bodyColor: tokens.ink,
     displayColor: tokens.ink,
   );
 
-  final headerStyle = GoogleFonts.spaceGrotesk(
+  final headerStyle = TextStyle(
     fontWeight: FontWeight.w700,
     color: tokens.ink,
   );
@@ -62,6 +59,7 @@ ThemeData buildCissTheme(Brightness brightness) {
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
+    fontFamily: 'Inter',
     colorScheme: colorScheme,
     scaffoldBackgroundColor: tokens.canvas,
     extensions: <ThemeExtension<dynamic>>[tokens],
@@ -252,14 +250,14 @@ ThemeData buildCissTheme(Brightness brightness) {
       }),
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return GoogleFonts.inter(
+          return TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w700,
             color: tokens.primaryStrong,
             letterSpacing: 0.3,
           );
         }
-        return GoogleFonts.inter(
+        return TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w500,
           color: tokens.inkMuted,
@@ -288,7 +286,7 @@ ThemeData buildCissTheme(Brightness brightness) {
     // SnackBar — floating M3 style
     snackBarTheme: SnackBarThemeData(
       backgroundColor: isDark ? tokens.surfaceStrong : tokens.ink,
-      contentTextStyle: GoogleFonts.inter(
+      contentTextStyle: TextStyle(
         color: isDark ? tokens.ink : tokens.canvas,
         fontSize: 14,
         fontWeight: FontWeight.w500,

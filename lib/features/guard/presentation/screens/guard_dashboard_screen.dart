@@ -12,6 +12,8 @@ import '../../../../../core/cache/skeleton_widgets.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
+import '../../../../../core/fcm/notification_service.dart';
+import '../../../shared/notification_inbox_screen.dart';
 import '../../guard_tab_provider.dart';
 import '../widgets/guard_portal_widgets.dart';
 import 'guard_incidents_screen.dart';
@@ -46,6 +48,8 @@ class GuardDashboardScreen extends ConsumerWidget {
           title: 'Dashboard',
           subtitle: displayName,
           actions: <Widget>[
+            const _DashboardNotificationBadge(),
+            const SizedBox(width: 4),
             const SyncStatusBadge(),
             IconButton(
               onPressed: () => ref.invalidate(guardDashboardProvider),
@@ -608,6 +612,67 @@ class _EvalScore extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _DashboardNotificationBadge extends ConsumerWidget {
+  const _DashboardNotificationBadge();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = CissThemeTokens.of(context);
+    final unreadAsync = ref.watch(NotificationService.unreadCountProvider);
+    return unreadAsync.when(
+      data: (int count) => count > 0
+          ? Stack(
+              children: <Widget>[
+                IconButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const NotificationInboxScreen(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.notifications_outlined, size: 20),
+                ),
+                Positioned(
+                  right: 4,
+                  top: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: tokens.danger,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '$count',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : IconButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const NotificationInboxScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.notifications_outlined, size: 20),
+            ),
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
     );
   }
 }

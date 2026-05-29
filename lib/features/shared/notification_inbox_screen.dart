@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_tokens.dart';
@@ -19,14 +18,14 @@ class NotificationInboxScreen extends ConsumerWidget {
       backgroundColor: tokens.canvas,
       appBar: AppBar(
         title: Text('Notifications',
-            style: GoogleFonts.rajdhani(fontWeight: FontWeight.w800)),
+            style: TextStyle(fontWeight: FontWeight.w800)),
         backgroundColor: tokens.canvas,
         actions: [
           TextButton(
             onPressed: () =>
                 ref.read(notificationServiceProvider).markAllAsRead(),
             child: Text('Mark all read',
-                style: GoogleFonts.rajdhani(
+                style: TextStyle(
                     fontWeight: FontWeight.w700, fontSize: 13)),
           ),
         ],
@@ -72,7 +71,7 @@ class NotificationInboxScreen extends ConsumerWidget {
                 ),
                 title: Text(
                   n['title'] as String? ?? '',
-                  style: GoogleFonts.rajdhani(
+                  style: TextStyle(
                     fontWeight: isRead ? FontWeight.w600 : FontWeight.w800,
                     fontSize: 15,
                   ),

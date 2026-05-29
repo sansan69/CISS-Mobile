@@ -3,7 +3,6 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/brand.dart';
@@ -92,7 +91,7 @@ class _LoginHubScreenState extends State<LoginHubScreen>
                         Text(
                           kCompanyName.toUpperCase(),
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.rajdhani(
+                          style: TextStyle(
                             fontSize: 32,
                             fontWeight: FontWeight.w800,
                             color: tokens.primary,
@@ -359,7 +358,7 @@ class _RoleCardState extends State<_RoleCard>
                         // Role name in display font
                         Text(
                           widget.title,
-                          style: GoogleFonts.rajdhani(
+                          style: TextStyle(
                             fontSize: 38,
                             fontWeight: FontWeight.w700,
                             color: tokens.ink,

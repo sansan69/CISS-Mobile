@@ -4,7 +4,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -148,7 +147,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                       const SizedBox(height: 12),
                       Text(
                         'Align QR code within the frame',
-                        style: GoogleFonts.rajdhani(
+                        style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
                           color: Colors.white70,
@@ -316,7 +315,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                 const SizedBox(width: 4),
                 Text(
                   _attendanceStatus == 'In' ? 'CLOCK IN' : 'CLOCK OUT',
-                  style: GoogleFonts.rajdhani(
+                  style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w800,
                     color: _attendanceStatus == 'In'
@@ -395,7 +394,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                   icon: const Icon(Icons.camera_alt_rounded, size: 20),
                   label: Text(
                     'CAPTURE PHOTO (optional)',
-                    style: GoogleFonts.rajdhani(
+                    style: TextStyle(
                         fontWeight: FontWeight.w700, letterSpacing: 1),
                   ),
                 ),
@@ -422,7 +421,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                       )
                     : Text(
                         _attendanceStatus == 'In' ? 'MARK IN' : 'MARK OUT',
-                        style: GoogleFonts.rajdhani(
+                        style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 2,
@@ -748,7 +747,7 @@ Verified by CISS Workforce Platform''';
               const SizedBox(height: 20),
               Text(
                 'ATTENDANCE MARKED',
-                style: GoogleFonts.rajdhani(
+                style: TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.w800,
                   color: tokens.ink,
@@ -784,7 +783,7 @@ Verified by CISS Workforce Platform''';
                   icon: const Icon(Icons.chat_rounded, color: Colors.white),
                   label: Text(
                     'Share via WhatsApp',
-                    style: GoogleFonts.rajdhani(
+                    style: TextStyle(
                         fontWeight: FontWeight.w700,
                         color: Colors.white,
                         fontSize: 16),
@@ -800,7 +799,7 @@ Verified by CISS Workforce Platform''';
                       subject: 'CISS Attendance Confirmation'),
                   icon: const Icon(Icons.share_rounded, size: 20),
                   label: Text('Share',
-                      style: GoogleFonts.rajdhani(
+                      style: TextStyle(
                           fontWeight: FontWeight.w700)),
                 ),
               ),
@@ -809,7 +808,7 @@ Verified by CISS Workforce Platform''';
                 onPressed: () => Navigator.of(context).pop(),
                 child: Text(
                   'Done',
-                  style: GoogleFonts.rajdhani(
+                  style: TextStyle(
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1,
                       fontSize: 16),
@@ -876,7 +875,7 @@ class _InfoCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       value,
-                      style: GoogleFonts.rajdhani(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
                         color: tokens.ink,
@@ -942,7 +941,7 @@ class _ConfirmationCard extends StatelessWidget {
             ),
             child: Text(
               status.toUpperCase(),
-              style: GoogleFonts.rajdhani(
+              style: TextStyle(
                 fontWeight: FontWeight.w800,
                 color: status == 'In' ? tokens.success : tokens.danger,
                 letterSpacing: 1,
@@ -967,7 +966,7 @@ class _ConfirmationCard extends StatelessWidget {
           ),
           Expanded(
             child: Text(value,
-                style: GoogleFonts.rajdhani(
+                style: TextStyle(
                     fontWeight: FontWeight.w600, fontSize: 16)),
           ),
         ],

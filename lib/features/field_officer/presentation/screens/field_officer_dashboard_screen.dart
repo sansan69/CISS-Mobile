@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
@@ -106,6 +105,12 @@ class FieldOfficerDashboardScreen extends ConsumerWidget {
                       accentColor: tokens.accent,
                       helper: 'Today\'s total activity',
                     ),
+                    const SizedBox(width: 12),
+                    _ComplianceTile(
+                      checkedIn: data.attendanceSummary.checkedInToday,
+                      onDuty: data.totalGuards,
+                      accentColor: tokens.warning,
+                    ),
                   ],
                 ),
               ),
@@ -114,7 +119,7 @@ class FieldOfficerDashboardScreen extends ConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
                 child: Text(
                   'OPERATIONS',
-                  style: GoogleFonts.rajdhani(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 2,
@@ -129,11 +134,21 @@ class FieldOfficerDashboardScreen extends ConsumerWidget {
               ),
 
               const SizedBox(height: 24),
-              
+
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: _AttendanceOverview(data: data),
               ),
+
+              if (data.recentVisitReports.isNotEmpty ||
+                  data.recentTrainingReports.isNotEmpty ||
+                  data.recentWorkOrders.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _PendingReportsSummary(data: data),
+                ),
+              ],
             ],
           ),
         );
@@ -175,7 +190,7 @@ class _CommandTile extends StatelessWidget {
                 const Spacer(),
                 Text(
                   label.toUpperCase(),
-                  style: GoogleFonts.rajdhani(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: tokens.inkMuted,
@@ -187,7 +202,7 @@ class _CommandTile extends StatelessWidget {
             const Spacer(),
             Text(
               value,
-              style: GoogleFonts.rajdhani(
+              style: TextStyle(
                 fontSize: 42,
                 fontWeight: FontWeight.w800,
                 color: tokens.ink,
@@ -240,7 +255,7 @@ class _DeploymentTile extends StatelessWidget {
                 children: [
                   Text(
                     'DEPLOYMENT',
-                    style: GoogleFonts.rajdhani(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
                       color: tokens.inkMuted,
@@ -250,7 +265,7 @@ class _DeploymentTile extends StatelessWidget {
                   const Spacer(),
                   Text(
                     '$percent%',
-                    style: GoogleFonts.rajdhani(
+                    style: TextStyle(
                       fontSize: 42,
                       fontWeight: FontWeight.w800,
                       color: accentColor,
@@ -389,7 +404,7 @@ class _ActionCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       action.label,
-                      style: GoogleFonts.rajdhani(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
                         color: tokens.ink,
@@ -423,7 +438,7 @@ class _AttendanceOverview extends ConsumerWidget {
       children: [
         Text(
           'ATTENDANCE FEED',
-          style: GoogleFonts.rajdhani(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w800,
             letterSpacing: 2,
@@ -445,7 +460,7 @@ class _AttendanceOverview extends ConsumerWidget {
                         children: [
                           Text(
                             'Daily Coverage',
-                            style: GoogleFonts.rajdhani(
+                            style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
                               color: tokens.ink,
@@ -507,7 +522,7 @@ class _AttendanceOverview extends ConsumerWidget {
                     onPressed: () => ref.read(fieldOfficerTabIndexProvider.notifier).state = 3,
                     child: Text(
                       'View all ${sites.length} sites',
-                      style: GoogleFonts.rajdhani(fontWeight: FontWeight.w700, color: tokens.primary),
+                      style: TextStyle(fontWeight: FontWeight.w700, color: tokens.primary),
                     ),
                   ),
                 ),
@@ -552,7 +567,7 @@ class _ProgressLine extends StatelessWidget {
                   children: [
                     Text(
                       label,
-                      style: GoogleFonts.rajdhani(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                         color: tokens.ink,
@@ -570,7 +585,7 @@ class _ProgressLine extends StatelessWidget {
               ),
               Text(
                 '$onDuty / $checkedIn',
-                style: GoogleFonts.rajdhani(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: accentColor,
@@ -587,6 +602,241 @@ class _ProgressLine extends StatelessWidget {
               backgroundColor: accentColor.withValues(alpha: 0.1),
               valueColor: AlwaysStoppedAnimation<Color>(accentColor),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ComplianceTile extends StatelessWidget {
+  const _ComplianceTile({
+    required this.checkedIn,
+    required this.onDuty,
+    required this.accentColor,
+  });
+
+  final int checkedIn;
+  final int onDuty;
+  final Color accentColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    final double progress =
+        onDuty <= 0 ? 0.0 : (checkedIn / onDuty).clamp(0, 1);
+    final int percent = (progress * 100).toInt();
+
+    return GlassCard(
+      accentColor: accentColor,
+      child: SizedBox(
+        width: 160,
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'COMPLIANCE',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: tokens.inkMuted,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    '$percent%',
+                    style: TextStyle(
+                      fontSize: 42,
+                      fontWeight: FontWeight.w800,
+                      color: accentColor,
+                      height: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$checkedIn of $onDuty present',
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: tokens.inkMuted,
+                          fontSize: 10,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 48,
+              height: 48,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  CircularProgressIndicator(
+                    value: 1.0,
+                    strokeWidth: 6,
+                    color: accentColor.withValues(alpha: 0.1),
+                  ),
+                  CircularProgressIndicator(
+                    value: progress,
+                    strokeWidth: 6,
+                    color: accentColor,
+                    strokeCap: StrokeCap.round,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PendingReportsSummary extends StatelessWidget {
+  const _PendingReportsSummary({required this.data});
+
+  final FieldOfficerDashboardSnapshot data;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    final theme = Theme.of(context);
+
+    final int pendingOrders =
+        data.recentWorkOrders.where((w) => w.assignedCount < w.totalManpower).length;
+    final int pendingVisits =
+        data.recentVisitReports.where((r) => r.status == 'draft').length;
+    final int pendingTraining =
+        data.recentTrainingReports.where((r) => r.status == 'draft').length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'PENDING REPORTS',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 2,
+            color: tokens.inkMuted,
+          ),
+        ),
+        const SizedBox(height: 12),
+        GlassCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              if (data.recentWorkOrders.isNotEmpty) ...[
+                _ReportRow(
+                  icon: Icons.assignment_late_outlined,
+                  label: 'Work Orders',
+                  count: data.recentWorkOrders.length,
+                  accent: tokens.primary,
+                  subtitle: pendingOrders > 0
+                      ? '$pendingOrders need staffing'
+                      : 'All staffed',
+                ),
+              ],
+              if (data.recentVisitReports.isNotEmpty) ...[
+                if (data.recentWorkOrders.isNotEmpty)
+                  Divider(
+                    height: 1,
+                    color: tokens.border.withValues(alpha: 0.3),
+                  ),
+                _ReportRow(
+                  icon: Icons.fact_check_outlined,
+                  label: 'Visit Reports',
+                  count: data.recentVisitReports.length,
+                  accent: tokens.warning,
+                  subtitle: pendingVisits > 0
+                      ? '$pendingVisits drafts pending'
+                      : 'All submitted',
+                ),
+              ],
+              if (data.recentTrainingReports.isNotEmpty) ...[
+                if (data.recentWorkOrders.isNotEmpty ||
+                    data.recentVisitReports.isNotEmpty)
+                  Divider(
+                    height: 1,
+                    color: tokens.border.withValues(alpha: 0.3),
+                  ),
+                _ReportRow(
+                  icon: Icons.school_outlined,
+                  label: 'Training Reports',
+                  count: data.recentTrainingReports.length,
+                  accent: tokens.success,
+                  subtitle: pendingTraining > 0
+                      ? '$pendingTraining drafts pending'
+                      : 'All submitted',
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReportRow extends StatelessWidget {
+  const _ReportRow({
+    required this.icon,
+    required this.label,
+    required this.count,
+    required this.accent,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String label;
+  final int count;
+  final Color accent;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            child: Icon(icon, color: accent, size: 20),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: tokens.ink,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: tokens.inkMuted,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          StatusChip(
+            label: '$count',
+            tone: StatusChipTone.info,
           ),
         ],
       ),

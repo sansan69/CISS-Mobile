@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/cache/preload_controller.dart';
@@ -89,26 +90,54 @@ class _FieldOfficerShellState extends ConsumerState<FieldOfficerShell> {
     ref.watch(fieldOfficerVisitReportsProvider);
     ref.watch(fieldOfficerTrainingReportsProvider);
 
-    return Scaffold(
-      body: IndexedStack(
-        index: index,
-        children: _tabs.map((t) => t.screen).toList(),
-      ),
-      bottomNavigationBar: BrandedNavigationBar(
-        selectedIndex: index,
-        onSelected: (int i) {
-          Haptics.selection();
-          ref.read(fieldOfficerTabIndexProvider.notifier).state = i;
-        },
-        items: _tabs
-            .map(
-              (_FieldOfficerTab tab) => BrandedNavigationItem(
-                label: tab.label,
-                icon: tab.icon,
-                activeIcon: tab.activeIcon,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) async {
+        if (didPop) return;
+        final bool? shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (BuildContext ctx) => AlertDialog(
+            title: const Text('Exit CISS Workforce?'),
+            content: const Text(
+              'Are you sure you want to close the app?',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Stay'),
               ),
-            )
-            .toList(),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Exit'),
+              ),
+            ],
+          ),
+        );
+        if (shouldExit == true && context.mounted) {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+        body: IndexedStack(
+          index: index,
+          children: _tabs.map((t) => t.screen).toList(),
+        ),
+        bottomNavigationBar: BrandedNavigationBar(
+          selectedIndex: index,
+          onSelected: (int i) {
+            Haptics.selection();
+            ref.read(fieldOfficerTabIndexProvider.notifier).state = i;
+          },
+          items: _tabs
+              .map(
+                (_FieldOfficerTab tab) => BrandedNavigationItem(
+                  label: tab.label,
+                  icon: tab.icon,
+                  activeIcon: tab.activeIcon,
+                ),
+              )
+              .toList(),
+        ),
       ),
     );
   }
@@ -155,7 +184,7 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
               children: [
                 Text(
                   'PREFERENCES',
-                  style: GoogleFonts.rajdhani(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 2,
@@ -172,7 +201,7 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                 const SizedBox(height: 32),
                 Text(
                   'SYSTEM TOOLS',
-                  style: GoogleFonts.rajdhani(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 2,
@@ -238,7 +267,7 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                                 Text(
                                   session?.displayName.toUpperCase() ??
                                       'OFFICER',
-                                  style: GoogleFonts.rajdhani(
+                                  style: TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.w800,
                                     color: tokens.ink,
@@ -272,7 +301,7 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                           icon: const Icon(Icons.logout_rounded, size: 18),
                           label: Text(
                             'TERMINATE SESSION',
-                            style: GoogleFonts.rajdhani(
+                            style: TextStyle(
                               fontWeight: FontWeight.w800,
                               letterSpacing: 1,
                             ),
@@ -324,7 +353,7 @@ class _ToolTile extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 label.toUpperCase(),
-                style: GoogleFonts.rajdhani(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w800,
                   color: tokens.ink,
@@ -349,7 +378,7 @@ class _NotificationTile extends ConsumerWidget {
     return GlassCard(
       child: ListTile(
         leading: Icon(Icons.notifications_outlined, color: tokens.primary),
-        title: Text('Notifications', style: GoogleFonts.rajdhani(fontWeight: FontWeight.w700)),
+        title: Text('Notifications', style: TextStyle(fontWeight: FontWeight.w700)),
         subtitle: Text(count > 0 ? '$count unread' : 'No new alerts'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () {

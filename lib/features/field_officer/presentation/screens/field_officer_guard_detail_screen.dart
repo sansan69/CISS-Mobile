@@ -3,7 +3,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
@@ -94,7 +93,7 @@ class _FieldOfficerGuardDetailScreenState
       appBar: AppBar(
         title: Text(
           widget.guardName,
-          style: GoogleFonts.rajdhani(fontWeight: FontWeight.w800, fontSize: 20),
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 20),
         ),
         backgroundColor: tokens.canvas,
       ),
@@ -219,7 +218,7 @@ class _FieldOfficerGuardDetailScreenState
                     Expanded(
                       child: Text(
                         widget.guardName,
-                        style: GoogleFonts.rajdhani(
+                        style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
                           color: tokens.ink,
@@ -250,7 +249,7 @@ class _FieldOfficerGuardDetailScreenState
                           const SizedBox(width: 6),
                           Text(
                             isActive ? 'ON DUTY' : 'OFF DUTY',
-                            style: GoogleFonts.rajdhani(
+                            style: TextStyle(
                               fontWeight: FontWeight.w800,
                               fontSize: 12,
                               color: isActive ? tokens.success : tokens.danger,
@@ -309,7 +308,7 @@ class _FieldOfficerGuardDetailScreenState
                   icon: const Icon(Icons.my_location_rounded, size: 18),
                   label: Text(
                     'RECENTER ON GUARD',
-                    style: GoogleFonts.rajdhani(
+                    style: TextStyle(
                         fontWeight: FontWeight.w700, letterSpacing: 1),
                   ),
                 ),
@@ -339,7 +338,7 @@ class _FieldOfficerGuardDetailScreenState
           Expanded(
             child: Text(
               value,
-              style: GoogleFonts.rajdhani(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
                 color: tokens.ink,

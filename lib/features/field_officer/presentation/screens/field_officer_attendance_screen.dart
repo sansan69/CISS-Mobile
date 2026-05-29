@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
@@ -115,7 +114,7 @@ class _FieldOfficerGuardAttendanceScreenState
                       _selectedDate != null
                           ? _displayFmt.format(_selectedDate!)
                           : 'Select Date',
-                      style: GoogleFonts.rajdhani(fontWeight: FontWeight.w700),
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -300,7 +299,7 @@ class _SiteFilterChip extends StatelessWidget {
             children: [
               Text(
                 site.siteName,
-                style: GoogleFonts.rajdhani(
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: isSelected ? tokens.primaryStrong : tokens.ink,
@@ -315,7 +314,7 @@ class _SiteFilterChip extends StatelessWidget {
                   const SizedBox(width: 4),
                   Text(
                     '${site.onDutyNow}/${site.checkedInToday}',
-                    style: GoogleFonts.rajdhani(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
                       color: isSelected ? tokens.primaryStrong : tokens.inkMuted,
@@ -366,7 +365,7 @@ class _LiveGuardRow extends StatelessWidget {
                   child: (entry.photoUrl == null || entry.photoUrl!.isEmpty)
                       ? Text(
                           entry.guardName.isNotEmpty ? entry.guardName.substring(0, 1).toUpperCase() : 'G',
-                          style: GoogleFonts.rajdhani(
+                          style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
                             color: glow,
@@ -388,7 +387,7 @@ class _LiveGuardRow extends StatelessWidget {
                 children: [
                   Text(
                     entry.guardName,
-                    style: GoogleFonts.rajdhani(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: tokens.ink,
@@ -409,7 +408,7 @@ class _LiveGuardRow extends StatelessWidget {
               children: [
                 Text(
                   entry.checkIn ?? '--:--',
-                  style: GoogleFonts.rajdhani(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
                     color: tokens.primary,
@@ -417,7 +416,7 @@ class _LiveGuardRow extends StatelessWidget {
                 ),
                 Text(
                   entry.status.toUpperCase(),
-                  style: GoogleFonts.rajdhani(
+                  style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.5,

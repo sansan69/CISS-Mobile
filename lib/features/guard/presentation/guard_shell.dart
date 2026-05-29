@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_tokens.dart';
@@ -88,26 +89,54 @@ class _GuardShellState extends ConsumerState<GuardShell> {
     ref.watch(guardLeaveProvider);
     ref.watch(guardPatrolStatusProvider);
 
-    return Scaffold(
-      body: IndexedStack(
-        index: index,
-        children: _tabs.map((t) => t.screen).toList(),
-      ),
-      bottomNavigationBar: BrandedNavigationBar(
-        selectedIndex: index,
-        onSelected: (int i) {
-          Haptics.selection();
-          ref.read(guardTabIndexProvider.notifier).state = i;
-        },
-        items: _tabs
-            .map(
-              (_GuardTab tab) => BrandedNavigationItem(
-                label: tab.label,
-                icon: tab.icon,
-                activeIcon: tab.activeIcon,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) async {
+        if (didPop) return;
+        final bool? shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (BuildContext ctx) => AlertDialog(
+            title: const Text('Exit CISS Workforce?'),
+            content: const Text(
+              'Are you sure you want to close the app?',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Stay'),
               ),
-            )
-            .toList(),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Exit'),
+              ),
+            ],
+          ),
+        );
+        if (shouldExit == true && context.mounted) {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+        body: IndexedStack(
+          index: index,
+          children: _tabs.map((t) => t.screen).toList(),
+        ),
+        bottomNavigationBar: BrandedNavigationBar(
+          selectedIndex: index,
+          onSelected: (int i) {
+            Haptics.selection();
+            ref.read(guardTabIndexProvider.notifier).state = i;
+          },
+          items: _tabs
+              .map(
+                (_GuardTab tab) => BrandedNavigationItem(
+                  label: tab.label,
+                  icon: tab.icon,
+                  activeIcon: tab.activeIcon,
+                ),
+              )
+              .toList(),
+        ),
       ),
     );
   }

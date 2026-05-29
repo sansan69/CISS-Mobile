@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_tokens.dart';
@@ -407,7 +406,7 @@ class _SavedAccountsSection extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 'RECENT ACCOUNTS',
-                style: GoogleFonts.rajdhani(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.2,
@@ -470,7 +469,7 @@ class _SavedAccountTile extends StatelessWidget {
                   alignment: Alignment.center,
                   child: Text(
                     account.initials,
-                    style: GoogleFonts.rajdhani(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
                       color: tokens.primaryStrong,
@@ -484,7 +483,7 @@ class _SavedAccountTile extends StatelessWidget {
                     children: <Widget>[
                       Text(
                         account.displayName,
-                        style: GoogleFonts.rajdhani(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                           color: tokens.ink,

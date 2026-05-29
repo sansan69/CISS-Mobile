@@ -2,7 +2,6 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/guard_profile.dart';
@@ -231,7 +230,7 @@ class _WorkOrderCard extends ConsumerWidget {
                             workOrder.siteName.isEmpty
                                 ? 'Duty Site'
                                 : workOrder.siteName,
-                            style: GoogleFonts.rajdhani(
+                            style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
                               color: tokens.ink,
@@ -261,7 +260,7 @@ class _WorkOrderCard extends ConsumerWidget {
                     const SizedBox(width: 6),
                     Text(
                       workOrder.dateLabel,
-                      style: GoogleFonts.rajdhani(
+                      style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                         color: tokens.inkMuted,
@@ -327,7 +326,7 @@ class _RadialProgress extends StatelessWidget {
           ),
           Text(
             label,
-            style: GoogleFonts.rajdhani(
+            style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w800,
               color: color,
@@ -489,7 +488,7 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
                             children: [
                               Text(
                                 'ASSIGN GUARDS',
-                                style: GoogleFonts.rajdhani(
+                                style: TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: 1,
@@ -513,7 +512,7 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
                     const SizedBox(height: 16),
                     TabBar(
                       controller: _tabCtrl,
-                      labelStyle: GoogleFonts.rajdhani(fontWeight: FontWeight.w700),
+                      labelStyle: TextStyle(fontWeight: FontWeight.w700),
                       tabs: [
                         Tab(text: 'AVAILABLE (${_available?.length ?? 0})'),
                         Tab(text: 'SELECTED (${_selected.length})'),
@@ -587,7 +586,7 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
                       children: [
                         Text(
                           '${_selected.length} Selected',
-                          style: GoogleFonts.rajdhani(
+                          style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                             color: tokens.primary,
@@ -665,7 +664,7 @@ class _GuardTile extends StatelessWidget {
                       ? NetworkImage(guard.profilePhotoUrl!)
                       : null,
                   child: (guard.profilePhotoUrl == null || guard.profilePhotoUrl!.isEmpty)
-                      ? Text(initials, style: GoogleFonts.rajdhani(fontWeight: FontWeight.w700, color: tokens.primaryStrong))
+                      ? Text(initials, style: TextStyle(fontWeight: FontWeight.w700, color: tokens.primaryStrong))
                       : null,
                 ),
                 const SizedBox(width: 12),
@@ -677,7 +676,7 @@ class _GuardTile extends StatelessWidget {
                         guard.fullName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.rajdhani(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
                           color: tokens.ink,
