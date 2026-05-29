@@ -483,7 +483,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     return ScreenScaffold(
       title: 'Attendance',
       subtitle: 'Mark attendance with site, duty point, shift, photo, and GPS',
-      actions: <Widget>[
+      onRefresh: () async {
+        ref.invalidate(attendanceSitesProvider);
+        ref.invalidate(guardProfileProvider);
+      },
+          actions: <Widget>[
         IconButton(
           onPressed: () => ref.invalidate(attendanceSitesProvider),
           icon: const Icon(Icons.refresh_rounded),

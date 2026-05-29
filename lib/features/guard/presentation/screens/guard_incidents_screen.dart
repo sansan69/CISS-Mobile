@@ -222,7 +222,8 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
             return ScreenScaffold(
               title: 'Incidents',
               subtitle: 'Report and track incidents',
-              actions: <Widget>[
+              onRefresh: () async => ref.invalidate(guardIncidentsProvider),
+          actions: <Widget>[
                 IconButton(
                   onPressed: () => ref.invalidate(guardIncidentsProvider),
                   icon: const Icon(Icons.refresh_rounded),

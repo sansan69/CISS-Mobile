@@ -33,6 +33,7 @@ class GuardTrainingScreen extends ConsumerWidget {
         return ScreenScaffold(
           title: 'Training',
           subtitle: 'Assigned modules and evaluations',
+          onRefresh: () async => ref.invalidate(guardTrainingProvider),
           actions: <Widget>[
             IconButton(
               onPressed: () => ref.invalidate(guardTrainingProvider),

@@ -165,7 +165,7 @@ class _FieldOfficerReportsScreenState
                 const SyncStatusBadge(),
                 IconButton(
                   onPressed: _refresh,
-                  icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+                  icon: Icon(Icons.refresh_rounded, color: tokens.inkMuted, size: 20),
                 ),
               ],
             ),

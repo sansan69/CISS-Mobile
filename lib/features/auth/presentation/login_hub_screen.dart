@@ -58,6 +58,60 @@ class _LoginHubScreenState extends State<LoginHubScreen>
       title: 'Select your portal',
       subtitle: 'Choose the workspace for your role',
       children: <Widget>[
+        // Brand mark — prominent identity on login screen
+        FadeTransition(
+          opacity: _fade(0.0, 0.5),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Column(
+                children: <Widget>[
+                  Container(
+                    width: 72,
+                    height: 72,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: tokens.primarySoft,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: tokens.primary.withValues(alpha: 0.18),
+                          blurRadius: 28,
+                          spreadRadius: 4,
+                        ),
+                      ],
+                    ),
+                    child: Image.asset(kCompanyLogoAsset, fit: BoxFit.contain),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    kCompanyName.toUpperCase(),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
+                      color: tokens.primary,
+                      letterSpacing: 3,
+                      height: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    kCompanyTagline,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: tokens.inkMuted,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
         // Guard portal
         SizedBox(
           height: 230,

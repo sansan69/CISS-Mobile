@@ -32,6 +32,7 @@ class GuardEvaluationsScreen extends ConsumerWidget {
         return ScreenScaffold(
           title: 'Evaluations',
           subtitle: 'Quiz and performance records',
+          onRefresh: () async => ref.invalidate(guardEvaluationsProvider),
           actions: <Widget>[
             IconButton(
               onPressed: () => ref.invalidate(guardEvaluationsProvider),

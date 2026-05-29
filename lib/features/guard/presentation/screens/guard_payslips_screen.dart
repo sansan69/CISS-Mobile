@@ -33,6 +33,7 @@ class GuardPayslipsScreen extends ConsumerWidget {
         return ScreenScaffold(
           title: 'Payslips',
           subtitle: 'Monthly payroll slips',
+          onRefresh: () async => ref.invalidate(guardPayslipsProvider),
           actions: <Widget>[
             IconButton(
               onPressed: () => ref.invalidate(guardPayslipsProvider),

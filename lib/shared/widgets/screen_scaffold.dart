@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/app_tokens.dart';
 import '../../core/brand.dart';
+import '../../core/haptics.dart';
 
 /// Universal screen scaffold for CISS Workforce.
 ///
@@ -11,11 +12,12 @@ import '../../core/brand.dart';
 ///
 /// [title] is the primary screen heading shown in the AppBar.
 /// [subtitle] appears below the title in a smaller muted style.
-/// [children] are rendered in a scrollable [ListView] body.
+/// [children] are rendered in a scrollable body.
 /// [actions] are placed in the AppBar's trailing slot.
-/// [showBackButton] when true, the AppBar shows a system back button. Defaults
-///   to false (ideal for bottom-nav tab screens where no back navigation exists).
+/// [showBackButton] when true, the AppBar shows a back arrow. Defaults to false.
 /// [onBack] overrides the default back behavior (defaults to [Navigator.pop]).
+/// [onRefresh] when provided, enables pull-to-refresh with haptic feedback.
+/// [scrollController] for programmatic scroll control (e.g. scroll-to-top).
 class ScreenScaffold extends StatelessWidget {
   const ScreenScaffold({
     super.key,
@@ -25,6 +27,8 @@ class ScreenScaffold extends StatelessWidget {
     this.actions = const <Widget>[],
     this.showBackButton = false,
     this.onBack,
+    this.onRefresh,
+    this.scrollController,
   });
 
   final String title;
@@ -33,6 +37,8 @@ class ScreenScaffold extends StatelessWidget {
   final List<Widget> actions;
   final bool showBackButton;
   final VoidCallback? onBack;
+  final Future<void> Function()? onRefresh;
+  final ScrollController? scrollController;
 
   // Toolbar heights: base = company label + title; extended = + subtitle
   static const double _toolbarBase = 68.0;
@@ -44,11 +50,21 @@ class ScreenScaffold extends StatelessWidget {
     final double toolbarHeight =
         subtitle == null ? _toolbarBase : _toolbarWithSub;
 
+    final Widget body = ListView.separated(
+      controller: scrollController,
+      primary: scrollController == null,
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      itemBuilder: (BuildContext context, int index) => children[index],
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
+      itemCount: children.length,
+    );
+
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: Size.fromHeight(toolbarHeight),
         child: AppBar(
-          automaticallyImplyLeading: showBackButton,
+          automaticallyImplyLeading: false,
           leading: showBackButton
               ? IconButton(
                   icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
@@ -58,7 +74,7 @@ class ScreenScaffold extends StatelessWidget {
                   ),
                 )
               : null,
-          titleSpacing: showBackButton ? 0 : 0,
+          titleSpacing: 0,
           toolbarHeight: toolbarHeight,
           title: Padding(
             padding: EdgeInsets.fromLTRB(
@@ -137,12 +153,17 @@ class ScreenScaffold extends StatelessWidget {
           ),
         ),
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        itemBuilder: (BuildContext context, int index) => children[index],
-        separatorBuilder: (_, _) => const SizedBox(height: 12),
-        itemCount: children.length,
-      ),
+      body: onRefresh != null
+          ? RefreshIndicator(
+              onRefresh: () async {
+                Haptics.medium();
+                await onRefresh!();
+              },
+              color: tokens.primary,
+              backgroundColor: tokens.surface,
+              child: body,
+            )
+          : body,
     );
   }
 }

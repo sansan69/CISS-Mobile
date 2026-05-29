@@ -47,6 +47,7 @@ class GuardDashboardScreen extends ConsumerWidget {
         return ScreenScaffold(
           title: 'Dashboard',
           subtitle: displayName,
+          onRefresh: () async => ref.invalidate(guardDashboardProvider),
           actions: <Widget>[
             const _DashboardNotificationBadge(),
             const SizedBox(width: 4),

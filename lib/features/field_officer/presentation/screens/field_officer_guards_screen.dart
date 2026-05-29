@@ -78,6 +78,7 @@ class _FieldOfficerGuardsScreenState
               icon: const Icon(Icons.refresh_rounded),
             ),
           ],
+          onRefresh: () async => ref.invalidate(fieldOfficerGuardsProvider),
           children: <Widget>[
             Row(
               children: <Widget>[

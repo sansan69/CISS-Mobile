@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app/theme/app_tokens.dart';
 import '../../core/brand.dart';
@@ -31,8 +32,12 @@ class BrandBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Container(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+          .copyWith(statusBarColor: Colors.transparent),
+      child: Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
         vertical: AppSpacing.md,
@@ -126,6 +131,7 @@ class BrandBanner extends StatelessWidget {
             trailing!,
           ],
         ],
+      ),
       ),
     );
   }

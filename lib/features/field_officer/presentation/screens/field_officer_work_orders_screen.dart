@@ -89,7 +89,7 @@ class _FieldOfficerWorkOrdersScreenState
                     IconButton(
                       onPressed: () =>
                           ref.invalidate(fieldOfficerWorkOrdersProvider),
-                      icon: const Icon(Icons.refresh_rounded, color: Colors.white70),
+                      icon: Icon(Icons.refresh_rounded, color: tokens.inkMuted, size: 20),
                     ),
                   ],
                 ),

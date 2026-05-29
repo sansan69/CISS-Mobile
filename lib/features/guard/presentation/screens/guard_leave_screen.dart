@@ -124,6 +124,7 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
         return ScreenScaffold(
           title: 'Leave',
           subtitle: 'Apply and track leave requests',
+          onRefresh: () async => ref.invalidate(guardLeaveProvider),
           actions: <Widget>[
             IconButton(
               onPressed: () => ref.invalidate(guardLeaveProvider),

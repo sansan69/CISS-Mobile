@@ -212,7 +212,16 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
                 tone: isGuard ? StatusChipTone.success : StatusChipTone.info,
               ),
             ),
-
+            const SizedBox(height: AppSpacing.md),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Text(
+                widget.pageTitle,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
 
             // ── Saved accounts ─────────────────────────────────────────────
             if (_accountsLoaded && _savedAccounts.isNotEmpty) ...<Widget>[

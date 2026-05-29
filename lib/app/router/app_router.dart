@@ -10,54 +10,121 @@ import '../../features/attendance_qr/qr_attendance_flow.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
+/// Shared page transition used on all routes for consistent UX.
+///
+/// Slides in from the right with a brief fade, matching platform convention.
+Page<void> _buildPage({
+  required BuildContext context,
+  required GoRouterState state,
+  required Widget child,
+}) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: child,
+    transitionsBuilder: (
+      BuildContext context,
+      Animation<double> animation,
+      Animation<double> secondaryAnimation,
+      Widget child,
+    ) {
+      return SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0.08, 0),
+          end: Offset.zero,
+        ).animate(CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        )),
+        child: FadeTransition(
+          opacity: CurvedAnimation(
+            parent: animation,
+            curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
+          ),
+          child: child,
+        ),
+      );
+    },
+    transitionDuration: const Duration(milliseconds: 280),
+    reverseTransitionDuration: const Duration(milliseconds: 200),
+  );
+}
+
 final GoRouter appRouter = GoRouter(
   navigatorKey: rootNavigatorKey,
   initialLocation: '/',
   routes: <RouteBase>[
     GoRoute(
       path: '/',
-      builder: (BuildContext context, GoRouterState state) {
-        return const AuthGateScreen();
+      pageBuilder: (BuildContext context, GoRouterState state) {
+        return _buildPage(
+          context: context,
+          state: state,
+          child: const AuthGateScreen(),
+        );
       },
     ),
     GoRoute(
       path: '/login',
-      builder: (BuildContext context, GoRouterState state) {
-        return const LoginHubScreen();
+      pageBuilder: (BuildContext context, GoRouterState state) {
+        return _buildPage(
+          context: context,
+          state: state,
+          child: const LoginHubScreen(),
+        );
       },
     ),
     GoRoute(
       path: '/login/guard',
-      builder: (BuildContext context, GoRouterState state) {
-        return const RoleLoginScreen.guard();
+      pageBuilder: (BuildContext context, GoRouterState state) {
+        return _buildPage(
+          context: context,
+          state: state,
+          child: const RoleLoginScreen.guard(),
+        );
       },
     ),
     GoRoute(
       path: '/login/guard/setup',
-      builder: (BuildContext context, GoRouterState state) {
+      pageBuilder: (BuildContext context, GoRouterState state) {
         final params = state.uri.queryParameters;
-        return GuardPinSetupScreen(
-          initialEmployeeId: params['employeeId'],
-          initialPhoneNumber: params['phoneNumber'],
+        return _buildPage(
+          context: context,
+          state: state,
+          child: GuardPinSetupScreen(
+            initialEmployeeId: params['employeeId'],
+            initialPhoneNumber: params['phoneNumber'],
+          ),
         );
       },
     ),
     GoRoute(
       path: '/login/field-officer',
-      builder: (BuildContext context, GoRouterState state) {
-        return const RoleLoginScreen.fieldOfficer();
+      pageBuilder: (BuildContext context, GoRouterState state) {
+        return _buildPage(
+          context: context,
+          state: state,
+          child: const RoleLoginScreen.fieldOfficer(),
+        );
       },
     ),
     GoRoute(
       path: '/permissions',
-      builder: (BuildContext context, GoRouterState state) {
-        return const PermissionOnboardingScreen();
+      pageBuilder: (BuildContext context, GoRouterState state) {
+        return _buildPage(
+          context: context,
+          state: state,
+          child: const PermissionOnboardingScreen(),
+        );
       },
     ),
     GoRoute(
       path: '/qr-attendance',
-      builder: (BuildContext context, GoRouterState state) {
-        return const QrAttendanceFlow();
+      pageBuilder: (BuildContext context, GoRouterState state) {
+        return _buildPage(
+          context: context,
+          state: state,
+          child: const QrAttendanceFlow(),
+        );
       },
     ),
   ],
