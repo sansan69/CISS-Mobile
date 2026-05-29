@@ -54,6 +54,16 @@ class GuardDashboardScreen extends ConsumerWidget {
           ],
           children: <Widget>[
             // ── Shift status header ───────────────────────────────────────
+            if (data.profilePhotoUrl != null && data.profilePhotoUrl!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Center(
+                  child: CircleAvatar(
+                    radius: 36,
+                    backgroundImage: NetworkImage(data.profilePhotoUrl!),
+                  ),
+                ),
+              ),
             _ShiftStatusCard(data: data),
 
             const _PatrolStatusCard(),
@@ -107,6 +117,21 @@ class GuardDashboardScreen extends ConsumerWidget {
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: MetricTile(
+                    label: 'Absent days',
+                    value: '${data.absentDays}',
+                    helper: 'This month',
+                    icon: Icons.cancel_outlined,
+                    accentColor: Theme.of(context)
+                        .extension<CissThemeTokens>()!
+                        .danger,
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: MetricTile(
                     label: 'Leave balance',
                     value: '$leaveBalance day${leaveBalance == 1 ? '' : 's'}',
                     helper: 'Approved remaining',
@@ -116,6 +141,8 @@ class GuardDashboardScreen extends ConsumerWidget {
                         .warning,
                   ),
                 ),
+                const SizedBox(width: AppSpacing.sm),
+                const Expanded(child: SizedBox.shrink()),
               ],
             ),
 

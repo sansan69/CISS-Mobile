@@ -494,6 +494,19 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                                                   ),
                                             ),
                                           ),
+                                        if (activity.photoUrl != null && activity.photoUrl!.isNotEmpty)
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: AppSpacing.xs),
+                                            child: ClipRRect(
+                                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                                              child: Image.network(
+                                                activity.photoUrl!,
+                                                height: 80,
+                                                width: double.infinity,
+                                                fit: BoxFit.cover,
+                                              ),
+                                            ),
+                                          ),
                                       ],
                                     ),
                                   ),

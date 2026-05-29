@@ -40,6 +40,16 @@ class GuardProfileScreen extends ConsumerWidget {
             ),
           ],
           children: <Widget>[
+            if (profile.profilePhotoUrl != null && profile.profilePhotoUrl!.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Center(
+                  child: CircleAvatar(
+                    radius: 48,
+                    backgroundImage: NetworkImage(profile.profilePhotoUrl!),
+                  ),
+                ),
+              ),
             SectionCard(
               title: profile.fullName,
               subtitle:
@@ -53,6 +63,7 @@ class GuardProfileScreen extends ConsumerWidget {
             _InfoCard(
               rows: <_InfoRow>[
                 _InfoRow('Phone', profile.phoneNumber),
+                _InfoRow('Gender', (profile.gender ?? '').isEmpty ? '-' : profile.gender!),
                 _InfoRow('Joining Date', profile.joiningDate ?? ''),
                 _InfoRow('Resource ID', profile.resourceIdNumber ?? ''),
                 _InfoRow('Address', profile.address ?? ''),

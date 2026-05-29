@@ -20,6 +20,7 @@ import '../../../../../shared/widgets/section_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
+import '../../../../../shared/widgets/portal_primitives.dart';
 import '../widgets/guard_portal_widgets.dart';
 import 'guard_profile_screen.dart';
 
@@ -400,6 +401,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
             _photoPath = null;
             _error = 'Attendance submitted successfully.';
           });
+          ref.invalidate(attendanceHistoryProvider);
         }
       } catch (uploadOrSubmitError) {
         if (uploadOrSubmitError is DioException &&
@@ -427,6 +429,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                 _photoPath = null;
                 _error = 'Offline: Attendance queued for sync.';
               });
+              ref.invalidate(attendanceHistoryProvider);
             }
           }
         } else {
@@ -743,6 +746,9 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                             : StatusChipTone.success,
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    // ── Attendance History ──────────────────────────
+                    _AttendanceHistorySection(),
                   ],
                 );
               },
@@ -758,3 +764,156 @@ final FutureProvider<List<SiteOptionModel>> attendanceSitesProvider =
     FutureProvider<List<SiteOptionModel>>((Ref ref) {
       return ref.read(mobileRepositoryProvider).fetchAttendanceSites();
     });
+
+final FutureProvider<List<AttendanceRecordModel>> attendanceHistoryProvider =
+    FutureProvider<List<AttendanceRecordModel>>((Ref ref) {
+      return ref.read(mobileRepositoryProvider).fetchAttendanceHistory();
+    });
+
+class _AttendanceHistorySection extends ConsumerWidget {
+  const _AttendanceHistorySection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = CissThemeTokens.of(context);
+    final historyAsync = ref.watch(attendanceHistoryProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionCard(
+          title: 'Recent Attendance',
+          subtitle: 'Your recent check-in and check-out records',
+          icon: Icons.history_rounded,
+        ),
+        const SizedBox(height: 8),
+        historyAsync.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          ),
+          error: (error, _) => StateBlock(
+            icon: Icons.error_outline_rounded,
+            title: 'Could not load history',
+            message: error.toString().replaceFirst('Exception: ', ''),
+            action: FilledButton.tonal(
+              onPressed: () => ref.invalidate(attendanceHistoryProvider),
+              child: const Text('Retry'),
+            ),
+          ),
+          data: (records) {
+            if (records.isEmpty) {
+              return const StateBlock(
+                icon: Icons.history_toggle_off_rounded,
+                title: 'No attendance records yet',
+                message: 'Your check-in and check-out records will appear here.',
+              );
+            }
+
+            return Column(
+              children: records.take(10).map((record) {
+                final isIn = record.status == 'In';
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: PortalSurfaceCard(
+                    accentColor: isIn ? tokens.success : tokens.warning,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: (isIn ? tokens.success : tokens.warning)
+                                .withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                          ),
+                          child: Icon(
+                            isIn ? Icons.login_rounded : Icons.logout_rounded,
+                            color: isIn ? tokens.success : tokens.warning,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                record.siteName,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${record.dateLabel}${record.time != null ? ' · ${record.time}' : ''}${record.shiftLabel.isNotEmpty ? ' · ${record.shiftLabel}' : ''}',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: tokens.inkMuted,
+                                ),
+                              ),
+                              if (record.distanceMeters != null) ...[
+                                const SizedBox(height: 1),
+                                Text(
+                                  record.distanceMeters! < 1000
+                                      ? '${record.distanceMeters!.round()} m'
+                                      : '${(record.distanceMeters! / 1000).toStringAsFixed(1)} km',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: record.distanceMeters! > 200
+                                        ? tokens.danger
+                                        : tokens.inkMuted,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        if (record.photoUrl != null && record.photoUrl!.isNotEmpty)
+                          GestureDetector(
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => Scaffold(
+                                  backgroundColor: Colors.black,
+                                  appBar: AppBar(
+                                    backgroundColor: Colors.black,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  body: Center(
+                                    child: InteractiveViewer(
+                                      child: Image.network(record.photoUrl!),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                              child: Image.network(
+                                record.photoUrl!,
+                                width: 40,
+                                height: 40,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        StatusChip(
+                          label: record.status,
+                          tone: isIn
+                              ? StatusChipTone.success
+                              : StatusChipTone.warning,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}

@@ -153,6 +153,9 @@ class AttendanceRecordModel {
     required this.status,
     required this.dutyPointName,
     required this.shiftLabel,
+    this.time,
+    this.distanceMeters,
+    this.photoUrl,
   });
 
   final String siteName;
@@ -160,6 +163,9 @@ class AttendanceRecordModel {
   final String status;
   final String dutyPointName;
   final String shiftLabel;
+  final String? time;
+  final num? distanceMeters;
+  final String? photoUrl;
 
   factory AttendanceRecordModel.fromJson(Map<String, dynamic> json) {
     return AttendanceRecordModel(
@@ -169,6 +175,9 @@ class AttendanceRecordModel {
       status: (json['status'] as String?) ?? '',
       dutyPointName: (json['dutyPointName'] as String?) ?? '',
       shiftLabel: (json['shiftLabel'] as String?) ?? '',
+      time: json['time'] as String?,
+      distanceMeters: json['distanceMeters'] as num?,
+      photoUrl: json['photoUrl'] as String?,
     );
   }
 }

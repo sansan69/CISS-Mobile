@@ -443,6 +443,7 @@ class _LiveDot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
     final hasLive = location != null && location!.status == 'In';
     final isStale = hasLive &&
         DateTime.now().difference(location!.updatedAt).inMinutes > 10;
@@ -451,9 +452,9 @@ class _LiveDot extends StatelessWidget {
     if (!hasLive) {
       color = fallbackColor;
     } else if (isStale) {
-      color = Colors.orange;
+      color = tokens.warning;
     } else {
-      color = location!.isOutOfZone ? Colors.red : const Color(0xFF4CAF50);
+      color = location!.isOutOfZone ? tokens.danger : tokens.success;
     }
 
     return Container(

@@ -179,15 +179,15 @@ class _FieldOfficerGuardDetailScreenState
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: Colors.orange.shade100,
+              color: tokens.warningSoft,
               child: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, size: 18, color: Colors.orange),
+                  Icon(Icons.warning_amber_rounded, size: 18, color: tokens.warning),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Map tiles unavailable. Guard location still visible.',
-                      style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+                      style: TextStyle(fontSize: 12, color: tokens.warning),
                     ),
                   ),
                 ],
@@ -379,7 +379,8 @@ class _GuardMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isOutOfZone ? Colors.red : const Color(0xFF4CAF50);
+    final tokens = CissThemeTokens.of(context);
+    final color = isOutOfZone ? tokens.danger : tokens.success;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [

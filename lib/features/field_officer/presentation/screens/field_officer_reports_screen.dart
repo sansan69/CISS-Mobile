@@ -433,13 +433,25 @@ class _VisitBriefingCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (!isSynced)
-                  const StatusChip(label: 'SYNCING', tone: StatusChipTone.warning)
-                else
-                  const Icon(Icons.verified_rounded, size: 18, color: Color(0xFF1F8F63)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (!isSynced)
+                      const StatusChip(label: 'SYNCING', tone: StatusChipTone.warning)
+                    else
+                      StatusChip(
+                        label: report.status.toUpperCase(),
+                        tone: report.status == 'submitted'
+                            ? StatusChipTone.info
+                            : report.status == 'reviewed'
+                                ? StatusChipTone.success
+                                : StatusChipTone.warning,
+                      ),
+                  ],
+                ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Icon(Icons.calendar_today_outlined, size: 12, color: tokens.inkMuted),
@@ -448,7 +460,14 @@ class _VisitBriefingCard extends StatelessWidget {
                   report.dateLabel,
                   style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
+                Icon(Icons.map, size: 12, color: tokens.inkMuted),
+                const SizedBox(width: 4),
+                Text(
+                  report.district,
+                  style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
+                ),
+                const SizedBox(width: 12),
                 Icon(Icons.groups_2_outlined, size: 12, color: tokens.inkMuted),
                 const SizedBox(width: 4),
                 Text(
@@ -458,7 +477,7 @@ class _VisitBriefingCard extends StatelessWidget {
               ],
             ),
             if (report.summary.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Text(
                 report.summary,
                 style: Theme.of(context).textTheme.bodySmall,
@@ -466,9 +485,42 @@ class _VisitBriefingCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ],
+            if (report.issuesFound.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: tokens.warning.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  border: Border.all(color: tokens.warning.withValues(alpha: 0.25)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.warning_amber_rounded, size: 14, color: tokens.warning),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        report.issuesFound,
+                        style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.ink),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             if (report.photoUrls.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               _PhotoThumbnailStrip(photoUrls: report.photoUrls),
+            ],
+            if (report.visitLocation != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                '📍 ${report.visitLocation!['lat']?.toStringAsFixed(5) ?? '?'}, ${report.visitLocation!['lng']?.toStringAsFixed(5) ?? '?'}',
+                style: GoogleFonts.rajdhani(fontSize: 10, fontWeight: FontWeight.w500, color: tokens.inkMuted),
+              ),
             ],
           ],
         ),
@@ -509,7 +561,7 @@ class _TrainingBriefingCard extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        report.siteName,
+                        '${report.siteName} • ${report.clientName}',
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tokens.inkMuted),
                       ),
                     ],
@@ -518,19 +570,40 @@ class _TrainingBriefingCard extends StatelessWidget {
                 if (!isSynced)
                   const StatusChip(label: 'QUEUED', tone: StatusChipTone.info)
                 else
-                  const Icon(Icons.verified_rounded, size: 18, color: Color(0xFF1F8F63)),
+                  StatusChip(
+                    label: report.status.toUpperCase(),
+                    tone: report.status == 'acknowledged'
+                        ? StatusChipTone.success
+                        : report.status == 'submitted'
+                            ? StatusChipTone.info
+                            : StatusChipTone.warning,
+                  ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Row(
               children: [
+                Icon(Icons.calendar_today_outlined, size: 12, color: tokens.inkMuted),
+                const SizedBox(width: 4),
+                Text(
+                  report.dateLabel,
+                  style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
+                ),
+                const SizedBox(width: 12),
+                Icon(Icons.map, size: 12, color: tokens.inkMuted),
+                const SizedBox(width: 4),
+                Text(
+                  report.district,
+                  style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
+                ),
+                const SizedBox(width: 12),
                 Icon(Icons.timer_outlined, size: 12, color: tokens.inkMuted),
                 const SizedBox(width: 4),
                 Text(
                   '${report.durationMinutes} MINS',
                   style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.accent),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 Icon(Icons.people_alt_outlined, size: 12, color: tokens.inkMuted),
                 const SizedBox(width: 4),
                 Text(
@@ -539,15 +612,68 @@ class _TrainingBriefingCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (report.description.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                report.description,
+                style: Theme.of(context).textTheme.bodySmall,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+            if (report.clientReportUrl != null && report.clientReportUrl!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: () => _openFullScreen(context, report.clientReportUrl!),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: tokens.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    border: Border.all(color: tokens.primary.withValues(alpha: 0.25)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.description_outlined, size: 14, color: tokens.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Client Report',
+                        style: GoogleFonts.rajdhani(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.primary),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             if (report.photoUrls.isNotEmpty) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               _PhotoThumbnailStrip(photoUrls: report.photoUrls),
+            ],
+            if (report.visitLocation != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                '📍 ${report.visitLocation!['lat']?.toStringAsFixed(5) ?? '?'}, ${report.visitLocation!['lng']?.toStringAsFixed(5) ?? '?'}',
+                style: GoogleFonts.rajdhani(fontSize: 10, fontWeight: FontWeight.w500, color: tokens.inkMuted),
+              ),
             ],
           ],
         ),
       ),
     );
   }
+}
+
+void _openFullScreen(BuildContext context, String url) {
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
+        body: Center(child: InteractiveViewer(child: Image.network(url))),
+      ),
+    ),
+  );
 }
 
 class _PhotoThumbnailStrip extends StatelessWidget {
@@ -573,18 +699,6 @@ class _PhotoThumbnailStrip extends StatelessWidget {
               fit: BoxFit.cover,
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  void _openFullScreen(BuildContext context, String url) {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
-          body: Center(child: InteractiveViewer(child: Image.network(url))),
         ),
       ),
     );

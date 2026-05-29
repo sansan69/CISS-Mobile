@@ -228,13 +228,14 @@ class GuardMoreScreen extends ConsumerWidget {
 class _NotificationBadge extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = CissThemeTokens.of(context);
     final unreadAsync = ref.watch(NotificationService.unreadCountProvider);
     return unreadAsync.when(
       data: (count) => count > 0
           ? Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: Colors.red,
+                color: tokens.danger,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(

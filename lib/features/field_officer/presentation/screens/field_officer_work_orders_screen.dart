@@ -675,6 +675,8 @@ class _GuardTile extends StatelessWidget {
                     children: [
                       Text(
                         guard.fullName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.rajdhani(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
@@ -683,6 +685,8 @@ class _GuardTile extends StatelessWidget {
                       ),
                       Text(
                         'ID: ${guard.employeeId} · ${guard.gender ?? "N/A"}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
