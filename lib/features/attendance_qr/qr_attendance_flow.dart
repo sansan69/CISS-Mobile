@@ -362,8 +362,8 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline,
-                        size: 20, color: Colors.orange),
+                    Icon(Icons.info_outline,
+                        size: 20, color: tokens.warning),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(

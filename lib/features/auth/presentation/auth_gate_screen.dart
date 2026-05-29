@@ -196,16 +196,17 @@ class _BiometricLockScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<CissThemeTokens>()!;
     return Scaffold(
       body: SafeArea(
         child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.lock_outline_rounded,
               size: 64,
-              color: Colors.blueGrey,
+              color: tokens.inkMuted,
             ),
             const SizedBox(height: 24),
             const Text(
