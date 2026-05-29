@@ -2,5 +2,5 @@ flutter_launcher_icons:
   android: true
   image_path: "assets/ciss-logo.png"
   adaptive_icon_background: "#014c85"
-  adaptive_icon_foreground: "assets/ciss-logo.png"
+  adaptive_icon_foreground: "assets/ciss-logo-adaptive.png"
   min_sdk_android: 24
