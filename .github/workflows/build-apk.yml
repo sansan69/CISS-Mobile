@@ -24,6 +24,11 @@ jobs:
       
       - run: flutter pub get
       
+      # Override local SDK paths for CI
+      - run: |
+          echo "sdk.dir=${ANDROID_HOME}" > android/local.properties
+          echo "flutter.sdk=${FLUTTER_ROOT}" >> android/local.properties
+      
       - run: flutter build apk --release --split-per-abi
       
       - name: Upload ARM64 APK
