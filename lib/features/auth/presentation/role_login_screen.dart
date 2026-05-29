@@ -202,6 +202,8 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
             BrandBanner(
               title: widget.heroTitle,
               subtitle: widget.heroSubtitle,
+              showBackButton: true,
+              onBack: () => context.go('/login'),
               trailing: StatusChip(
                 label: isGuard ? 'Guard access' : 'Officer access',
                 icon: isGuard
@@ -210,28 +212,7 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
                 tone: isGuard ? StatusChipTone.success : StatusChipTone.info,
               ),
             ),
-            const SizedBox(height: AppSpacing.lg),
 
-            Row(
-              children: <Widget>[
-                IconButton(
-                  onPressed: () => context.go('/login'),
-                  icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                  style: IconButton.styleFrom(
-                    backgroundColor: tokens.surface,
-                    foregroundColor: tokens.primaryStrong,
-                    side: BorderSide(color: tokens.border),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    widget.pageTitle,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-              ],
-            ),
 
             // ── Saved accounts ─────────────────────────────────────────────
             if (_accountsLoaded && _savedAccounts.isNotEmpty) ...<Widget>[

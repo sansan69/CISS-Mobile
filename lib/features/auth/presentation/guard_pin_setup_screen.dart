@@ -106,7 +106,7 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
           children: <Widget>[
-            const BrandBanner(
+            const BrandBanner(showBackButton: true,
               title: 'First-time guard PIN setup',
               subtitle:
                   'Create your duty PIN so this device can sign in with your guard account.',

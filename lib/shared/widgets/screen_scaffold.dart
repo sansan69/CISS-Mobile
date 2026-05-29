@@ -3,6 +3,19 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_tokens.dart';
 import '../../core/brand.dart';
 
+/// Universal screen scaffold for CISS Workforce.
+///
+/// Provides a consistent AppBar with company branding (logo + name) and screen
+/// title. Every screen in the app — guard tabs, FO tabs, login pages, detail
+/// screens — uses this widget to guarantee identical header appearance.
+///
+/// [title] is the primary screen heading shown in the AppBar.
+/// [subtitle] appears below the title in a smaller muted style.
+/// [children] are rendered in a scrollable [ListView] body.
+/// [actions] are placed in the AppBar's trailing slot.
+/// [showBackButton] when true, the AppBar shows a system back button. Defaults
+///   to false (ideal for bottom-nav tab screens where no back navigation exists).
+/// [onBack] overrides the default back behavior (defaults to [Navigator.pop]).
 class ScreenScaffold extends StatelessWidget {
   const ScreenScaffold({
     super.key,
@@ -10,12 +23,16 @@ class ScreenScaffold extends StatelessWidget {
     required this.children,
     this.subtitle,
     this.actions = const <Widget>[],
+    this.showBackButton = false,
+    this.onBack,
   });
 
   final String title;
   final String? subtitle;
   final List<Widget> children;
   final List<Widget> actions;
+  final bool showBackButton;
+  final VoidCallback? onBack;
 
   // Toolbar heights: base = company label + title; extended = + subtitle
   static const double _toolbarBase = 68.0;
@@ -31,15 +48,29 @@ class ScreenScaffold extends StatelessWidget {
       appBar: PreferredSize(
         preferredSize: Size.fromHeight(toolbarHeight),
         child: AppBar(
-          automaticallyImplyLeading: false,
-          titleSpacing: 0,
+          automaticallyImplyLeading: showBackButton,
+          leading: showBackButton
+              ? IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                  onPressed: onBack ?? () => Navigator.of(context).pop(),
+                  style: IconButton.styleFrom(
+                    foregroundColor: tokens.ink,
+                  ),
+                )
+              : null,
+          titleSpacing: showBackButton ? 0 : 0,
           toolbarHeight: toolbarHeight,
           title: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+            padding: EdgeInsets.fromLTRB(
+              showBackButton ? 4 : 16,
+              6,
+              8,
+              6,
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: <Widget>[
-                // Brand logo
+                // Brand logo — consistent size and placement everywhere
                 Container(
                   width: 40,
                   height: 40,

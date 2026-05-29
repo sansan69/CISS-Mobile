@@ -55,7 +55,7 @@ class _PermissionOnboardingScreenState
       title: 'Guard setup',
       subtitle: 'Enable the required permissions before starting duty',
       children: <Widget>[
-        const BrandBanner(
+        const BrandBanner(showBackButton: true,
           title: 'Prepare this device for duty',
           subtitle:
               'Attendance proof, geofencing, and live updates depend on a small set of permissions.',

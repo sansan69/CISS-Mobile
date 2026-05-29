@@ -1,150 +1,131 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../app/theme/app_tokens.dart';
 import '../../core/brand.dart';
 
-/// Full-bleed brand header used on auth and onboarding screens.
+/// Unified header banner used on screens that don't use ScreenScaffold.
 ///
-/// Company identity (logo + name + tagline) sits at the top as the primary
-/// statement. The screen-specific [title] and [subtitle] appear below a
-/// hairline divider as supporting context.
+/// Visually identical to ScreenScaffold's AppBar: logo, company name, and
+/// screen context title. Use this inside a Scaffold body when you need the
+/// header inline rather than in an AppBar (e.g. when the header should scroll
+/// with the content).
+///
+/// [title] and [subtitle] identify the current screen for the user.
+/// [trailing] optional widget displayed to the right of the title.
 class BrandBanner extends StatelessWidget {
   const BrandBanner({
     super.key,
     required this.title,
     required this.subtitle,
     this.trailing,
+    this.showBackButton = false,
+    this.onBack,
   });
 
   final String title;
   final String subtitle;
   final Widget? trailing;
+  final bool showBackButton;
+  final VoidCallback? onBack;
 
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light.copyWith(
-        statusBarColor: Colors.transparent,
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.md,
       ),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.xl,
-          AppSpacing.xl + 12, // Extra top padding for status bar area
-          AppSpacing.xl,
-          AppSpacing.xl,
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        border: Border(
+          bottom: BorderSide(color: tokens.border),
         ),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: <Color>[
-              isDark ? const Color(0xFF0A1F3A) : tokens.primaryStrong,
-              isDark ? const Color(0xFF061428) : const Color(0xFF062D52),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          // Back button
+          if (showBackButton) ...<Widget>[
+            IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+              onPressed: onBack ?? () => Navigator.of(context).pop(),
+              style: IconButton.styleFrom(
+                foregroundColor: tokens.ink,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: 36,
+                minHeight: 36,
+              ),
+            ),
+            const SizedBox(width: 4),
+          ],
+
+          // Brand logo
+          Container(
+            width: 40,
+            height: 40,
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: tokens.primarySoft,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Image.asset(kCompanyLogoAsset, fit: BoxFit.contain),
           ),
-          borderRadius: const BorderRadius.vertical(
-            bottom: Radius.circular(AppRadius.lg),
-          ),
-          boxShadow: AppShadows.card,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            // ── Company identity ─────────────────────────────────────────────
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+          const SizedBox(width: 11),
+
+          // Title block
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                // Logo — larger, on a frosted circle background
-                Container(
-                  width: 52,
-                  height: 52,
-                  padding: const EdgeInsets.all(9),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.1),
-                    ),
-                  ),
-                  child: Image.asset(kCompanyLogoAsset, fit: BoxFit.contain),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Text(
-                        kCompanyName.toUpperCase(),
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              color: tokens.accent,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.6,
-                              height: 1,
-                            ),
+                // Company name — always visible
+                Text(
+                  kCompanyName.toUpperCase(),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: tokens.primaryStrong,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.3,
+                        height: 1,
                       ),
-                      const SizedBox(height: 3),
-                      Text(
-                        kCompanyTagline,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: Colors.white.withValues(alpha: 0.55),
-                              height: 1.3,
-                              letterSpacing: 0.1,
-                            ),
-                      ),
-                    ],
-                  ),
                 ),
-                if (trailing != null) ...<Widget>[
-                  const SizedBox(width: 8),
-                  trailing!,
+                const SizedBox(height: 2),
+                // Screen title
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        height: 1.1,
+                      ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (subtitle.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 1),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: tokens.inkMuted,
+                          height: 1.2,
+                        ),
+                  ),
                 ],
               ],
             ),
+          ),
 
-            const SizedBox(height: 16),
-
-            // Hairline divider — separates brand from screen context
-            Container(
-              height: 1,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: <Color>[
-                    Colors.white.withValues(alpha: 0.18),
-                    Colors.white.withValues(alpha: 0.04),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 14),
-
-            // ── Screen context ───────────────────────────────────────────────
-            Text(
-              title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 17,
-                    height: 1.1,
-                  ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.white.withValues(alpha: 0.65),
-                    height: 1.4,
-                  ),
-              maxLines: 2,
-            ),
+          // Trailing widget
+          if (trailing != null) ...<Widget>[
+            const SizedBox(width: 8),
+            trailing!,
           ],
-        ),
+        ],
       ),
     );
   }
