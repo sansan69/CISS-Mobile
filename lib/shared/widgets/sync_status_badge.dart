@@ -13,30 +13,34 @@ class SyncStatusBadge extends ConsumerWidget {
     final queue = ref.watch(offlineQueueProvider);
     final size = queue.queueSize;
 
-    if (size == 0) return const SizedBox.shrink();
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: tokens.warningSoft,
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        border: Border.all(color: tokens.warning),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(Icons.sync_problem_rounded, size: 16, color: tokens.warning),
-          const SizedBox(width: 6),
-          Text(
-            '$size pending',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              color: tokens.warning,
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      child: size == 0
+          ? const SizedBox.shrink()
+          : Container(
+              key: const ValueKey('pending'),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: tokens.warningSoft,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+                border: Border.all(color: tokens.warning),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(Icons.sync_problem_rounded, size: 16, color: tokens.warning),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$size pending',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: tokens.warning,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
     );
   }
 }

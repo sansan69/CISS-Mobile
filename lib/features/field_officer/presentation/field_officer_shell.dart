@@ -118,9 +118,12 @@ class _FieldOfficerShellState extends ConsumerState<FieldOfficerShell> {
         }
       },
       child: Scaffold(
-        body: IndexedStack(
+        body: SafeArea(
+          bottom: false,
+          child: IndexedStack(
           index: index,
           children: _tabs.map((t) => t.screen).toList(),
+        ),
         ),
         bottomNavigationBar: BrandedNavigationBar(
           selectedIndex: index,
@@ -276,7 +279,9 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                                 Text(
                                   session?.email ?? 'active session',
                                   style:
-                                      Theme.of(context).textTheme.labelSmall,
+                                      Theme.of(context).textTheme.labelSmall?.copyWith(
+                                        color: tokens.inkMuted,
+                                      ),
                                 ),
                               ],
                             ),

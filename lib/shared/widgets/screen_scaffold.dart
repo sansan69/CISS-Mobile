@@ -54,7 +54,12 @@ class ScreenScaffold extends StatelessWidget {
       controller: scrollController,
       primary: scrollController == null,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      padding: EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.xxl + MediaQuery.of(context).padding.bottom,
+      ),
       itemBuilder: (BuildContext context, int index) => children[index],
       separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemCount: children.length,

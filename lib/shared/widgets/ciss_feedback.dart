@@ -60,7 +60,7 @@ class CissFeedback {
         SnackBar(
           content: Row(
             children: <Widget>[
-              Icon(icon, size: 20, color: tokens.canvas),
+              Icon(icon, size: 20, color: tokens.surface),
               const SizedBox(width: 12),
               Expanded(child: Text(message)),
             ],
@@ -68,11 +68,13 @@ class CissFeedback {
           action: actionLabel != null && onAction != null
               ? SnackBarAction(
                   label: actionLabel,
-                  textColor: tokens.accent,
+                  textColor: tokens.primary,
                   onPressed: onAction,
                 )
               : null,
           duration: const Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.fromLTRB(16, 0, 16, 16 + MediaQuery.of(context).padding.bottom),
         ),
       );
   }

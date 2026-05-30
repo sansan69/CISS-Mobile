@@ -117,9 +117,12 @@ class _GuardShellState extends ConsumerState<GuardShell> {
         }
       },
       child: Scaffold(
-        body: IndexedStack(
+        body: SafeArea(
+          bottom: false, // NavigationBar handles bottom inset
+          child: IndexedStack(
           index: index,
           children: _tabs.map((t) => t.screen).toList(),
+        ),
         ),
         bottomNavigationBar: BrandedNavigationBar(
           selectedIndex: index,
@@ -269,7 +272,7 @@ class _NotificationBadge extends ConsumerWidget {
               ),
               child: Text(
                 '$count',
-                style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                style: TextStyle(color: tokens.surface, fontSize: 11, fontWeight: FontWeight.bold),
               ),
             )
           : const SizedBox.shrink(),

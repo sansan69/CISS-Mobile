@@ -9,18 +9,19 @@ class MetricTile extends StatelessWidget {
     required this.value,
     this.helper,
     this.icon,
-    this.accentColor = const Color(0xFF0B4F82),
+    this.accentColor,
   });
 
   final String label;
   final String value;
   final String? helper;
   final IconData? icon;
-  final Color accentColor;
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
+    final Color effectiveAccent = accentColor ?? tokens.primary;
     final theme = Theme.of(context);
 
     return Container(
@@ -40,10 +41,10 @@ class MetricTile extends StatelessWidget {
                   width: 36,
                   height: 36,
                   decoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: 0.12),
+                    color: effectiveAccent.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(AppRadius.sm),
                   ),
-                  child: Icon(icon, color: accentColor, size: 18),
+                  child: Icon(icon, color: effectiveAccent, size: 18),
                 ),
                 const SizedBox(width: AppSpacing.sm),
               ],

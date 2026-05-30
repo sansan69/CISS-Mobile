@@ -63,7 +63,7 @@ class BrandedNavigationBar extends StatelessWidget {
       child: NavigationBar(
         selectedIndex: selectedIndex,
         onDestinationSelected: onSelected,
-        animationDuration: const Duration(milliseconds: 300),
+        animationDuration: const Duration(milliseconds: 200),
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         destinations: items
             .map(

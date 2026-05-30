@@ -17,14 +17,14 @@ class BrandBanner extends StatelessWidget {
   const BrandBanner({
     super.key,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
     this.trailing,
     this.showBackButton = false,
     this.onBack,
   });
 
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final Widget? trailing;
   final bool showBackButton;
   final VoidCallback? onBack;
@@ -109,10 +109,10 @@ class BrandBanner extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                if (subtitle.isNotEmpty) ...<Widget>[
+                if (subtitle != null && subtitle!.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 1),
                   Text(
-                    subtitle,
+                    subtitle!,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(

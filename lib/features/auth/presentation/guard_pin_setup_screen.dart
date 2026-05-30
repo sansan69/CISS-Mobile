@@ -112,25 +112,9 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
                   'Create your duty PIN so this device can sign in with your guard account.',
             ),
             const SizedBox(height: AppSpacing.lg),
-            Row(
-              children: <Widget>[
-                  IconButton(
-                  onPressed: () => context.go('/login/guard'),
-                  icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                  style: IconButton.styleFrom(
-                    backgroundColor: tokens.surface,
-                    foregroundColor: tokens.primaryStrong,
-                    side: BorderSide(color: tokens.border),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    'Set up your PIN',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-              ],
+            Text(
+              'Set up your PIN',
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: AppSpacing.lg),
             Container(
@@ -228,7 +212,7 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
                     ),
                   ],
                   const SizedBox(height: AppSpacing.lg),
-                  ElevatedButton(
+                  FilledButton(
                     onPressed: _submitting ? null : _submit,
                     child: _submitting
                         ? const SizedBox(
