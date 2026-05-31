@@ -83,7 +83,7 @@ class _FieldOfficerGuardAttendanceScreenState
     return Scaffold(
       backgroundColor: tokens.canvas,
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.xxl),
         children: [
           BrandBanner(
             title: 'Attendance',
@@ -109,7 +109,7 @@ class _FieldOfficerGuardAttendanceScreenState
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _pickDate,
-                    icon: const Icon(Icons.calendar_today_outlined, size: 16),
+                    icon: const Icon(Icons.calendar_today_rounded, size: 16),
                     label: Text(
                       _selectedDate != null
                           ? _displayFmt.format(_selectedDate!)
@@ -213,7 +213,7 @@ class _FieldOfficerGuardAttendanceScreenState
                         return const Padding(
                           padding: EdgeInsets.symmetric(vertical: 60),
                           child: StateBlock(
-                            icon: Icons.person_off_outlined,
+                            icon: Icons.person_off_rounded,
                             title: 'No records found',
                             message: 'No guard attendance recorded for this filter.',
                           ),
@@ -310,7 +310,7 @@ class _SiteFilterChip extends StatelessWidget {
               const Spacer(),
               Row(
                 children: [
-                  Icon(Icons.people_alt_outlined, size: 12, color: tokens.inkMuted),
+                  Icon(Icons.people_alt_rounded, size: 12, color: tokens.inkMuted),
                   const SizedBox(width: 4),
                   Text(
                     '${site.onDutyNow}/${site.checkedInToday}',

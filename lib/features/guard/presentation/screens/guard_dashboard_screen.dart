@@ -98,7 +98,7 @@ class GuardDashboardScreen extends ConsumerWidget {
                     label: 'District',
                     value: data.district.isEmpty ? 'Pending' : data.district,
                     helper: 'Current posting',
-                    icon: Icons.place_outlined,
+                    icon: Icons.place_rounded,
                     accentColor: Theme.of(context)
                         .extension<CissThemeTokens>()!
                         .accent,
@@ -125,7 +125,7 @@ class GuardDashboardScreen extends ConsumerWidget {
                     label: 'Absent days',
                     value: '${data.absentDays}',
                     helper: 'This month',
-                    icon: Icons.cancel_outlined,
+                    icon: Icons.cancel_rounded,
                     accentColor: Theme.of(context)
                         .extension<CissThemeTokens>()!
                         .danger,
@@ -140,7 +140,7 @@ class GuardDashboardScreen extends ConsumerWidget {
                     label: 'Leave balance',
                     value: '$leaveBalance day${leaveBalance == 1 ? '' : 's'}',
                     helper: 'Approved remaining',
-                    icon: Icons.event_available_outlined,
+                    icon: Icons.event_available_rounded,
                     accentColor: Theme.of(context)
                         .extension<CissThemeTokens>()!
                         .warning,
@@ -301,7 +301,7 @@ class _PatrolStatusCard extends ConsumerWidget {
                     : StatusChipTone.success,
                 icon: status.hourlyRequirement.dueNow
                     ? Icons.alarm_on_rounded
-                    : Icons.route_outlined,
+                    : Icons.route_rounded,
               ),
             ],
           ),
@@ -351,7 +351,7 @@ class _QuickActions extends StatelessWidget {
         ),
       ),
       _Action(
-        icon: Icons.route_outlined,
+        icon: Icons.route_rounded,
         label: 'Patrol',
         color: tokens.accent,
         onTap: () => Navigator.of(context).push(
@@ -636,7 +636,7 @@ class _DashboardNotificationBadge extends ConsumerWidget {
                       ),
                     );
                   },
-                  icon: const Icon(Icons.notifications_outlined, size: 20),
+                  icon: const Icon(Icons.notifications_rounded, size: 20),
                 ),
                 Positioned(
                   right: 4,
@@ -670,7 +670,7 @@ class _DashboardNotificationBadge extends ConsumerWidget {
                   ),
                 );
               },
-              icon: const Icon(Icons.notifications_outlined, size: 20),
+              icon: const Icon(Icons.notifications_rounded, size: 20),
             ),
       loading: () => const SizedBox.shrink(),
       error: (_, __) => const SizedBox.shrink(),

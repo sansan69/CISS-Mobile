@@ -140,7 +140,7 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Employee ID (optional)',
                       hintText: 'CISS/TCS/2025-26/871',
-                      prefixIcon: Icon(Icons.badge_outlined),
+                      prefixIcon: Icon(Icons.badge_rounded),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
@@ -150,7 +150,7 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Registered phone number',
                       hintText: '9048255377',
-                      prefixIcon: Icon(Icons.phone_outlined),
+                      prefixIcon: Icon(Icons.phone_rounded),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
@@ -176,7 +176,7 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Date of birth',
                       hintText: 'Select date',
-                      prefixIcon: Icon(Icons.calendar_month_outlined),
+                      prefixIcon: Icon(Icons.calendar_month_rounded),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
@@ -198,7 +198,7 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
                     decoration: const InputDecoration(
                       labelText: 'Confirm PIN',
                       hintText: '1234',
-                      prefixIcon: Icon(Icons.lock_person_outlined),
+                      prefixIcon: Icon(Icons.lock_person_rounded),
                     ),
                   ),
                   if (_error != null) ...<Widget>[

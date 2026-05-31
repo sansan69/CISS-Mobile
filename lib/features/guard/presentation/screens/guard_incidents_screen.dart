@@ -325,7 +325,7 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                             : Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  Icon(Icons.add_a_photo_outlined, color: tokens.primary, size: 32),
+                                  Icon(Icons.add_a_photo_rounded, color: tokens.primary, size: 32),
                                   const SizedBox(height: 8),
                                   Text('Add incident photo', style: TextStyle(color: tokens.primary, fontWeight: FontWeight.w600)),
                                 ],
@@ -378,11 +378,11 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                   subtitle: incidents.isEmpty
                       ? 'No incidents recorded yet.'
                       : '${incidents.length} incident${incidents.length == 1 ? '' : 's'} found',
-                  icon: Icons.assignment_outlined,
+                  icon: Icons.assignment_rounded,
                 ),
                 if (incidents.isEmpty)
                   const StateBlock(
-                    icon: Icons.assignment_outlined,
+                    icon: Icons.assignment_rounded,
                     title: 'No incident history',
                     message:
                         'Submitted incidents and office review status will appear here.',
@@ -392,7 +392,7 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                     title: '${incident.category} • ${incident.severity}',
                     subtitle:
                         '${incident.siteName} • ${incident.status}\n${incident.reportedAtLabel}\n${incident.summary}',
-                    icon: Icons.report_problem_outlined,
+                    icon: Icons.report_problem_rounded,
                     chip: StatusChip(
                       label: incident.status,
                       tone: incident.status.toLowerCase() == 'closed'

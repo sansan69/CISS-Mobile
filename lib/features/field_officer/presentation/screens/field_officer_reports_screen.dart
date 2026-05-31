@@ -131,7 +131,7 @@ class _FieldOfficerReportsScreenState
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: StateBlock(
-              icon: Icons.assignment_late_outlined,
+              icon: Icons.assignment_late_rounded,
               title: 'Could not load reports',
               message: err.toString().replaceFirst('Exception: ', ''),
               action: FilledButton.tonal(
@@ -154,7 +154,7 @@ class _FieldOfficerReportsScreenState
     return Scaffold(
       backgroundColor: tokens.canvas,
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
+        padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.xxl),
         children: [
           BrandBanner(
             title: 'Reports',
@@ -180,12 +180,12 @@ class _FieldOfficerReportsScreenState
                     ButtonSegment<_Tab>(
                       value: _Tab.visit,
                       label: Text('Visit Logs'),
-                      icon: Icon(Icons.fact_check_outlined, size: 16),
+                      icon: Icon(Icons.fact_check_rounded, size: 16),
                     ),
                     ButtonSegment<_Tab>(
                       value: _Tab.training,
                       label: Text('Training'),
-                      icon: Icon(Icons.school_outlined, size: 16),
+                      icon: Icon(Icons.school_rounded, size: 16),
                     ),
                   ],
                   selected: <_Tab>{_tab},
@@ -304,7 +304,7 @@ class _FieldOfficerReportsScreenState
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 60),
                 child: StateBlock(
-                  icon: Icons.fact_check_outlined,
+                  icon: Icons.fact_check_rounded,
                   title: 'No visit reports',
                   message: 'Your site visit briefing notes will appear here.',
                 ),
@@ -321,7 +321,7 @@ class _FieldOfficerReportsScreenState
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 60),
                 child: StateBlock(
-                  icon: Icons.school_outlined,
+                  icon: Icons.school_rounded,
                   title: 'No training logs',
                   message: 'Logged field training sessions will appear here.',
                 ),
@@ -453,7 +453,7 @@ class _VisitBriefingCard extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(Icons.calendar_today_outlined, size: 12, color: tokens.inkMuted),
+                Icon(Icons.calendar_today_rounded, size: 12, color: tokens.inkMuted),
                 const SizedBox(width: 4),
                 Text(
                   report.dateLabel,
@@ -467,7 +467,7 @@ class _VisitBriefingCard extends StatelessWidget {
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
                 ),
                 const SizedBox(width: 12),
-                Icon(Icons.groups_2_outlined, size: 12, color: tokens.inkMuted),
+                Icon(Icons.groups_2_rounded, size: 12, color: tokens.inkMuted),
                 const SizedBox(width: 4),
                 Text(
                   '${report.guardsPresentCount} IN / ${report.guardsAbsentCount} OUT',
@@ -582,7 +582,7 @@ class _TrainingBriefingCard extends StatelessWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(Icons.calendar_today_outlined, size: 12, color: tokens.inkMuted),
+                Icon(Icons.calendar_today_rounded, size: 12, color: tokens.inkMuted),
                 const SizedBox(width: 4),
                 Text(
                   report.dateLabel,
@@ -596,14 +596,14 @@ class _TrainingBriefingCard extends StatelessWidget {
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
                 ),
                 const SizedBox(width: 12),
-                Icon(Icons.timer_outlined, size: 12, color: tokens.inkMuted),
+                Icon(Icons.timer_rounded, size: 12, color: tokens.inkMuted),
                 const SizedBox(width: 4),
                 Text(
                   '${report.durationMinutes} MINS',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.accent),
                 ),
                 const SizedBox(width: 12),
-                Icon(Icons.people_alt_outlined, size: 12, color: tokens.inkMuted),
+                Icon(Icons.people_alt_rounded, size: 12, color: tokens.inkMuted),
                 const SizedBox(width: 4),
                 Text(
                   '${report.attendeeCount} ATTENDED',
@@ -634,7 +634,7 @@ class _TrainingBriefingCard extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.description_outlined, size: 14, color: tokens.primary),
+                      Icon(Icons.description_rounded, size: 14, color: tokens.primary),
                       const SizedBox(width: 6),
                       Text(
                         'Client Report',
@@ -1140,8 +1140,8 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                     const SizedBox(height: 16),
                     SegmentedButton<_Tab>(
                       segments: const <ButtonSegment<_Tab>>[
-                        ButtonSegment<_Tab>(value: _Tab.visit, label: Text('Visit'), icon: Icon(Icons.fact_check_outlined, size: 16)),
-                        ButtonSegment<_Tab>(value: _Tab.training, label: Text('Training'), icon: Icon(Icons.school_outlined, size: 16)),
+                        ButtonSegment<_Tab>(value: _Tab.visit, label: Text('Visit'), icon: Icon(Icons.fact_check_rounded, size: 16)),
+                        ButtonSegment<_Tab>(value: _Tab.training, label: Text('Training'), icon: Icon(Icons.school_rounded, size: 16)),
                       ],
                       selected: <_Tab>{_tab},
                       onSelectionChanged: (Set<_Tab> next) => setState(() => _tab = next.first),
@@ -1162,7 +1162,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                         value: _selectedWorkOrder,
                         decoration: const InputDecoration(
                           labelText: 'Link to Work Order',
-                          prefixIcon: Icon(Icons.assignment_turned_in_outlined),
+                          prefixIcon: Icon(Icons.assignment_turned_in_rounded),
                         ),
                         items: widget.workOrders.map((w) => DropdownMenuItem(
                           value: w,
@@ -1228,7 +1228,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           controller: _visitDateCtrl,
           readOnly: true,
           onTap: () => _pickDate(isVisit: true),
-          decoration: const InputDecoration(labelText: 'Visit Date', prefixIcon: Icon(Icons.calendar_today_outlined)),
+          decoration: const InputDecoration(labelText: 'Visit Date', prefixIcon: Icon(Icons.calendar_today_rounded)),
         ),
         const SizedBox(height: 16),
         Row(
@@ -1253,7 +1253,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           controller: _trainingDateCtrl,
           readOnly: true,
           onTap: () => _pickDate(isVisit: false),
-          decoration: const InputDecoration(labelText: 'Training Date', prefixIcon: Icon(Icons.calendar_today_outlined)),
+          decoration: const InputDecoration(labelText: 'Training Date', prefixIcon: Icon(Icons.calendar_today_rounded)),
         ),
         const SizedBox(height: 16),
         TextField(controller: _trainingTopicCtrl, decoration: const InputDecoration(labelText: 'Training Topic')),
@@ -1310,7 +1310,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           child: SegmentedButton<String>(
             segments: const [
               ButtonSegment(value: 'submitted', label: Text('Submit'), icon: Icon(Icons.send_rounded, size: 16)),
-              ButtonSegment(value: 'draft', label: Text('Save Draft'), icon: Icon(Icons.save_outlined, size: 16)),
+              ButtonSegment(value: 'draft', label: Text('Save Draft'), icon: Icon(Icons.save_rounded, size: 16)),
             ],
             selected: {_reportStatus},
             onSelectionChanged: (v) => setState(() => _reportStatus = v.first),
@@ -1366,7 +1366,7 @@ class _AddPhotoButton extends StatelessWidget {
       child: Container(
         width: 80, height: 80,
         decoration: BoxDecoration(color: tokens.surfaceStrong, borderRadius: BorderRadius.circular(8), border: Border.all(color: tokens.border)),
-        child: Icon(Icons.add_a_photo_outlined, color: tokens.inkMuted),
+        child: Icon(Icons.add_a_photo_rounded, color: tokens.inkMuted),
       ),
     );
   }
@@ -1399,7 +1399,7 @@ class _AddReportButton extends StatelessWidget {
       child: Container(
         width: 80, height: 80,
         decoration: BoxDecoration(color: tokens.surfaceStrong, borderRadius: BorderRadius.circular(8), border: Border.all(color: tokens.accent)),
-        child: Icon(Icons.description_outlined, color: tokens.accent),
+        child: Icon(Icons.description_rounded, color: tokens.accent),
       ),
     );
   }

@@ -189,14 +189,14 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
           children: <Widget>[
             if (!status.enabled)
               const StateBlock(
-                icon: Icons.shield_outlined,
+                icon: Icons.shield_rounded,
                 title: 'Patrol monitoring is off',
                 message:
                     'This client has not enabled patrol rounds or hourly night-photo checks.',
               )
             else if (activeDuty == null)
               const StateBlock(
-                icon: Icons.fact_check_outlined,
+                icon: Icons.fact_check_rounded,
                 title: 'No active duty session',
                 message:
                     'Check in to your duty first. Patrol and hourly proof only open while you are on active duty.',
@@ -206,7 +206,7 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                 title: activeDuty.siteName,
                 subtitle:
                     '${activeDuty.district} • ${activeDuty.dutyPointName ?? 'Duty point'} • ${activeDuty.shiftLabel ?? 'Shift'}',
-                icon: Icons.place_outlined,
+                icon: Icons.place_rounded,
                 trailing: Text(
                   activeDuty.activeSinceLabel ?? '',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -259,7 +259,7 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                       onPressed: _submitting || !status.hourlyRequirement.enabled
                           ? null
                           : () => _submit(status, 'hourly_photo'),
-                      icon: const Icon(Icons.camera_alt_outlined),
+                      icon: const Icon(Icons.camera_alt_rounded),
                       label: const Text('Submit Hourly Photo'),
                     ),
                   ],
@@ -358,7 +358,7 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                     const SizedBox(height: AppSpacing.md),
                     OutlinedButton.icon(
                       onPressed: _submitting ? null : _capturePhoto,
-                      icon: const Icon(Icons.add_a_photo_outlined),
+                      icon: const Icon(Icons.add_a_photo_rounded),
                       label: Text(_photoPath == null
                           ? 'Capture proof photo'
                           : 'Retake photo'),
@@ -406,7 +406,7 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                                 width: 16,
                                 child: CircularProgressIndicator(strokeWidth: 2),
                               )
-                          : const Icon(Icons.route_outlined),
+                          : const Icon(Icons.route_rounded),
                       label: const Text('Submit Patrol Round'),
                     ),
                   ],
@@ -447,8 +447,8 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                                 children: <Widget>[
                                   Icon(
                                     activity.type == 'hourly_photo'
-                                        ? Icons.camera_alt_outlined
-                                        : Icons.route_outlined,
+                                        ? Icons.camera_alt_rounded
+                                        : Icons.route_rounded,
                                     color: activity.type == 'hourly_photo'
                                         ? tokens.primary
                                         : tokens.success,

@@ -44,11 +44,11 @@ class GuardEvaluationsScreen extends ConsumerWidget {
               title: 'Assigned Evaluations',
               subtitle:
                   '${evaluations.length} record${evaluations.length == 1 ? '' : 's'}',
-              icon: Icons.workspace_premium_outlined,
+              icon: Icons.workspace_premium_rounded,
             ),
             if (evaluations.isEmpty)
               const StateBlock(
-                icon: Icons.workspace_premium_outlined,
+                icon: Icons.workspace_premium_rounded,
                 title: 'No evaluations yet',
                 message:
                     'Performance evaluations and quiz scores will be listed here once published.',
@@ -58,7 +58,7 @@ class GuardEvaluationsScreen extends ConsumerWidget {
                 title: evaluation.title,
                 subtitle:
                     '${evaluation.status} • Score ${evaluation.scoreLabel}',
-                icon: Icons.quiz_outlined,
+                icon: Icons.quiz_rounded,
                 chip: StatusChip(
                   label: evaluation.scoreLabel,
                   tone: StatusChipTone.info,

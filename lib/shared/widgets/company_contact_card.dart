@@ -78,7 +78,7 @@ class CompanyContactCard extends StatelessWidget {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: () => _openUrl(Uri.parse('mailto:$kCompanySupportEmail')),
-                  icon: const Icon(Icons.email_outlined, size: 18),
+                  icon: const Icon(Icons.email_rounded, size: 18),
                   label: const Text('Email support'),
                 ),
               ),

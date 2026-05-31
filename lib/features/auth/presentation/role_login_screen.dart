@@ -207,8 +207,8 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
               trailing: StatusChip(
                 label: isGuard ? 'Guard access' : 'Officer access',
                 icon: isGuard
-                    ? Icons.shield_outlined
-                    : Icons.admin_panel_settings_outlined,
+                    ? Icons.shield_rounded
+                    : Icons.admin_panel_settings_rounded,
                 tone: isGuard ? StatusChipTone.success : StatusChipTone.info,
               ),
             ),
@@ -267,7 +267,7 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
                       hintText: widget.usernameHint,
                       prefixIcon: Icon(
                         isGuard
-                            ? Icons.badge_outlined
+                            ? Icons.badge_rounded
                             : Icons.alternate_email_rounded,
                       ),
                     ),

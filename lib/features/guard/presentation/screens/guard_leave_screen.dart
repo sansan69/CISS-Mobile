@@ -185,7 +185,7 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
                   decoration: const InputDecoration(
                     labelText: 'From Date',
                     hintText: 'Select date',
-                    prefixIcon: Icon(Icons.calendar_today_outlined),
+                    prefixIcon: Icon(Icons.calendar_today_rounded),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -209,7 +209,7 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
                   decoration: const InputDecoration(
                     labelText: 'To Date',
                     hintText: 'Select date',
-                    prefixIcon: Icon(Icons.calendar_today_outlined),
+                    prefixIcon: Icon(Icons.calendar_today_rounded),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -255,7 +255,7 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
             const SizedBox(height: 4),
             if (requests.isEmpty)
               const StateBlock(
-                icon: Icons.event_busy_outlined,
+                icon: Icons.event_busy_rounded,
                 title: 'No leave requests',
                 message:
                     'Submitted leave requests and approval status will appear here.',

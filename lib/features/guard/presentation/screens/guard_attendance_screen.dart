@@ -508,7 +508,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           data: (profile) {
             return sitesAsync.when(
               loading: () => const StateBlock(
-                icon: Icons.place_outlined,
+                icon: Icons.place_rounded,
                 title: 'Loading sites',
                 message: 'Fetching duty centers...',
               ),
@@ -538,7 +538,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                       title: profile.fullName,
                       subtitle:
                           '${profile.employeeId} • ${profile.clientName} • ${profile.district}',
-                      icon: Icons.badge_outlined,
+                      icon: Icons.badge_rounded,
                     ),
                     const SizedBox(height: 14),
                     if (!isFiltered && sites.isNotEmpty)
@@ -742,7 +742,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                       subtitle: _site == null
                           ? 'Select a site to load duty points and shifts.'
                           : '${_site!.siteName} • ${_site!.district} • ${_site!.dutyPoints.length} duty points',
-                      icon: Icons.location_on_outlined,
+                      icon: Icons.location_on_rounded,
                       trailing: StatusChip(
                         label: _site == null ? 'Pending' : 'Ready',
                         tone: _site == null

@@ -61,7 +61,7 @@ class _PermissionOnboardingScreenState
               'Attendance proof, geofencing, and live updates depend on a small set of permissions.',
         ),
         const StateBlock(
-          icon: Icons.verified_user_outlined,
+          icon: Icons.verified_user_rounded,
           title: 'Why this matters',
           message:
               'These permissions help confirm site presence, capture attendance evidence, and keep field alerts flowing during duty hours.',

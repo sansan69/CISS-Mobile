@@ -54,7 +54,7 @@ class _FieldOfficerWorkOrdersScreenState
           padding: const EdgeInsets.all(20),
           child: Center(
             child: StateBlock(
-              icon: Icons.assignment_late_outlined,
+              icon: Icons.assignment_late_rounded,
               title: 'Could not load work orders',
               message: '$error',
               action: FilledButton.tonal(
@@ -76,7 +76,7 @@ class _FieldOfficerWorkOrdersScreenState
         return Scaffold(
           backgroundColor: tokens.canvas,
           body: ListView(
-            padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.xxl),
             children: [
               BrandBanner(
                 title: 'Operations',
@@ -139,7 +139,7 @@ class _FieldOfficerWorkOrdersScreenState
                 Padding(
                   padding: const EdgeInsets.all(32),
                   child: StateBlock(
-                    icon: Icons.assignment_turned_in_outlined,
+                    icon: Icons.assignment_turned_in_rounded,
                     title: _activeFilter == _WorkOrderFilter.upcoming
                         ? 'No upcoming duties'
                         : 'No duties loaded',
@@ -256,7 +256,7 @@ class _WorkOrderCard extends ConsumerWidget {
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    Icon(Icons.calendar_today_outlined, size: 14, color: tokens.inkMuted),
+                    Icon(Icons.calendar_today_rounded, size: 14, color: tokens.inkMuted),
                     const SizedBox(width: 6),
                     Text(
                       workOrder.dateLabel,

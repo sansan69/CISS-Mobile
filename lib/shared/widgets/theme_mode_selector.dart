@@ -33,17 +33,17 @@ class ThemeModeSelector extends ConsumerWidget {
               ButtonSegment<ThemeMode>(
                 value: ThemeMode.system,
                 label: Text('System'),
-                icon: Icon(Icons.settings_suggest_outlined),
+                icon: Icon(Icons.settings_suggest_rounded),
               ),
               ButtonSegment<ThemeMode>(
                 value: ThemeMode.light,
                 label: Text('Light'),
-                icon: Icon(Icons.light_mode_outlined),
+                icon: Icon(Icons.light_mode_rounded),
               ),
               ButtonSegment<ThemeMode>(
                 value: ThemeMode.dark,
                 label: Text('Dark'),
-                icon: Icon(Icons.dark_mode_outlined),
+                icon: Icon(Icons.dark_mode_rounded),
               ),
             ],
             selected: <ThemeMode>{current},

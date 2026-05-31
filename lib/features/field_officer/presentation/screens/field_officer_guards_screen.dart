@@ -45,7 +45,7 @@ class _FieldOfficerGuardsScreenState
           padding: const EdgeInsets.all(20),
           child: Center(
             child: StateBlock(
-              icon: Icons.groups_2_outlined,
+              icon: Icons.groups_2_rounded,
               title: 'Could not load guards',
               message: '$error',
               action: FilledButton.tonal(
@@ -87,7 +87,7 @@ class _FieldOfficerGuardsScreenState
                     label: 'Visible',
                     value: guards.length.toString(),
                     helper: 'Active guards',
-                    icon: Icons.groups_2_outlined,
+                    icon: Icons.groups_2_rounded,
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -96,7 +96,7 @@ class _FieldOfficerGuardsScreenState
                     label: 'Districts',
                     value: districts.toString(),
                     helper: '$clients client${clients == 1 ? '' : 's'}',
-                    icon: Icons.map_outlined,
+                    icon: Icons.map_rounded,
                   ),
                 ),
               ],
@@ -112,7 +112,7 @@ class _FieldOfficerGuardsScreenState
             ),
             if (guards.isEmpty)
               const StateBlock(
-                icon: Icons.person_off_outlined,
+                icon: Icons.person_off_rounded,
                 title: 'No guards found',
                 message:
                     'Guards assigned to your districts will appear here once available.',
@@ -233,9 +233,9 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
                           runSpacing: AppSpacing.xs,
                           children: <Widget>[
                             if (guard.district.isNotEmpty)
-                              StatusChip(label: guard.district, icon: Icons.place_outlined, tone: StatusChipTone.info),
+                              StatusChip(label: guard.district, icon: Icons.place_rounded, tone: StatusChipTone.info),
                             if (guard.phoneNumber.isNotEmpty)
-                              StatusChip(label: guard.phoneNumber, icon: Icons.call_outlined),
+                              StatusChip(label: guard.phoneNumber, icon: Icons.call_rounded),
                           ],
                         ),
                       ],
@@ -256,18 +256,18 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
                 child: Column(
                   children: <Widget>[
                     if (guard.employeeId.isNotEmpty)
-                      _InfoRow(icon: Icons.badge_outlined, label: 'Employee ID', value: guard.employeeId, tokens: tokens),
+                      _InfoRow(icon: Icons.badge_rounded, label: 'Employee ID', value: guard.employeeId, tokens: tokens),
                     if (guard.clientName.isNotEmpty) ...<Widget>[
                       const SizedBox(height: AppSpacing.xs),
                       _InfoRow(icon: Icons.business_rounded, label: 'Client', value: guard.clientName, tokens: tokens),
                     ],
                     if (guard.district.isNotEmpty) ...<Widget>[
                       const SizedBox(height: AppSpacing.xs),
-                      _InfoRow(icon: Icons.place_outlined, label: 'District', value: guard.district, tokens: tokens),
+                      _InfoRow(icon: Icons.place_rounded, label: 'District', value: guard.district, tokens: tokens),
                     ],
                     if (guard.phoneNumber.isNotEmpty) ...<Widget>[
                       const SizedBox(height: AppSpacing.xs),
-                      _InfoRow(icon: Icons.call_outlined, label: 'Phone', value: guard.phoneNumber, tokens: tokens),
+                      _InfoRow(icon: Icons.call_rounded, label: 'Phone', value: guard.phoneNumber, tokens: tokens),
                     ],
                     if (guard.gender != null && guard.gender!.isNotEmpty) ...<Widget>[
                       const SizedBox(height: AppSpacing.xs),
@@ -275,7 +275,7 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
                     ],
                     if (guard.joiningDate != null && guard.joiningDate!.isNotEmpty) ...<Widget>[
                       const SizedBox(height: AppSpacing.xs),
-                      _InfoRow(icon: Icons.calendar_today_outlined, label: 'Joined', value: guard.joiningDate!, tokens: tokens),
+                      _InfoRow(icon: Icons.calendar_today_rounded, label: 'Joined', value: guard.joiningDate!, tokens: tokens),
                     ],
                     if (guard.resourceIdNumber != null && guard.resourceIdNumber!.isNotEmpty) ...<Widget>[
                       const SizedBox(height: AppSpacing.xs),
@@ -283,7 +283,7 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
                     ],
                     if (guard.address != null && guard.address!.isNotEmpty) ...<Widget>[
                       const SizedBox(height: AppSpacing.xs),
-                      _InfoRow(icon: Icons.home_outlined, label: 'Address', value: guard.address!, tokens: tokens),
+                      _InfoRow(icon: Icons.home_rounded, label: 'Address', value: guard.address!, tokens: tokens),
                     ],
                   ],
                 ),

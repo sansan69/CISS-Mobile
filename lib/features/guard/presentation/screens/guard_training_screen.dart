@@ -49,7 +49,7 @@ class GuardTrainingScreen extends ConsumerWidget {
             ),
             if (assignments.isEmpty)
               const StateBlock(
-                icon: Icons.school_outlined,
+                icon: Icons.school_rounded,
                 title: 'No training assigned',
                 message:
                     'New training modules and briefings will appear here when assigned by the office.',
@@ -65,7 +65,7 @@ class GuardTrainingScreen extends ConsumerWidget {
                       : assignment.contentType != null
                       ? '${assignment.status} • ${assignment.contentType}'
                       : assignment.status,
-                  icon: Icons.assignment_outlined,
+                  icon: Icons.assignment_rounded,
                   chip: StatusChip(
                     label: assignment.status,
                     tone: isCompleted
@@ -111,7 +111,7 @@ class GuardTrainingScreen extends ConsumerWidget {
               title: 'Evaluations',
               subtitle:
                   'Scores and quiz attempts are available from the Evaluations tab.',
-              icon: Icons.quiz_outlined,
+              icon: Icons.quiz_rounded,
             ),
           ],
         );

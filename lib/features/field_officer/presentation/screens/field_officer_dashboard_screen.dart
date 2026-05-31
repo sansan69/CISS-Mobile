@@ -54,7 +54,7 @@ class FieldOfficerDashboardScreen extends ConsumerWidget {
         return Scaffold(
           backgroundColor: tokens.canvas,
           body: ListView(
-            padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.xxl),
             children: <Widget>[
               BrandBanner(
                 title: 'Command Center',
@@ -87,7 +87,7 @@ class FieldOfficerDashboardScreen extends ConsumerWidget {
                     _CommandTile(
                       label: 'Total Guards',
                       value: '${data.totalGuards}',
-                      icon: Icons.groups_2_outlined,
+                      icon: Icons.groups_2_rounded,
                       accentColor: tokens.primary,
                       helper: 'Registered in $districts',
                     ),
@@ -731,7 +731,7 @@ class _PendingReportsSummary extends StatelessWidget {
             children: [
               if (data.recentWorkOrders.isNotEmpty) ...[
                 _ReportRow(
-                  icon: Icons.assignment_late_outlined,
+                  icon: Icons.assignment_late_rounded,
                   label: 'Work Orders',
                   count: data.recentWorkOrders.length,
                   accent: tokens.primary,
@@ -747,7 +747,7 @@ class _PendingReportsSummary extends StatelessWidget {
                     color: tokens.border.withValues(alpha: 0.3),
                   ),
                 _ReportRow(
-                  icon: Icons.fact_check_outlined,
+                  icon: Icons.fact_check_rounded,
                   label: 'Visit Reports',
                   count: data.recentVisitReports.length,
                   accent: tokens.warning,
@@ -764,7 +764,7 @@ class _PendingReportsSummary extends StatelessWidget {
                     color: tokens.border.withValues(alpha: 0.3),
                   ),
                 _ReportRow(
-                  icon: Icons.school_outlined,
+                  icon: Icons.school_rounded,
                   label: 'Training Reports',
                   count: data.recentTrainingReports.length,
                   accent: tokens.success,

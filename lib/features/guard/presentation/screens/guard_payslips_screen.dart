@@ -49,7 +49,7 @@ class GuardPayslipsScreen extends ConsumerWidget {
             ),
             if (payslips.isEmpty)
               const StateBlock(
-                icon: Icons.receipt_long_outlined,
+                icon: Icons.receipt_long_rounded,
                 title: 'No payslips published',
                 message:
                     'Monthly payslips will appear here after payroll is processed.',
@@ -58,7 +58,7 @@ class GuardPayslipsScreen extends ConsumerWidget {
               (payslip) => GuardRecordCard(
                 title: payslip.periodLabel,
                 subtitle: payslip.netPayLabel,
-                icon: Icons.payments_outlined,
+                icon: Icons.payments_rounded,
                 chip: const StatusChip(label: 'PDF', tone: StatusChipTone.info),
                 onTap: () async {
                   final launchUri = Uri.parse(

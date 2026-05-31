@@ -39,7 +39,7 @@ class StateBlock extends StatelessWidget {
               color: tokens.primarySoft,
               borderRadius: BorderRadius.circular(AppRadius.md),
             ),
-            child: Icon(icon, color: tokens.primaryStrong),
+            child: Icon(icon, color: tokens.primaryStrong, size: 24),
           ),
           const SizedBox(height: AppSpacing.md),
           Text(title, style: theme.textTheme.titleMedium),
