@@ -240,7 +240,7 @@ class _DeploymentTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    final double progress = total <= 0 ? 0.0 : (active / total).clamp(0, 1);
+    final double progress = total <= 0 ? 0.0 : (active / total).clamp(0, 1).toDouble();
     final int percent = (progress * 100).toInt();
 
     return GlassCard(
@@ -624,7 +624,7 @@ class _ComplianceTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
     final double progress =
-        onDuty <= 0 ? 0.0 : (checkedIn / onDuty).clamp(0, 1);
+        onDuty <= 0 ? 0.0 : (checkedIn / onDuty).clamp(0, 1).toDouble();
     final int percent = (progress * 100).toInt();
 
     return GlassCard(

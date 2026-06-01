@@ -296,7 +296,10 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
 
   Widget _buildAction() {
     final tokens = CissThemeTokens.of(context);
-    final employee = _employee!;
+    final employee = _employee;
+    if (employee == null) {
+      return const Center(child: Text('Employee data missing. Please scan again.'));
+    }
     final site = _selectedSite;
     final hint = employee.attendanceHint;
 
@@ -713,8 +716,12 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
 
   Widget _buildConfirmation() {
     final tokens = CissThemeTokens.of(context);
-    final employee = _employee!;
-    final site = _selectedSite!;
+    final employee = _employee;
+    final site = _selectedSite;
+    final attendanceTime = _attendanceTime;
+    if (employee == null || site == null || attendanceTime == null) {
+      return const Center(child: Text('Attendance data incomplete. Please scan again.'));
+    }
 
     final shareText = '''
 CISS Workforce — Attendance Confirmed
@@ -722,7 +729,7 @@ CISS Workforce — Attendance Confirmed
 Guard:         ${employee.fullName}
 Employee ID:   ${employee.employeeCode ?? employee.id}
 Site:          ${site.siteName}
-Date/Time:     ${formatAttendanceDateTime(_attendanceTime!)}
+Date/Time:     ${formatAttendanceDateTime(attendanceTime)}
 Status:        ${_attendanceStatus.toUpperCase()}
 ────────────────────────────────────
 Verified by CISS Workforce Platform''';

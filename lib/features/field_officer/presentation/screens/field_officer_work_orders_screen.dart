@@ -544,7 +544,6 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
                         else
                           Expanded(
                             child: ListView.builder(
-                              controller: scrollController,
                               padding: const EdgeInsets.symmetric(horizontal: 16),
                               itemCount: _filtered.length,
                               itemBuilder: (_, i) => _GuardTile(
@@ -558,7 +557,6 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
                     ),
                     // Selected
                     ListView.builder(
-                      controller: scrollController,
                       padding: const EdgeInsets.all(16),
                       itemCount: _selected.length,
                       itemBuilder: (_, i) => _GuardTile(

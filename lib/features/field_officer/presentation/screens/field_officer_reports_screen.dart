@@ -64,6 +64,26 @@ class _FieldOfficerReportsScreenState
   String _districtFilter = '';
   bool _showFilters = false;
 
+  late final TextEditingController _monthController;
+  late final TextEditingController _clientController;
+  late final TextEditingController _districtController;
+
+  @override
+  void initState() {
+    super.initState();
+    _monthController = TextEditingController();
+    _clientController = TextEditingController();
+    _districtController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _monthController.dispose();
+    _clientController.dispose();
+    _districtController.dispose();
+    super.dispose();
+  }
+
   void _refresh() {
     ref.invalidate(fieldOfficerWorkOrdersProvider);
     ref.invalidate(fieldOfficerVisitReportsProvider);
@@ -262,7 +282,7 @@ class _FieldOfficerReportsScreenState
                             labelText: 'Month', prefixIcon: Icon(Icons.calendar_month, size: 18),
                             isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                           ),
-                          controller: TextEditingController(text: _monthFilter),
+                          controller: _monthController,
                           onChanged: (v) => setState(() => _monthFilter = v),
                           keyboardType: TextInputType.datetime,
                         ),
@@ -275,7 +295,7 @@ class _FieldOfficerReportsScreenState
                             labelText: 'Client', prefixIcon: Icon(Icons.business, size: 18),
                             isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                           ),
-                          controller: TextEditingController(text: _clientFilter),
+                          controller: _clientController,
                           onChanged: (v) => setState(() => _clientFilter = v),
                         ),
                       ),
@@ -287,7 +307,7 @@ class _FieldOfficerReportsScreenState
                             labelText: 'District', prefixIcon: Icon(Icons.map, size: 18),
                             isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                           ),
-                          controller: TextEditingController(text: _districtFilter),
+                          controller: _districtController,
                           onChanged: (v) => setState(() => _districtFilter = v),
                         ),
                       ),
@@ -934,7 +954,8 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
       try {
         final ext = entry.mimeType.split('/').last;
         final safeName = '${timestamp}_photo_${urls.length}.$ext';
-        final path = 'foReports/$folder/${FirebaseAuth.instance.currentUser!.uid}/$safeName';
+        final uid = FirebaseAuth.instance.currentUser?.uid ?? 'unknown';
+        final path = 'foReports/$folder/$uid/$safeName';
         final dataUrl = await ref
             .read(mobileRepositoryProvider)
             .encodeFileToDataUrl(entry.bytes.toList(), entry.mimeType);
@@ -1040,7 +1061,8 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
             try {
               final ext = entry.mimeType.split('/').last;
               final safeName = '${timestamp}_client_report.$ext';
-              final path = 'foReports/trainingReportFiles/${FirebaseAuth.instance.currentUser!.uid}/$safeName';
+              final uid = FirebaseAuth.instance.currentUser?.uid ?? 'unknown';
+              final path = 'foReports/trainingReportFiles/$uid/$safeName';
               final dataUrl = await ref
                   .read(mobileRepositoryProvider)
                   .encodeFileToDataUrl(entry.bytes.toList(), entry.mimeType);

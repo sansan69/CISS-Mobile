@@ -22,13 +22,15 @@ import '../../../core/network/providers.dart';
 class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
   StreamSubscription<User?>? _authSubscription;
   AuthSession? _cachedSession;
+  bool _disposed = false;
 
   @override
   Future<AuthSession?> build() async {
     final auth = ref.watch(firebaseAuthProvider);
 
-    // Cancel any previous listener (idempotent on rebuild).
-    _authSubscription?.cancel();
+    // Cancel any previous listener and await to prevent duplicate subscriptions.
+    await _authSubscription?.cancel();
+    _authSubscription = null;
 
     // Fast path: if we have a cached session and the Firebase user matches,
     // return it instantly. The listener will refresh in the background.
@@ -38,14 +40,16 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
       return null;
     }
 
-    if (_cachedSession != null && _cachedSession!.uid == user.uid) {
+    final cached = _cachedSession;
+    if (cached != null && cached.uid == user.uid) {
       // Schedule a background refresh without blocking the UI.
       _scheduleBackgroundRefresh();
-      return _cachedSession;
+      return cached;
     }
 
     // Listen to auth changes for the lifetime of this notifier.
     _authSubscription = auth.idTokenChanges().listen((User? changedUser) async {
+      if (_disposed) return;
       if (changedUser == null) {
         _cachedSession = null;
         state = const AsyncData(null);
@@ -53,7 +57,8 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
       }
 
       // If the user hasn't changed and we have a cached session, skip.
-      if (_cachedSession != null && _cachedSession!.uid == changedUser.uid) {
+      final currentCached = _cachedSession;
+      if (currentCached != null && currentCached.uid == changedUser.uid) {
         return;
       }
 
@@ -61,12 +66,15 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
         final session = await ref
             .read(mobileRepositoryProvider)
             .resolveCurrentSession();
+        if (_disposed) return;
         _cachedSession = session;
         state = AsyncData(session);
       } catch (error, stack) {
+        if (_disposed) return;
         // Keep the cached session alive if backend is temporarily down.
-        if (_cachedSession != null) {
-          state = AsyncData(_cachedSession);
+        final fallback = _cachedSession;
+        if (fallback != null) {
+          state = AsyncData(fallback);
         } else {
           state = AsyncError(error, stack);
         }
@@ -84,26 +92,35 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
   void _scheduleBackgroundRefresh() {
     // Refresh in the background without blocking.
     ref.read(mobileRepositoryProvider).resolveCurrentSession().then((session) {
-      if (session != null) {
-        _cachedSession = session;
-        // Only update state if it hasn't changed to null in the meantime.
-        if (state.valueOrNull != null) {
-          state = AsyncData(session);
-        }
+      if (_disposed || session == null) return;
+      _cachedSession = session;
+      // Only update state if it hasn't changed to null in the meantime.
+      if (state.valueOrNull != null) {
+        state = AsyncData(session);
       }
     }).catchError((_) {
       // Silent — the cached session is still valid.
     });
   }
 
+  @override
+  void dispose() {
+    _disposed = true;
+    _authSubscription?.cancel();
+    _authSubscription = null;
+    super.dispose();
+  }
+
   /// Inject a session after a fresh login — avoids a redundant backend call.
   void setSession(AuthSession session) {
+    if (_disposed) return;
     _cachedSession = session;
     state = AsyncData(session);
   }
 
   /// Clear the session (used on sign-out before the auth listener fires).
   void clearSession() {
+    if (_disposed) return;
     _cachedSession = null;
     state = const AsyncData(null);
   }

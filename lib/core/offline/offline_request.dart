@@ -10,14 +10,22 @@ class OfflineRequest {
   });
 
   factory OfflineRequest.fromJson(Map<String, dynamic> json) {
+    final bodyRaw = json['body'];
+    final body = bodyRaw is Map
+        ? Map<String, dynamic>.from(bodyRaw)
+        : <String, dynamic>{};
+    final createdAtRaw = json['createdAt'];
+    final createdAt = createdAtRaw is String
+        ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
+        : DateTime.now();
     return OfflineRequest(
-      id: json['id'] as String,
-      path: json['path'] as String,
-      method: json['method'] as String,
-      body: Map<String, dynamic>.from(json['body'] as Map),
-      createdAt: DateTime.parse(json['createdAt'] as String),
+      id: json['id']?.toString() ?? '',
+      path: json['path']?.toString() ?? '',
+      method: json['method']?.toString() ?? 'POST',
+      body: body,
+      createdAt: createdAt,
       retryCount: json['retryCount'] as int? ?? 0,
-      lastError: json['lastError'] as String?,
+      lastError: json['lastError']?.toString(),
     );
   }
 

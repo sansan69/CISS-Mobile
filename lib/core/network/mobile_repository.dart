@@ -26,6 +26,7 @@ class MobileRepository {
   final FirebaseAuth _auth;
 
   ApiClient get apiClient => _apiClient;
+  User? get currentUser => _auth.currentUser;
 
   static const String _mobileNotificationsPath = '/api/mobile/notifications';
   static const String _mobileTokenPath = '/api/mobile/token';
@@ -139,8 +140,13 @@ class MobileRepository {
         queryParameters: queryParameters,
         options: Options(headers: await _authHeaders()),
       );
-      return Map<String, dynamic>.from(response.data as Map);
+      final data = response.data;
+      if (data is! Map) {
+        throw Exception('Unexpected response format from server');
+      }
+      return Map<String, dynamic>.from(data);
     } catch (error) {
+      if (_isOfflineDioError(error)) rethrow;
       throw Exception(_extractApiError(error));
     }
   }
@@ -162,7 +168,11 @@ class MobileRepository {
         data: body,
         options: Options(headers: await _authHeaders()),
       );
-      return Map<String, dynamic>.from(response.data as Map);
+      final data = response.data;
+      if (data is! Map) {
+        throw Exception('Unexpected response format from server');
+      }
+      return Map<String, dynamic>.from(data);
     } catch (error) {
       if (_isOfflineDioError(error)) rethrow;
       throw Exception(_extractApiError(error));
@@ -172,15 +182,20 @@ class MobileRepository {
   Future<Map<String, dynamic>> _patchJson(
     String path,
     Map<String, dynamic> body,
-  ) async {
+  }) async {
     try {
       final response = await _apiClient.dio.patch<dynamic>(
         path,
         data: body,
         options: Options(headers: await _authHeaders()),
       );
-      return Map<String, dynamic>.from(response.data as Map);
+      final data = response.data;
+      if (data is! Map) {
+        throw Exception('Unexpected response format from server');
+      }
+      return Map<String, dynamic>.from(data);
     } catch (error) {
+      if (_isOfflineDioError(error)) rethrow;
       throw Exception(_extractApiError(error));
     }
   }
@@ -190,13 +205,15 @@ class MobileRepository {
         (error.type == DioExceptionType.connectionTimeout ||
             error.type == DioExceptionType.sendTimeout ||
             error.type == DioExceptionType.receiveTimeout ||
-            error.type == DioExceptionType.connectionError);
+            error.type == DioExceptionType.connectionError ||
+            error.type == DioExceptionType.unknown ||
+            error.type == DioExceptionType.badCertificate);
   }
 
   Future<Map<String, String>> _authHeaders() async {
     final token = await _token();
     if (token == null || token.isEmpty) {
-      return const <String, String>{};
+      throw StateError('Not authenticated');
     }
     return <String, String>{'Authorization': 'Bearer $token'};
   }
@@ -210,9 +227,9 @@ class MobileRepository {
       if (backendSession != null) {
         return backendSession;
       }
-    } catch (_) {
-      // Local development can briefly lose the API while Firebase is valid.
-      // Claims are still enough to keep a signed-in mobile user moving.
+    } catch (e) {
+      // Backend may be temporarily unavailable; fall back to Firebase claims.
+      debugPrint('Backend session resolution failed: $e');
     }
 
     final token = await user.getIdTokenResult(false);

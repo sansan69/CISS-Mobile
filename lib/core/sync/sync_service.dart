@@ -17,15 +17,24 @@ class SyncService {
   bool _isSyncing = false;
 
   void start() {
-    _subscription = _connectivity.onConnectivityChanged.listen((results) {
-      if (results.any((r) => r != ConnectivityResult.none)) {
-        processQueue();
-      }
-    });
+    _subscription?.cancel();
+    _subscription = _connectivity.onConnectivityChanged.listen(
+      (results) {
+        if (results.any((r) => r != ConnectivityResult.none)) {
+          processQueue();
+        }
+      },
+      onError: (Object error) {
+        foundation.debugPrint('Connectivity stream error: $error');
+      },
+    );
+    // Process any queued requests immediately on startup.
+    processQueue();
   }
 
   void stop() {
     _subscription?.cancel();
+    _subscription = null;
   }
 
   Future<void> processQueue() async {
@@ -35,18 +44,28 @@ class SyncService {
     try {
       final requests = _queue.getQueuedRequests();
       for (final request in requests) {
+        // Evict requests that have failed too many times.
+        if (request.retryCount > 20) {
+          await _queue.removeRequest(request.id);
+          foundation.debugPrint(
+            'Evicted request ${request.id} after ${request.retryCount} failed attempts.',
+          );
+          continue;
+        }
+
         final success = await _processRequest(request);
         if (success) {
-          await _queue.removeRequest(request.id);
-        } else {
-          // If failed, _processRequest has already updated the retry count and 
-          // potentially cleared large base64 photo data if they were successfully 
-          // uploaded before the main request failed.
-          foundation.debugPrint('Sync failed for request ${request.id}, will retry later.');
-          
-          if (request.retryCount > 10) {
-            // Optional: Move to a "failed" box for manual intervention
+          try {
+            await _queue.removeRequest(request.id);
+          } catch (removeError) {
+            foundation.debugPrint(
+              'Failed to remove request ${request.id} from queue: $removeError',
+            );
           }
+        } else {
+          foundation.debugPrint(
+            'Sync failed for request ${request.id}, will retry later.',
+          );
         }
       }
     } finally {
@@ -78,7 +97,11 @@ class SyncService {
           path: uploadPath,
           dataUrl: dataUrl,
         );
-        body['photoUrl'] = result['url'];
+        final uploadedUrl = result['url'];
+        if (uploadedUrl == null || uploadedUrl is! String) {
+          throw Exception('Photo upload did not return a URL');
+        }
+        body['photoUrl'] = uploadedUrl;
         bodyChanged = true;
       }
 
@@ -94,8 +117,8 @@ class SyncService {
           final String uploadPath;
           if (isVisitReport || isTrainingReport) {
             final folder = isVisitReport ? 'visitReports' : 'trainingReports';
-            final uid = _repository.apiClient.dio.options.headers['Authorization']?.toString() ?? '';
-            uploadPath = 'foReports/$folder/offline_sync/${ts}_$i.jpg';
+            final uid = _repository.currentUser?.uid ?? 'unknown';
+            uploadPath = 'foReports/$folder/offline_sync/${uid}_${ts}_$i.jpg';
           } else {
             uploadPath = 'reports/${ts}_$i.jpg';
           }
@@ -103,7 +126,11 @@ class SyncService {
             path: uploadPath,
             dataUrl: dataUrls[i],
           );
-          photoUrls.add(result['url'] as String);
+          final url = result['url'];
+          if (url == null || url is! String) {
+            throw Exception('Report photo upload did not return a URL');
+          }
+          photoUrls.add(url);
         }
         body['photoUrls'] = photoUrls;
         bodyChanged = true;
@@ -113,11 +140,16 @@ class SyncService {
         currentRequest = currentRequest.copyWith(body: body);
       }
 
-      await dio.request<dynamic>(
+      final response = await dio.request<dynamic>(
         request.path,
         data: body,
         options: options,
       );
+      // Treat 200/201/204 as success; also validate response body if present.
+      final responseData = response.data;
+      if (responseData is Map && responseData['success'] == false) {
+        throw Exception(responseData['error']?.toString() ?? 'Server rejected the request');
+      }
       return true;
     } catch (e) {
       final newRetryCount = currentRequest.retryCount + 1;
@@ -127,12 +159,6 @@ class SyncService {
           lastError: e.toString(),
         ),
       );
-
-      if (newRetryCount > 20) {
-        foundation.debugPrint(
-          'Request ${currentRequest.id} to ${currentRequest.path} failed permanently after 20 attempts.',
-        );
-      }
       return false;
     }
   }

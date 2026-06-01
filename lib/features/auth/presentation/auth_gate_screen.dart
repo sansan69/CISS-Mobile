@@ -25,9 +25,11 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
   bool _isAuthenticating = false;
   bool _permissionsChecked = false;
   bool _bioTriggered = false;
+  AuthSession? _lastSession;
 
   Future<void> _checkBiometrics(bool enabled) async {
     if (!enabled || _authenticated || _isAuthenticating) return;
+    if (!mounted) return;
 
     setState(() => _isAuthenticating = true);
     try {
@@ -36,16 +38,27 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
         localizedReason: 'Authenticate to access your duty workspace',
       );
 
-      if (mounted) {
-        setState(() {
-          _authenticated = success;
-          _isAuthenticating = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => _isAuthenticating = false);
-      }
+      if (!mounted) return;
+      setState(() {
+        _authenticated = success;
+        _isAuthenticating = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isAuthenticating = false);
+      // Show error so user isn't silently locked out.
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Biometric error: $error'),
+          action: SnackBarAction(
+            label: 'Retry',
+            onPressed: () {
+              _bioTriggered = false;
+              _maybeTriggerBiometrics();
+            },
+          ),
+        ),
+      );
     }
   }
 
@@ -79,14 +92,42 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
         // Show a branded skeleton on initial load instead of a bare spinner.
         loading: () => const _AppLoadingScreen(),
         error: (Object error, StackTrace stackTrace) => Scaffold(
-          body: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text('Auth error: $error'),
+          body: SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    const SizedBox(height: 16),
+                    Text('Auth error: $error', textAlign: TextAlign.center),
+                    const SizedBox(height: 24),
+                    FilledButton.tonal(
+                      onPressed: () => ref.invalidate(authSessionProvider),
+                      child: const Text('Retry'),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        ref.read(authControllerProvider).signOut();
+                      },
+                      child: const Text('Sign out'),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),
         data: (session) {
+          // Reset permission check when session changes (new login).
+          if (_lastSession?.uid != session?.uid) {
+            _permissionsChecked = false;
+            _bioTriggered = false;
+            _authenticated = false;
+          }
+          _lastSession = session;
+
           if (session == null) {
             return const LoginHubScreen();
           }
@@ -131,6 +172,9 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
       if (!allGranted && mounted) {
         context.go('/permissions');
       }
+    }).catchError((_) {
+      // Silently ignore permission check failures; they'll be checked again
+      // when the user tries to use location or camera.
     });
   }
 }

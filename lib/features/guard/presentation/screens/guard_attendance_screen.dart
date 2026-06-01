@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -103,13 +104,22 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       return;
     }
 
-    final position = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-    );
-    setState(() {
-      _position = position;
-      _error = null;
-    });
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      ).timeout(const Duration(seconds: 10));
+      if (!mounted) return;
+      setState(() {
+        _position = position;
+        _error = null;
+      });
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() => _error = 'GPS timed out. Please ensure location services are enabled and try again.');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Could not get location: $e');
+    }
   }
 
   Future<void> _capturePhoto() async {
@@ -293,7 +303,10 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     }
     if (_position == null) {
       await _captureLocation();
-      if (_position == null) return;
+      if (_position == null) {
+        setState(() => _error = 'Could not determine your location. Please check GPS and try again.');
+        return;
+      }
     }
 
     setState(() {

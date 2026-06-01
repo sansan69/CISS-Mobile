@@ -13,13 +13,18 @@ class OfflineQueue extends ChangeNotifier {
   final _secureStorage = const FlutterSecureStorage();
 
   Future<HiveAesCipher?> getEncryptionCipher() async {
-    String? key = await _secureStorage.read(key: _keyName);
-    if (key == null) {
-      final newKey = Hive.generateSecureKey();
-      await _secureStorage.write(key: _keyName, value: base64UrlEncode(newKey));
-      return HiveAesCipher(newKey);
+    try {
+      String? key = await _secureStorage.read(key: _keyName);
+      if (key == null) {
+        final newKey = Hive.generateSecureKey();
+        await _secureStorage.write(key: _keyName, value: base64UrlEncode(newKey));
+        return HiveAesCipher(newKey);
+      }
+      return HiveAesCipher(base64Url.decode(key));
+    } catch (e) {
+      debugPrint('Encryption cipher error: $e');
+      return null;
     }
-    return HiveAesCipher(base64Url.decode(key));
   }
 
   Future<void> init() async {
@@ -49,10 +54,18 @@ class OfflineQueue extends ChangeNotifier {
   }
 
   List<OfflineRequest> getQueuedRequests() {
-    return _box.values
-        .map((e) => OfflineRequest.fromJson(Map<String, dynamic>.from(e)))
-        .toList()
-      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    final requests = <OfflineRequest>[];
+    for (final entry in _box.values) {
+      try {
+        if (entry is! Map) continue;
+        final map = Map<String, dynamic>.from(entry);
+        requests.add(OfflineRequest.fromJson(map));
+      } catch (e) {
+        debugPrint('Skipping corrupted offline queue entry: $e');
+      }
+    }
+    requests.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    return requests;
   }
 
   Future<void> removeRequest(String id) async {

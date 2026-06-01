@@ -196,17 +196,17 @@ class _FieldOfficerGuardAttendanceScreenState
                         message: CissError.parse(err),
                       ),
                     ),
-                    data: (entries) {
+                      data: (entries) {
                       final filtered = _selectedSiteId == null
                           ? entries
                           : entries
-                              .where((e) =>
-                                  e.siteName.trim().toLowerCase() ==
-                                  sites
-                                      .firstWhere((s) => s.siteId == _selectedSiteId)
-                                      .siteName
-                                      .trim()
-                                      .toLowerCase())
+                              .where((e) {
+                                final selectedSite = sites.cast<FieldOfficerAttendanceSite?>()
+                                    .firstWhere((s) => s?.siteId == _selectedSiteId, orElse: () => null);
+                                if (selectedSite == null) return false;
+                                return e.siteName.trim().toLowerCase() ==
+                                    selectedSite.siteName.trim().toLowerCase();
+                              })
                               .toList();
 
                       if (filtered.isEmpty) {
