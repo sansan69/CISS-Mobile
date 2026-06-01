@@ -3,15 +3,45 @@
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Location: fine + coarse for indoor/outdoor hybrid positioning -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!-- WiFi state for indoor network-based positioning in warehouses/factories -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!-- Camera for attendance photo proof and incident reporting -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
+    <!-- Foreground service + location type for background tracking -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
+    <!-- Keep device awake during active duty tracking -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Restart tracking service after device reboot -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Notifications for duty alerts and geofence breaches -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Activity recognition for movement detection (walking, still, in vehicle) -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+    <!-- Ignore battery optimizations so background tracking isn't killed -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Vibration for duty alerts -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Biometric authentication for guard login -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.USE_FINGERPRINT" />
 
     <application
         android:label="CISS Workforce"

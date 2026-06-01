@@ -48,7 +48,29 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initLocationCheck();
+      _initStatusFromHistory();
     });
+  }
+
+  /// Determine default IN/OUT status from attendance history.
+  /// If the most recent record is IN, default to OUT (guard is checking out).
+  /// If the most recent record is OUT or no history, default to IN.
+  Future<void> _initStatusFromHistory() async {
+    try {
+      final records = await ref.read(attendanceHistoryProvider.future);
+      if (records.isEmpty) return;
+
+      final latest = records.first;
+      if (!mounted) return;
+
+      // If latest is IN, the guard probably wants to OUT now
+      // If latest is OUT, the guard probably wants to IN now
+      setState(() {
+        _status = latest.status == 'In' ? 'Out' : 'In';
+      });
+    } catch (e) {
+      // Silently ignore — default IN is fine
+    }
   }
 
   Future<void> _initLocationCheck() async {
@@ -589,6 +611,8 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                       ),
                       const SizedBox(height: 14),
                     ],
+                    // ── Stale session warning ──────────────────────────────
+                    _StaleSessionBanner(),
                     GuardFormCard(
                       children: <Widget>[
                         InkWell(
@@ -627,11 +651,10 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                               : (dutyPoint) {
                                   setState(() {
                                     _dutyPoint = dutyPoint;
-                                    _shift =
-                                        dutyPoint?.shiftTemplates.isNotEmpty ==
-                                            true
-                                        ? dutyPoint!.shiftTemplates.first
-                                        : null;
+                                    _shift = resolveAttendanceShiftTemplate(
+                                      dutyPoint?.shiftTemplates ??
+                                          const <ShiftTemplateModel>[],
+                                    );
                                   });
                                 },
                           decoration: const InputDecoration(
@@ -773,6 +796,75 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           },
         ),
       ],
+    );
+  }
+}
+
+/// Shows a warning banner if the guard has an open IN session from a previous day.
+/// This helps guards realize they forgot to check out.
+class _StaleSessionBanner extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = CissThemeTokens.of(context);
+    final historyAsync = ref.watch(attendanceHistoryProvider);
+
+    return historyAsync.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const SizedBox.shrink(),
+      data: (records) {
+        if (records.isEmpty) return const SizedBox.shrink();
+
+        final latest = records.first;
+        if (latest.status != 'In') return const SizedBox.shrink();
+
+        // Check if the latest IN is from a previous day
+        final today = DateTime.now();
+        final todayStr =
+            '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+
+        if (latest.dateLabel == todayStr || latest.dateLabel.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 14),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: tokens.dangerSoft,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: tokens.danger.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(Icons.warning_rounded, color: tokens.danger, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      'Open session from ${latest.dateLabel}',
+                      style: TextStyle(
+                        color: tokens.danger,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'You forgot to check out on ${latest.dateLabel}. Please mark OUT first, or contact your supervisor.',
+                      style: TextStyle(
+                        color: tokens.danger.withValues(alpha: 0.8),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

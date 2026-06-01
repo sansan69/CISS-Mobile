@@ -182,7 +182,7 @@ class MobileRepository {
   Future<Map<String, dynamic>> _patchJson(
     String path,
     Map<String, dynamic> body,
-  }) async {
+  ) async {
     try {
       final response = await _apiClient.dio.patch<dynamic>(
         path,

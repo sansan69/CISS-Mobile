@@ -59,6 +59,85 @@ ShiftTemplateModel? resolveActiveShiftTemplate(
   return shifts.first;
 }
 
+/// Resolve the shift a guard is reporting for based on punch time and status.
+///
+/// This is DIFFERENT from [resolveActiveShiftTemplate] which answers
+/// "what shift is currently active?". This answers "which shift is the
+/// guard reporting for?" considering early/late arrivals and handoff windows.
+///
+/// - IN punches: match to nearest shift start within tolerance
+/// - OUT punches: use the shift from the open session (lastShiftCode)
+/// - Handoff window: during last ~2h of a shift, a new IN is for NEXT shift
+ShiftTemplateModel? resolveAttendanceShiftTemplate(
+  Iterable<ShiftTemplateModel> shiftTemplates, {
+  DateTime? at,
+  String? lastShiftCode,
+  int toleranceMinutesBefore = 120,
+  int toleranceMinutesAfter = 60,
+  int handoffWindowMinutes = 120,
+}) {
+  final shifts = shiftTemplates.toList(growable: false);
+  if (shifts.isEmpty) return null;
+
+  // 1. OUT punches: use the shift from the open session
+  if (lastShiftCode != null && lastShiftCode.isNotEmpty) {
+    final lastShift = shifts.firstWhere(
+      (s) => s.code == lastShiftCode,
+      orElse: () => shifts.first,
+    );
+    return lastShift;
+  }
+
+  // 2. IN punches: find best matching shift
+  final now = at ?? DateTime.now();
+  final punchMinutes = now.hour * 60 + now.minute;
+
+  ShiftTemplateModel? bestShift;
+  double bestScore = double.infinity;
+
+  for (final shift in shifts) {
+    final start = _shiftMinutes(shift.startTime);
+    final end = _shiftMinutes(shift.endTime);
+    if (start == null || end == null) continue;
+
+    final crossesMidnight = start >= end;
+    final duration = crossesMidnight
+        ? ((24 * 60) - start) + end
+        : end - start;
+
+    // Minutes until this shift starts (0-1439)
+    var forwardDistance = (start - punchMinutes) % (24 * 60);
+    if (forwardDistance < 0) forwardDistance += 24 * 60;
+
+    // Minutes since this shift started (0-1439)
+    var timeInShift = (punchMinutes - start) % (24 * 60);
+    if (timeInShift < 0) timeInShift += 24 * 60;
+
+    double score;
+
+    if (forwardDistance > 0 && forwardDistance <= toleranceMinutesBefore) {
+      // Early arrival
+      score = forwardDistance.toDouble();
+    } else if (timeInShift <= toleranceMinutesAfter) {
+      // Late arrival
+      score = timeInShift + 0.5;
+    } else if (timeInShift < duration - handoffWindowMinutes) {
+      // Well into shift
+      score = (timeInShift + toleranceMinutesBefore).toDouble();
+    } else {
+      // Tail end — guard is likely arriving for next shift
+      continue;
+    }
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestShift = shift;
+    }
+  }
+
+  return bestShift;
+}
+
 class DutyPointModel {
   const DutyPointModel({
     required this.id,

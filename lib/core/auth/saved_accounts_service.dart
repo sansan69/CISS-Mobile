@@ -9,6 +9,7 @@ class SavedAccount {
     required this.loginId,
     required this.displayName,
     required this.lastLoginAt,
+    this.biometricEnabled = false,
   });
 
   /// 'guard' | 'fieldOfficer'
@@ -19,11 +20,15 @@ class SavedAccount {
   final String displayName;
   final DateTime lastLoginAt;
 
+  /// Whether this saved account has biometric login enabled.
+  final bool biometricEnabled;
+
   Map<String, dynamic> toJson() => <String, dynamic>{
     'role': role,
     'loginId': loginId,
     'displayName': displayName,
     'lastLoginAt': lastLoginAt.toIso8601String(),
+    'biometricEnabled': biometricEnabled,
   };
 
   factory SavedAccount.fromJson(Map<String, dynamic> json) {
@@ -34,15 +39,21 @@ class SavedAccount {
       lastLoginAt: json['lastLoginAt'] is String
           ? DateTime.tryParse(json['lastLoginAt'] as String) ?? DateTime.now()
           : DateTime.now(),
+      biometricEnabled: json['biometricEnabled'] as bool? ?? false,
     );
   }
 
-  SavedAccount withUpdated({String? displayName, DateTime? lastLoginAt}) {
+  SavedAccount withUpdated({
+    String? displayName,
+    DateTime? lastLoginAt,
+    bool? biometricEnabled,
+  }) {
     return SavedAccount(
       role: role,
       loginId: loginId,
       displayName: displayName ?? this.displayName,
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
+      biometricEnabled: biometricEnabled ?? this.biometricEnabled,
     );
   }
 
@@ -129,6 +140,18 @@ class SavedAccountsService {
         value: jsonEncode(updated.map((a) => a.toJson()).toList()),
       );
     } catch (_) {}
+  }
+
+  Future<void> saveAll(List<SavedAccount> accounts) async {
+    try {
+      final trimmed = accounts.take(_maxAccounts).toList();
+      await _storage.write(
+        key: _storageKey,
+        value: jsonEncode(trimmed.map((a) => a.toJson()).toList()),
+      );
+    } catch (_) {
+      // Non-critical — don't block if storage write fails.
+    }
   }
 }
 

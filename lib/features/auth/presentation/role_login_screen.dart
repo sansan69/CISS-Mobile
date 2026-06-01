@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/auth/biometric_service.dart';
 import '../../../core/auth/saved_accounts_service.dart';
-import '../../../core/models/app_role.dart';
 import '../../../core/models/auth_session.dart';
 import '../../../core/network/ciss_error.dart';
 import '../../auth/application/auth_controller.dart';
@@ -60,14 +60,26 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
   String? _error;
   List<SavedAccount> _savedAccounts = <SavedAccount>[];
   bool _accountsLoaded = false;
+  bool _biometricAvailable = false;
+  bool _enableBiometric = false;
+
 
   String get _roleKey =>
       widget.role == LoginRole.guard ? 'guard' : 'fieldOfficer';
+
+  Future<void> _checkBiometricAvailability() async {
+    final bioService = ref.read(biometricServiceProvider);
+    final available = await bioService.canAuthenticate();
+    if (mounted) {
+      setState(() => _biometricAvailable = available);
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _loadSavedAccounts();
+    _checkBiometricAvailability();
   }
 
   @override
@@ -104,6 +116,103 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
         .read(savedAccountsServiceProvider)
         .removeAccount(account.role, account.loginId);
     await _loadSavedAccounts();
+  }
+
+  Future<void> _tryBiometricLogin(SavedAccount account) async {
+    if (!_biometricAvailable) {
+      _fillAccount(account);
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      final bioService = ref.read(biometricServiceProvider);
+      final success = await bioService.authenticate(
+        localizedReason: 'Authenticate to sign in as ${account.displayName}',
+      );
+      if (!success || !mounted) {
+        setState(() => _loading = false);
+        return;
+      }
+
+      final password = await ref
+          .read(authControllerProvider)
+          .getStoredPassword(role: account.role, loginId: account.loginId);
+
+      if (password == null || password.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _error = 'Stored credentials not found. Please enter your password manually.';
+        });
+        _fillAccount(account);
+        return;
+      }
+
+      _usernameController.text = account.loginId;
+      _passwordController.text = password;
+
+      if (widget.role == LoginRole.guard) {
+        await _doSignInGuard(account.loginId, password);
+      } else {
+        await _doSignInFieldOfficer(account.loginId, password);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Biometric login failed: $e';
+      });
+    }
+  }
+
+  Future<void> _doSignInGuard(String loginId, String pin) async {
+    try {
+      final session = await ref
+          .read(authControllerProvider)
+          .signInAsGuard(
+            loginIdOrPhone: loginId,
+            pin: pin,
+            saveForBiometric: _enableBiometric,
+          );
+      if (!mounted) return;
+      _onLoginSuccess(session);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = CissError.parse(error);
+      });
+      _loadSavedAccounts();
+    }
+  }
+
+  Future<void> _doSignInFieldOfficer(String email, String password) async {
+    try {
+      final session = await ref
+          .read(authControllerProvider)
+          .signInAsFieldOfficer(
+            email: email,
+            password: password,
+            saveForBiometric: _enableBiometric,
+          );
+      if (!mounted) return;
+      _onLoginSuccess(session);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = CissError.parse(error);
+      });
+      _loadSavedAccounts();
+    }
+  }
+
+  void _onLoginSuccess(AuthSession session) {
+    setState(() => _loading = false);
+    if (mounted) {
+      context.go('/');
+    }
   }
 
   Future<void> _submit() async {
@@ -160,31 +269,10 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
       _error = null;
     });
 
-    try {
-      late final AuthSession session;
-      if (widget.role == LoginRole.guard) {
-        session = await ref
-            .read(authControllerProvider)
-            .signInAsGuard(loginIdOrPhone: loginId, pin: pin);
-      } else {
-        session = await ref
-            .read(authControllerProvider)
-            .signInAsFieldOfficer(email: loginId, password: pin);
-      }
-      if (mounted) {
-        // AuthGate routes to the correct shell based on session role.
-        context.go('/');
-      }
-    } catch (error) {
-      setState(() {
-        _error = CissError.parse(error);
-      });
-      // Refresh accounts list in case session cleared
-      _loadSavedAccounts();
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+    if (widget.role == LoginRole.guard) {
+      await _doSignInGuard(loginId, pin);
+    } else {
+      await _doSignInFieldOfficer(loginId, pin);
     }
   }
 
@@ -228,7 +316,9 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
               _SavedAccountsSection(
                 accounts: _savedAccounts,
                 tokens: tokens,
+                biometricAvailable: _biometricAvailable,
                 onTap: _fillAccount,
+                onBiometricTap: _tryBiometricLogin,
                 onRemove: _removeSavedAccount,
               ),
             ],
@@ -294,6 +384,34 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
                         color: tokens.danger,
                         fontWeight: FontWeight.w700,
                       ),
+                    ),
+                  ],
+                  if (_biometricAvailable) ...<Widget>[
+                    const SizedBox(height: AppSpacing.sm),
+                    Row(
+                      children: <Widget>[
+                        Checkbox(
+                          value: _enableBiometric,
+                          onChanged: _loading
+                              ? null
+                              : (v) => setState(() => _enableBiometric = v ?? false),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _loading
+                                ? null
+                                : () => setState(
+                                    () => _enableBiometric = !_enableBiometric,
+                                  ),
+                            child: Text(
+                              'Enable biometric login for next time',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: tokens.inkMuted,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                   const SizedBox(height: AppSpacing.lg),
@@ -373,13 +491,17 @@ class _SavedAccountsSection extends StatelessWidget {
   const _SavedAccountsSection({
     required this.accounts,
     required this.tokens,
+    required this.biometricAvailable,
     required this.onTap,
+    required this.onBiometricTap,
     required this.onRemove,
   });
 
   final List<SavedAccount> accounts;
   final CissThemeTokens tokens;
+  final bool biometricAvailable;
   final void Function(SavedAccount) onTap;
+  final void Function(SavedAccount) onBiometricTap;
   final void Function(SavedAccount) onRemove;
 
   @override
@@ -409,7 +531,9 @@ class _SavedAccountsSection extends StatelessWidget {
           (account) => _SavedAccountTile(
             account: account,
             tokens: tokens,
+            biometricAvailable: biometricAvailable,
             onTap: () => onTap(account),
+            onBiometricTap: () => onBiometricTap(account),
             onRemove: () => onRemove(account),
           ),
         ),
@@ -422,19 +546,25 @@ class _SavedAccountTile extends StatelessWidget {
   const _SavedAccountTile({
     required this.account,
     required this.tokens,
+    required this.biometricAvailable,
     required this.onTap,
+    required this.onBiometricTap,
     required this.onRemove,
   });
 
   final SavedAccount account;
   final CissThemeTokens tokens;
+  final bool biometricAvailable;
   final VoidCallback onTap;
+  final VoidCallback onBiometricTap;
   final VoidCallback onRemove;
 
   static final DateFormat _timeFmt = DateFormat('d MMM, h:mm a');
 
   @override
   Widget build(BuildContext context) {
+    final bool canBiometric = biometricAvailable && account.biometricEnabled;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
@@ -442,7 +572,7 @@ class _SavedAccountTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.md),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: onTap,
+          onTap: canBiometric ? onBiometricTap : onTap,
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
             child: Row(
@@ -502,6 +632,14 @@ class _SavedAccountTile extends StatelessWidget {
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(color: tokens.inkMuted),
                           ),
+                          if (canBiometric) ...<Widget>[
+                            const SizedBox(width: 6),
+                            Icon(
+                              Icons.fingerprint_rounded,
+                              size: 14,
+                              color: tokens.success,
+                            ),
+                          ],
                         ],
                       ),
                     ],
@@ -509,7 +647,9 @@ class _SavedAccountTile extends StatelessWidget {
                 ),
                 // Quick-fill arrow
                 Icon(
-                  Icons.arrow_forward_ios_rounded,
+                  canBiometric
+                      ? Icons.fingerprint_rounded
+                      : Icons.arrow_forward_ios_rounded,
                   size: 14,
                   color: tokens.primary,
                 ),

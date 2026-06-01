@@ -186,4 +186,87 @@ abstract final class AppShadows {
       offset: Offset(0, 10),
     ),
   ];
+
+  static const List<BoxShadow> subtle = <BoxShadow>[
+    BoxShadow(
+      color: Color(0x0A0C2A43),
+      blurRadius: 12,
+      offset: Offset(0, 4),
+    ),
+  ];
+
+  static const List<BoxShadow> elevated = <BoxShadow>[
+    BoxShadow(
+      color: Color(0x1A0C2A43),
+      blurRadius: 32,
+      offset: Offset(0, 12),
+      spreadRadius: -4,
+    ),
+  ];
+}
+
+/// Pre-defined typography scale for consistent dashboard text.
+/// Sizes are tuned for mobile readability and brand coherence.
+abstract final class AppTypography {
+  /// Hero greeting — 28px, tight leading, strong weight
+  static TextStyle display(BuildContext context) =>
+      Theme.of(context).textTheme.headlineSmall!.copyWith(
+            fontWeight: FontWeight.w800,
+            height: 1.15,
+            letterSpacing: -0.5,
+          );
+
+  /// Section titles — 18px, bold
+  static TextStyle title(BuildContext context) =>
+      Theme.of(context).textTheme.titleLarge!.copyWith(
+            fontWeight: FontWeight.w700,
+            height: 1.25,
+            letterSpacing: -0.3,
+          );
+
+  /// Card headings — 16px, semibold
+  static TextStyle cardTitle(BuildContext context) =>
+      Theme.of(context).textTheme.titleMedium!.copyWith(
+            fontWeight: FontWeight.w600,
+            height: 1.3,
+          );
+
+  /// Body emphasis — 15px, medium weight
+  static TextStyle bodyStrong(BuildContext context) =>
+      Theme.of(context).textTheme.bodyLarge!.copyWith(
+            fontWeight: FontWeight.w600,
+            height: 1.4,
+          );
+
+  /// Standard body — 14px, regular
+  static TextStyle body(BuildContext context) =>
+      Theme.of(context).textTheme.bodyMedium!.copyWith(
+            height: 1.5,
+          );
+
+  /// Small labels — 12px, bold, muted
+  static TextStyle label(BuildContext context) =>
+      Theme.of(context).textTheme.labelSmall!.copyWith(
+            fontWeight: FontWeight.w700,
+            fontSize: 12,
+            letterSpacing: 0.3,
+            height: 1.3,
+          );
+
+  /// Metric values — 32px, extra bold
+  static TextStyle metric(BuildContext context) =>
+      Theme.of(context).textTheme.headlineSmall!.copyWith(
+            fontWeight: FontWeight.w800,
+            fontSize: 32,
+            height: 1.0,
+            letterSpacing: -0.8,
+          );
+
+  /// Micro text — 11px, medium
+  static TextStyle micro(BuildContext context) =>
+      Theme.of(context).textTheme.labelSmall!.copyWith(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            height: 1.3,
+          );
 }

@@ -4,7 +4,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../core/network/providers.dart';
-import '../../../../../shared/widgets/brand_banner.dart';
+import '../../../../../shared/widgets/dashboard/activity_feed.dart';
+import '../../../../../shared/widgets/dashboard/dashboard_header.dart';
+import '../../../../../shared/widgets/dashboard/quick_action_bar.dart';
+import '../../../../../shared/widgets/dashboard/stat_pill_row.dart';
 import '../../../../../shared/widgets/glass_card.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
@@ -12,19 +15,26 @@ import '../../../../../shared/widgets/sync_status_badge.dart';
 import '../../field_officer_tab_provider.dart';
 
 final FutureProvider<FieldOfficerDashboardSnapshot>
-fieldOfficerDashboardProvider = FutureProvider<FieldOfficerDashboardSnapshot>((
+    fieldOfficerDashboardProvider = FutureProvider<FieldOfficerDashboardSnapshot>((
   Ref ref,
 ) {
   return ref.read(mobileRepositoryProvider).fetchFieldOfficerDashboard();
 });
 
+/// Field Officer dashboard redesigned for command-center clarity.
+///
+/// Layout (top to bottom):
+/// 1. Header — greeting + name + district badge
+/// 2. Stat pills — total guards, active/on-duty, check-ins today
+/// 3. Quick actions — orders, guards, attendance, reports, alerts
+/// 4. Attendance coverage — district/site progress bars
+/// 5. Pending items — work orders, visit reports, training (if any)
 class FieldOfficerDashboardScreen extends ConsumerWidget {
   const FieldOfficerDashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final snapshot = ref.watch(fieldOfficerDashboardProvider);
-    final tokens = CissThemeTokens.of(context);
 
     return snapshot.when(
       loading: () => const Scaffold(
@@ -46,493 +56,416 @@ class FieldOfficerDashboardScreen extends ConsumerWidget {
           ),
         ),
       ),
-      data: (FieldOfficerDashboardSnapshot data) {
-        final String districts = data.assignedDistricts.isEmpty
-            ? 'No district assigned'
-            : data.assignedDistricts.join(', ');
-
-        return Scaffold(
-          backgroundColor: tokens.canvas,
-          body: ListView(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.xxl),
-            children: <Widget>[
-              BrandBanner(
-                title: 'Command Center',
-                subtitle: '${data.name} · $districts',
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    const SyncStatusBadge(),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      onPressed: () => ref.invalidate(fieldOfficerDashboardProvider),
-                      icon: Icon(
-                        Icons.refresh_rounded,
-                        color: tokens.inkMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              
-              const SizedBox(height: AppSpacing.lg),
-              
-              // Command Tiles
-              SizedBox(
-                height: 160,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  children: <Widget>[
-                    _CommandTile(
-                      label: 'Total Guards',
-                      value: '${data.totalGuards}',
-                      icon: Icons.groups_2_rounded,
-                      accentColor: tokens.primary,
-                      helper: 'Registered in $districts',
-                    ),
-                    const SizedBox(width: 12),
-                    _DeploymentTile(
-                      active: data.activeGuards,
-                      total: data.totalGuards,
-                      accentColor: tokens.success,
-                    ),
-                    const SizedBox(width: 12),
-                    _CommandTile(
-                      label: 'Check-ins',
-                      value: '${data.attendanceSummary.checkedInToday}',
-                      icon: Icons.login_rounded,
-                      accentColor: tokens.accent,
-                      helper: 'Today\'s total activity',
-                    ),
-                    const SizedBox(width: 12),
-                    _ComplianceTile(
-                      checkedIn: data.attendanceSummary.checkedInToday,
-                      onDuty: data.totalGuards,
-                      accentColor: tokens.warning,
-                    ),
-                  ],
-                ),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
-                child: Text(
-                  'OPERATIONS',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2,
-                    color: tokens.inkMuted,
-                  ),
-                ),
-              ),
-              
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _QuickActionsGrid(ref: ref),
-              ),
-
-              const SizedBox(height: 24),
-
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: _AttendanceOverview(data: data),
-              ),
-
-              if (data.recentVisitReports.isNotEmpty ||
-                  data.recentTrainingReports.isNotEmpty ||
-                  data.recentWorkOrders.isNotEmpty) ...[
-                const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: _PendingReportsSummary(data: data),
-                ),
-              ],
-            ],
-          ),
-        );
-      },
+      data: (FieldOfficerDashboardSnapshot data) => _DashboardBody(data: data),
     );
   }
 }
 
-class _CommandTile extends StatelessWidget {
-  const _CommandTile({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.accentColor,
-    required this.helper,
-  });
+class _DashboardBody extends ConsumerWidget {
+  const _DashboardBody({required this.data});
 
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color accentColor;
-  final String helper;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = CissThemeTokens.of(context);
-    
-    return GlassCard(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      accentColor: accentColor,
-      child: SizedBox(
-        width: 160,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: accentColor, size: 20),
-                const Spacer(),
-                Text(
-                  label.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: tokens.inkMuted,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ],
-            ),
-            const Spacer(),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 42,
-                fontWeight: FontWeight.w800,
-                color: tokens.ink,
-                height: 1,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              helper,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: tokens.inkMuted,
-                fontSize: 10,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DeploymentTile extends StatelessWidget {
-  const _DeploymentTile({
-    required this.active,
-    required this.total,
-    required this.accentColor,
-  });
-
-  final int active;
-  final int total;
-  final Color accentColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = CissThemeTokens.of(context);
-    final double progress = total <= 0 ? 0.0 : (active / total).clamp(0, 1).toDouble();
-    final int percent = (progress * 100).toInt();
-
-    return GlassCard(
-      accentColor: accentColor,
-      child: SizedBox(
-        width: 160,
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'DEPLOYMENT',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: tokens.inkMuted,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '$percent%',
-                    style: TextStyle(
-                      fontSize: 42,
-                      fontWeight: FontWeight.w800,
-                      color: accentColor,
-                      height: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '$active of $total on duty',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: tokens.inkMuted,
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 48,
-              height: 48,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CircularProgressIndicator(
-                    value: 1.0,
-                    strokeWidth: 6,
-                    color: accentColor.withValues(alpha: 0.1),
-                  ),
-                  CircularProgressIndicator(
-                    value: progress,
-                    strokeWidth: 6,
-                    color: accentColor,
-                    strokeCap: StrokeCap.round,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _QuickActionsGrid extends StatelessWidget {
-  const _QuickActionsGrid({required this.ref});
-  final WidgetRef ref;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = CissThemeTokens.of(context);
-    final List<_QuickAction> actions = <_QuickAction>[
-      _QuickAction(
-        label: 'Work Orders',
-        icon: Icons.assignment_turned_in_rounded,
-        color: tokens.primary,
-        tabIndex: 1,
-      ),
-      _QuickAction(
-        label: 'Guards',
-        icon: Icons.groups_2_rounded,
-        color: tokens.success,
-        tabIndex: 2,
-      ),
-      _QuickAction(
-        label: 'Visit Report',
-        icon: Icons.fact_check_rounded,
-        color: tokens.warning,
-        tabIndex: 4,
-      ),
-      _QuickAction(
-        label: 'Training',
-        icon: Icons.school_rounded,
-        color: tokens.accent,
-        tabIndex: 4,
-      ),
-    ];
-
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      childAspectRatio: 1.6,
-      children: actions.map((action) => _ActionCard(action: action, ref: ref)).toList(),
-    );
-  }
-}
-
-class _QuickAction {
-  const _QuickAction({
-    required this.label,
-    required this.icon,
-    required this.color,
-    required this.tabIndex,
-  });
-  final String label;
-  final IconData icon;
-  final Color color;
-  final int tabIndex;
-}
-
-class _ActionCard extends StatelessWidget {
-  const _ActionCard({required this.action, required this.ref});
-  final _QuickAction action;
-  final WidgetRef ref;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = CissThemeTokens.of(context);
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => ref.read(fieldOfficerTabIndexProvider.notifier).state = action.tabIndex,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: GlassCard(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          accentColor: action.color,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: action.color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                ),
-                child: Icon(action.icon, color: action.color, size: 20),
-              ),
-              const Spacer(),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      action.label,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: tokens.ink,
-                      ),
-                    ),
-                  ),
-                  Icon(Icons.arrow_forward_rounded, size: 14, color: tokens.inkMuted),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AttendanceOverview extends ConsumerWidget {
-  const _AttendanceOverview({required this.data});
   final FieldOfficerDashboardSnapshot data;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = CissThemeTokens.of(context);
-    final theme = Theme.of(context);
-    final districts = data.attendanceSummary.districts;
-    final sites = data.attendanceSites;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'ATTENDANCE FEED',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2,
-            color: tokens.inkMuted,
-          ),
-        ),
-        const SizedBox(height: 12),
-        GlassCard(
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: [
+    final districts = data.assignedDistricts.isEmpty
+        ? 'No district assigned'
+        : data.assignedDistricts.join(', ');
+
+    final hour = DateTime.now().hour;
+    final greeting = hour < 12
+        ? 'Good morning'
+        : hour < 17
+            ? 'Good afternoon'
+            : 'Good evening';
+
+    final summary = data.attendanceSummary;
+    final checkedIn = summary.checkedInToday;
+    final onDuty = summary.onDutyNow;
+    final coverage = checkedIn <= 0
+        ? 0.0
+        : (onDuty / checkedIn).clamp(0, 1).toDouble();
+
+    return Scaffold(
+      backgroundColor: tokens.canvas,
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: () async => ref.invalidate(fieldOfficerDashboardProvider),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              0,
+              AppSpacing.sm,
+              0,
+              AppSpacing.xxl,
+            ),
+            children: <Widget>[
+              // Top bar: sync + refresh
               Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                 child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Daily Coverage',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: tokens.ink,
-                            ),
-                          ),
-                          Text(
-                            data.attendanceSummary.date.isEmpty ? 'Today' : data.attendanceSummary.date,
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        ],
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: <Widget>[
+                    const SyncStatusBadge(),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      onPressed: () =>
+                          ref.invalidate(fieldOfficerDashboardProvider),
+                      icon: Icon(
+                        Icons.refresh_rounded,
+                        color: tokens.inkMuted,
+                        size: 20,
                       ),
                     ),
-                    StatusChip(
-                      label: data.stateCode.isEmpty ? 'LIVE' : data.stateCode,
-                      icon: Icons.radar_rounded,
-                      tone: StatusChipTone.info,
-                    ),
                   ],
                 ),
               ),
-              Divider(height: 1, color: tokens.border.withValues(alpha: 0.3)),
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Column(
-                  children: [
-                    if (districts.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        child: Text(
-                          'Waiting for morning check-ins...',
-                          style: theme.textTheme.bodySmall?.copyWith(fontStyle: FontStyle.italic),
-                        ),
-                      )
-                    else
-                      ...districts.map((d) => _ProgressLine(
-                        label: d.district,
-                        checkedIn: d.checkedInToday,
-                        onDuty: d.onDutyNow,
-                        accentColor: tokens.primary,
-                      )),
-                    
-                    if (sites.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      ...sites.take(3).map((s) => _ProgressLine(
-                        label: s.siteName,
-                        sublabel: s.clientName,
-                        checkedIn: s.checkedInToday,
-                        onDuty: s.onDutyNow,
-                        accentColor: tokens.success,
-                      )),
-                    ],
-                  ],
-                ),
+
+              const SizedBox(height: AppSpacing.sm),
+
+              // 1. Header
+              DashboardHeader(
+                greeting: greeting,
+                name: data.name,
+                subtitle: districts,
               ),
-              if (sites.length > 3)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: TextButton(
-                    onPressed: () => ref.read(fieldOfficerTabIndexProvider.notifier).state = 3,
-                    child: Text(
-                      'View all ${sites.length} sites',
-                      style: TextStyle(fontWeight: FontWeight.w700, color: tokens.primary),
-                    ),
+
+              const SizedBox(height: AppSpacing.lg),
+
+              // 2. Stat pills
+              StatPillRow(
+                pills: <StatPill>[
+                  StatPill(
+                    label: 'Total Guards',
+                    value: '${data.totalGuards}',
+                    accentColor: tokens.primary,
+                    icon: Icons.groups_2_rounded,
                   ),
-                ),
+                  StatPill(
+                    label: 'On Duty',
+                    value: '$onDuty',
+                    accentColor: tokens.success,
+                    icon: Icons.radio_button_checked_rounded,
+                  ),
+                  StatPill(
+                    label: 'Check-ins',
+                    value: '$checkedIn',
+                    accentColor: tokens.accent,
+                    icon: Icons.login_rounded,
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: AppSpacing.lg),
+
+              // 3. Quick actions
+              QuickActionBar(
+                actions: <QuickAction>[
+                  QuickAction(
+                    icon: Icons.assignment_turned_in_rounded,
+                    label: 'Orders',
+                    color: tokens.primary,
+                    onTap: () => ref
+                        .read(fieldOfficerTabIndexProvider.notifier)
+                        .state = 1,
+                  ),
+                  QuickAction(
+                    icon: Icons.groups_2_rounded,
+                    label: 'Guards',
+                    color: tokens.success,
+                    onTap: () => ref
+                        .read(fieldOfficerTabIndexProvider.notifier)
+                        .state = 2,
+                  ),
+                  QuickAction(
+                    icon: Icons.fact_check_rounded,
+                    label: 'Attendance',
+                    color: tokens.warning,
+                    onTap: () => ref
+                        .read(fieldOfficerTabIndexProvider.notifier)
+                        .state = 3,
+                  ),
+                  QuickAction(
+                    icon: Icons.edit_note_rounded,
+                    label: 'Reports',
+                    color: tokens.accent,
+                    onTap: () => ref
+                        .read(fieldOfficerTabIndexProvider.notifier)
+                        .state = 4,
+                  ),
+                  QuickAction(
+                    icon: Icons.notifications_active_rounded,
+                    label: 'Alerts',
+                    color: tokens.danger,
+                    onTap: () {},
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: AppSpacing.xl),
+
+              // 4. Attendance coverage
+              _AttendanceCoverage(
+                data: data,
+                coverage: coverage,
+                onViewAll: () => ref
+                    .read(fieldOfficerTabIndexProvider.notifier)
+                    .state = 3,
+              ),
+
+              const SizedBox(height: AppSpacing.xl),
+
+              // 5. Pending items (if any)
+              if (data.recentWorkOrders.isNotEmpty ||
+                  data.recentVisitReports.isNotEmpty ||
+                  data.recentTrainingReports.isNotEmpty)
+                _PendingItems(data: data),
+
+              const SizedBox(height: AppSpacing.xxl),
             ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
+
+// ── Attendance coverage section ──────────────────────────────────────────────
+
+class _AttendanceCoverage extends StatelessWidget {
+  const _AttendanceCoverage({
+    required this.data,
+    required this.coverage,
+    this.onViewAll,
+  });
+
+  final FieldOfficerDashboardSnapshot data;
+  final double coverage;
+  final VoidCallback? onViewAll;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    final summary = data.attendanceSummary;
+    final districts = summary.districts;
+    final sites = data.attendanceSites;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Text(
+                'Attendance coverage',
+                style: AppTypography.title(context).copyWith(fontSize: 18),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: tokens.primarySoft,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+                child: Text(
+                  '${(coverage * 100).toInt()}%',
+                  style: AppTypography.label(context).copyWith(
+                    color: tokens.primary,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          GlassCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text(
+                              'Daily Coverage',
+                              style: AppTypography.cardTitle(context),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              summary.date.isEmpty
+                                  ? 'Today'
+                                  : summary.date,
+                              style: AppTypography.micro(context).copyWith(
+                                color: tokens.inkMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      StatusChip(
+                        label: data.stateCode.isEmpty
+                            ? 'LIVE'
+                            : data.stateCode,
+                        icon: Icons.radar_rounded,
+                        tone: StatusChipTone.info,
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(
+                  height: 1,
+                  color: tokens.border.withValues(alpha: 0.3),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Column(
+                    children: <Widget>[
+                      if (districts.isEmpty)
+                        Text(
+                          'Waiting for morning check-ins...',
+                          style: AppTypography.body(context).copyWith(
+                            fontStyle: FontStyle.italic,
+                            color: tokens.inkMuted,
+                          ),
+                        )
+                      else
+                        ...districts.map(
+                          (d) => _ProgressLine(
+                            label: d.district,
+                            checkedIn: d.checkedInToday,
+                            onDuty: d.onDutyNow,
+                            accentColor: tokens.primary,
+                          ),
+                        ),
+                      if (sites.isNotEmpty) ...<Widget>[
+                        const SizedBox(height: AppSpacing.md),
+                        Divider(
+                          height: 1,
+                          color: tokens.border.withValues(alpha: 0.2),
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        ...sites.take(3).map(
+                          (s) => _ProgressLine(
+                            label: s.siteName,
+                            sublabel: s.clientName,
+                            checkedIn: s.checkedInToday,
+                            onDuty: s.onDutyNow,
+                            accentColor: tokens.success,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (sites.length > 3 && onViewAll != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: TextButton(
+                      onPressed: onViewAll,
+                      child: Text(
+                        'View all ${sites.length} sites',
+                        style: AppTypography.bodyStrong(context).copyWith(
+                          color: tokens.primary,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Pending items ────────────────────────────────────────────────────────────
+
+class _PendingItems extends StatelessWidget {
+  const _PendingItems({required this.data});
+
+  final FieldOfficerDashboardSnapshot data;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+
+    final pendingOrders = data.recentWorkOrders
+        .where((w) => w.assignedCount < w.totalManpower)
+        .length;
+    final pendingVisits = data.recentVisitReports
+        .where((r) => r.status == 'draft')
+        .length;
+    final pendingTraining = data.recentTrainingReports
+        .where((r) => r.status == 'draft')
+        .length;
+
+    final items = <ActivityItem>[];
+
+    if (data.recentWorkOrders.isNotEmpty) {
+      items.add(
+        ActivityItem(
+          icon: Icons.assignment_late_rounded,
+          iconColor: tokens.primary,
+          iconBgColor: tokens.primarySoft,
+          title: 'Work Orders',
+          subtitle: pendingOrders > 0
+              ? '$pendingOrders need staffing'
+              : 'All staffed',
+          trailing: '${data.recentWorkOrders.length}',
+        ),
+      );
+    }
+
+    if (data.recentVisitReports.isNotEmpty) {
+      items.add(
+        ActivityItem(
+          icon: Icons.fact_check_rounded,
+          iconColor: tokens.warning,
+          iconBgColor: tokens.warningSoft,
+          title: 'Visit Reports',
+          subtitle: pendingVisits > 0
+              ? '$pendingVisits drafts pending'
+              : 'All submitted',
+          trailing: '${data.recentVisitReports.length}',
+        ),
+      );
+    }
+
+    if (data.recentTrainingReports.isNotEmpty) {
+      items.add(
+        ActivityItem(
+          icon: Icons.school_rounded,
+          iconColor: tokens.success,
+          iconBgColor: tokens.successSoft,
+          title: 'Training Reports',
+          subtitle: pendingTraining > 0
+              ? '$pendingTraining drafts pending'
+              : 'All submitted',
+          trailing: '${data.recentTrainingReports.length}',
+        ),
+      );
+    }
+
+    return ActivityFeed(
+      title: 'Pending items',
+      items: items,
+    );
+  }
+}
+
+// ── Progress line widget ─────────────────────────────────────────────────────
 
 class _ProgressLine extends StatelessWidget {
   const _ProgressLine({
@@ -552,24 +485,24 @@ class _ProgressLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    final double p = checkedIn <= 0 ? 0 : (onDuty / checkedIn).clamp(0, 1).toDouble();
+    final p = checkedIn <= 0
+        ? 0.0
+        : (onDuty / checkedIn).clamp(0, 1).toDouble();
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        children: <Widget>[
           Row(
-            children: [
+            children: <Widget>[
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                  children: <Widget>[
                     Text(
                       label,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
+                      style: AppTypography.bodyStrong(context).copyWith(
                         color: tokens.ink,
                       ),
                       maxLines: 1,
@@ -578,17 +511,18 @@ class _ProgressLine extends StatelessWidget {
                     if (sublabel != null)
                       Text(
                         sublabel!,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tokens.inkMuted),
+                        style: AppTypography.micro(context).copyWith(
+                          color: tokens.inkMuted,
+                        ),
                       ),
                   ],
                 ),
               ),
               Text(
                 '$onDuty / $checkedIn',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                style: AppTypography.bodyStrong(context).copyWith(
                   color: accentColor,
+                  fontSize: 13,
                 ),
               ),
             ],
@@ -602,241 +536,6 @@ class _ProgressLine extends StatelessWidget {
               backgroundColor: accentColor.withValues(alpha: 0.1),
               valueColor: AlwaysStoppedAnimation<Color>(accentColor),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ComplianceTile extends StatelessWidget {
-  const _ComplianceTile({
-    required this.checkedIn,
-    required this.onDuty,
-    required this.accentColor,
-  });
-
-  final int checkedIn;
-  final int onDuty;
-  final Color accentColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = CissThemeTokens.of(context);
-    final double progress =
-        onDuty <= 0 ? 0.0 : (checkedIn / onDuty).clamp(0, 1).toDouble();
-    final int percent = (progress * 100).toInt();
-
-    return GlassCard(
-      accentColor: accentColor,
-      child: SizedBox(
-        width: 160,
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'COMPLIANCE',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: tokens.inkMuted,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '$percent%',
-                    style: TextStyle(
-                      fontSize: 42,
-                      fontWeight: FontWeight.w800,
-                      color: accentColor,
-                      height: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '$checkedIn of $onDuty present',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: tokens.inkMuted,
-                          fontSize: 10,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            SizedBox(
-              width: 48,
-              height: 48,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CircularProgressIndicator(
-                    value: 1.0,
-                    strokeWidth: 6,
-                    color: accentColor.withValues(alpha: 0.1),
-                  ),
-                  CircularProgressIndicator(
-                    value: progress,
-                    strokeWidth: 6,
-                    color: accentColor,
-                    strokeCap: StrokeCap.round,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PendingReportsSummary extends StatelessWidget {
-  const _PendingReportsSummary({required this.data});
-
-  final FieldOfficerDashboardSnapshot data;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = CissThemeTokens.of(context);
-    final theme = Theme.of(context);
-
-    final int pendingOrders =
-        data.recentWorkOrders.where((w) => w.assignedCount < w.totalManpower).length;
-    final int pendingVisits =
-        data.recentVisitReports.where((r) => r.status == 'draft').length;
-    final int pendingTraining =
-        data.recentTrainingReports.where((r) => r.status == 'draft').length;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'PENDING REPORTS',
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 2,
-            color: tokens.inkMuted,
-          ),
-        ),
-        const SizedBox(height: 12),
-        GlassCard(
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              if (data.recentWorkOrders.isNotEmpty) ...[
-                _ReportRow(
-                  icon: Icons.assignment_late_rounded,
-                  label: 'Work Orders',
-                  count: data.recentWorkOrders.length,
-                  accent: tokens.primary,
-                  subtitle: pendingOrders > 0
-                      ? '$pendingOrders need staffing'
-                      : 'All staffed',
-                ),
-              ],
-              if (data.recentVisitReports.isNotEmpty) ...[
-                if (data.recentWorkOrders.isNotEmpty)
-                  Divider(
-                    height: 1,
-                    color: tokens.border.withValues(alpha: 0.3),
-                  ),
-                _ReportRow(
-                  icon: Icons.fact_check_rounded,
-                  label: 'Visit Reports',
-                  count: data.recentVisitReports.length,
-                  accent: tokens.warning,
-                  subtitle: pendingVisits > 0
-                      ? '$pendingVisits drafts pending'
-                      : 'All submitted',
-                ),
-              ],
-              if (data.recentTrainingReports.isNotEmpty) ...[
-                if (data.recentWorkOrders.isNotEmpty ||
-                    data.recentVisitReports.isNotEmpty)
-                  Divider(
-                    height: 1,
-                    color: tokens.border.withValues(alpha: 0.3),
-                  ),
-                _ReportRow(
-                  icon: Icons.school_rounded,
-                  label: 'Training Reports',
-                  count: data.recentTrainingReports.length,
-                  accent: tokens.success,
-                  subtitle: pendingTraining > 0
-                      ? '$pendingTraining drafts pending'
-                      : 'All submitted',
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ReportRow extends StatelessWidget {
-  const _ReportRow({
-    required this.icon,
-    required this.label,
-    required this.count,
-    required this.accent,
-    required this.subtitle,
-  });
-
-  final IconData icon;
-  final String label;
-  final int count;
-  final Color accent;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = CissThemeTokens.of(context);
-    return Padding(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-            ),
-            child: Icon(icon, color: accent, size: 20),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: tokens.ink,
-                  ),
-                ),
-                Text(
-                  subtitle,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: tokens.inkMuted,
-                      ),
-                ),
-              ],
-            ),
-          ),
-          StatusChip(
-            label: '$count',
-            tone: StatusChipTone.info,
           ),
         ],
       ),

@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/auth/biometric_credential_store.dart';
 import '../../../core/auth/saved_accounts_service.dart';
 import '../../../core/fcm/providers.dart';
 import '../../../core/models/auth_session.dart';
@@ -26,6 +28,12 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
 
   @override
   Future<AuthSession?> build() async {
+    ref.onDispose(() {
+      _disposed = true;
+      _authSubscription?.cancel();
+      _authSubscription = null;
+    });
+
     final auth = ref.watch(firebaseAuthProvider);
 
     // Cancel any previous listener and await to prevent duplicate subscriptions.
@@ -103,14 +111,6 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
     });
   }
 
-  @override
-  void dispose() {
-    _disposed = true;
-    _authSubscription?.cancel();
-    _authSubscription = null;
-    super.dispose();
-  }
-
   /// Inject a session after a fresh login — avoids a redundant backend call.
   void setSession(AuthSession session) {
     if (_disposed) return;
@@ -143,6 +143,7 @@ class AuthController {
   Future<AuthSession> signInAsGuard({
     required String loginIdOrPhone,
     required String pin,
+    bool saveForBiometric = false,
   }) async {
     // 1. Authenticate with Firebase via the custom token from the backend.
     final session = await _ref
@@ -156,14 +157,27 @@ class AuthController {
     );
 
     // 3. Persist the account for quick login next time.
+    final trimmedLoginId = loginIdOrPhone.trim();
     unawaited(_ref.read(savedAccountsServiceProvider).saveAccount(
       SavedAccount(
         role: 'guard',
-        loginId: loginIdOrPhone.trim(),
+        loginId: trimmedLoginId,
         displayName: session.displayName,
         lastLoginAt: DateTime.now(),
+        biometricEnabled: saveForBiometric,
       ),
     ));
+
+    // 4. If biometric login is requested, encrypt and store the PIN.
+    if (saveForBiometric) {
+      unawaited(
+        _ref.read(biometricCredentialStoreProvider).saveCredentials(
+          role: 'guard',
+          loginId: trimmedLoginId,
+          password: pin,
+        ),
+      );
+    }
 
     return session;
   }
@@ -193,6 +207,7 @@ class AuthController {
   Future<AuthSession> signInAsFieldOfficer({
     required String email,
     required String password,
+    bool saveForBiometric = false,
   }) async {
     // 1. Authenticate with Firebase directly.
     final session = await _ref
@@ -206,16 +221,82 @@ class AuthController {
     );
 
     // 3. Persist the account.
+    final trimmedEmail = email.trim();
     unawaited(_ref.read(savedAccountsServiceProvider).saveAccount(
       SavedAccount(
         role: 'fieldOfficer',
-        loginId: email.trim(),
+        loginId: trimmedEmail,
         displayName: session.displayName,
         lastLoginAt: DateTime.now(),
+        biometricEnabled: saveForBiometric,
       ),
     ));
 
+    // 4. If biometric login is requested, encrypt and store the password.
+    if (saveForBiometric) {
+      unawaited(
+        _ref.read(biometricCredentialStoreProvider).saveCredentials(
+          role: 'fieldOfficer',
+          loginId: trimmedEmail,
+          password: password,
+        ),
+      );
+    }
+
     return session;
+  }
+
+  /// Retrieve stored credentials for biometric auto-login.
+  Future<String?> getStoredPassword({
+    required String role,
+    required String loginId,
+  }) async {
+    return _ref.read(biometricCredentialStoreProvider).getPassword(
+      role: role,
+      loginId: loginId,
+    );
+  }
+
+  /// Enable or disable biometric login for a saved account.
+  Future<void> setBiometricEnabled({
+    required String role,
+    required String loginId,
+    required bool enabled,
+  }) async {
+    try {
+      final service = _ref.read(savedAccountsServiceProvider);
+      final accounts = await service.loadAll();
+      final target = accounts.firstWhere(
+        (a) => a.role == role && a.loginId == loginId,
+      );
+      final updated = target.withUpdated(biometricEnabled: enabled);
+
+      final updatedList = accounts.map((a) {
+        if (a.role == role && a.loginId == loginId) return updated;
+        return a;
+      }).toList();
+
+      await service.saveAll(updatedList);
+
+      if (!enabled) {
+        await _ref.read(biometricCredentialStoreProvider).deleteCredentials(
+          role: role,
+          loginId: loginId,
+        );
+      }
+    } catch (e) {
+      debugPrint('setBiometricEnabled error: $e');
+    }
+  }
+
+  Future<void> deleteBiometricCredentials({
+    required String role,
+    required String loginId,
+  }) async {
+    await _ref.read(biometricCredentialStoreProvider).deleteCredentials(
+      role: role,
+      loginId: loginId,
+    );
   }
 
   Future<void> signOut() async {

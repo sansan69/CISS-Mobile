@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../application/auth_controller.dart';
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/models/app_role.dart';
+import '../../../core/models/auth_session.dart';
 import '../../../app/theme/theme_mode_controller.dart';
 import '../../../core/auth/biometric_service.dart';
 import '../../field_officer/presentation/field_officer_shell.dart';
@@ -163,10 +164,13 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
   }
 
   /// Check guard permissions in the background without blocking the UI.
+  /// Routes to permission onboarding if any critical permission is missing.
   void _checkGuardPermissionsInBackground() {
     Future.wait([
       Permission.location.status,
+      Permission.locationAlways.status,
       Permission.camera.status,
+      Permission.notification.status,
     ]).then((statuses) {
       final allGranted = statuses.every((s) => s.isGranted);
       if (!allGranted && mounted) {
