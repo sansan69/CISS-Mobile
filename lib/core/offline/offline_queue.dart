@@ -57,7 +57,6 @@ class OfflineQueue extends ChangeNotifier {
     final requests = <OfflineRequest>[];
     for (final entry in _box.values) {
       try {
-        if (entry is! Map) continue;
         final map = Map<String, dynamic>.from(entry);
         requests.add(OfflineRequest.fromJson(map));
       } catch (e) {

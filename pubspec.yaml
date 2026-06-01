@@ -65,6 +65,8 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   flutter_secure_storage: ^10.0.0
   local_auth: ^2.2.0
+  local_auth_android: ^1.0.52
+  local_auth_darwin: ^1.6.0
   camera: ^0.11.1
   cloud_firestore: ^5.6.6
 

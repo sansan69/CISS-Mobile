@@ -1,4 +1,4 @@
-/// Shared date/time formatting utilities used across attendance screens.
+// Shared date/time formatting utilities used across attendance screens.
 
 const _months = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',

@@ -141,7 +141,7 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
             GuardFormCard(
               children: <Widget>[
                 DropdownButtonFormField<String>(
-                  value: _type,
+                  initialValue: _type,
                   items: const <DropdownMenuItem<String>>[
                     DropdownMenuItem<String>(
                       value: 'casual',

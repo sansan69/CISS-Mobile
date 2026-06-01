@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 /// Subtle security-grid background painter for login screens.
@@ -13,11 +12,13 @@ class SecurityGridBackground extends StatefulWidget {
     this.gridColor,
     this.dotColor,
     this.child,
+    this.animate = true,
   });
 
   final Color? gridColor;
   final Color? dotColor;
   final Widget? child;
+  final bool animate;
 
   @override
   State<SecurityGridBackground> createState() => _SecurityGridBackgroundState();
@@ -33,7 +34,10 @@ class _SecurityGridBackgroundState extends State<SecurityGridBackground>
     _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 20),
-    )..repeat();
+    );
+    if (widget.animate) {
+      _ctrl.repeat();
+    }
   }
 
   @override
@@ -52,6 +56,7 @@ class _SecurityGridBackgroundState extends State<SecurityGridBackground>
         return CustomPaint(
           painter: _SecurityGridPainter(
             progress: _ctrl.value,
+            isDark: isDark,
             gridColor: widget.gridColor ??
                 (isDark
                     ? const Color(0xFF1A2A41).withValues(alpha: 0.5)
@@ -74,11 +79,13 @@ class _SecurityGridPainter extends CustomPainter {
     required this.progress,
     required this.gridColor,
     required this.dotColor,
+    required this.isDark,
   });
 
   final double progress;
   final Color gridColor;
   final Color dotColor;
+  final bool isDark;
 
   static const double _spacing = 48.0;
   static const double _dotSpacing = _spacing * 2.5;
@@ -128,6 +135,7 @@ class _SecurityGridPainter extends CustomPainter {
     }
 
     // Bottom gradient fade to ensure form readability
+    final scaffoldBg = isDark ? const Color(0xFF0B1320) : Colors.white;
     final fadePaint = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
@@ -135,8 +143,8 @@ class _SecurityGridPainter extends CustomPainter {
         colors: [
           Colors.transparent,
           Colors.transparent,
-          Colors.white.withValues(alpha: 0.7),
-          Colors.white.withValues(alpha: 0.95),
+          scaffoldBg.withValues(alpha: 0.7),
+          scaffoldBg.withValues(alpha: 0.95),
         ],
         stops: const [0.0, 0.5, 0.75, 1.0],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));

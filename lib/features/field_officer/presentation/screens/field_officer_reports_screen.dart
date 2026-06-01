@@ -9,11 +9,9 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/report_models.dart';
-import '../../../../../core/network/mobile_repository.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/offline/draft_service.dart';
@@ -762,12 +760,17 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
   final List<_PhotoEntry> _photos = <_PhotoEntry>[];
   final List<_PhotoEntry> _clientReportPhotos = <_PhotoEntry>[];
   final ImagePicker _picker = ImagePicker();
-  final Uuid _uuid = const Uuid();
 
   String _reportStatus = 'submitted'; // 'draft' | 'submitted'
   Map<String, double>? _visitLocation;
   bool _loading = false;
   String? _error;
+
+  // Guard attendee selection for training reports
+  final List<Map<String, String>> _selectedAttendees = <Map<String, String>>[]; // [{userId, name}]
+  final List<Map<String, String>> _availableGuards = <Map<String, String>>[]; // cached guard list for picker
+  bool _guardsLoaded = false;
+  bool _gpsLoading = false;
 
   static final DateFormat _displayFmt = DateFormat('dd/MM/yyyy');
   static final DateFormat _apiFmt = DateFormat('yyyy-MM-dd');
@@ -992,6 +995,28 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     } catch (_) {}
   }
 
+  Future<void> _captureGpsLocation() async {
+    setState(() => _gpsLoading = true);
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 10)),
+      );
+      if (mounted) {
+        setState(() {
+          _visitLocation = {'lat': pos.latitude, 'lng': pos.longitude};
+          _gpsLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _gpsLoading = false;
+          _error = 'Failed to get GPS location. Ensure location services are enabled.';
+        });
+      }
+    }
+  }
+
   void _removePhoto(int index) {
     setState(() => _photos.removeAt(index));
   }
@@ -1093,16 +1118,35 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           'guardsAbsentCount': int.tryParse(_visitAbsentCtrl.text.trim()) ?? 0,
         };
       } else {
+        final topic = _trainingTopicCtrl.text.trim();
+        if (topic.isEmpty) {
+          setState(() {
+            _loading = false;
+            _error = 'Please enter a training topic.';
+          });
+          return;
+        }
+
+        final attendeeCount = int.tryParse(_trainingAttendeeCtrl.text.trim()) ?? _selectedAttendees.length;
+        if (attendeeCount < 1) {
+          setState(() {
+            _loading = false;
+            _error = 'Please specify at least one attendee. Use the "Add Guards" button or enter a count.';
+          });
+          return;
+        }
+
         path = '/api/field-officer/training-reports';
         photoFolder = 'trainingReports';
         payload = {
           ...common,
           'trainingDate': _apiFmt.format(date),
           'durationMinutes': int.tryParse(_trainingDurationCtrl.text.trim()) ?? 60,
-          'topic': _trainingTopicCtrl.text.trim(),
+          'topic': topic,
           'description': _trainingDescCtrl.text.trim(),
-          'attendeeIds': <String>[],
-          'attendeeCount': int.tryParse(_trainingAttendeeCtrl.text.trim()) ?? 0,
+          'attendeeIds': _selectedAttendees.map((g) => g['userId']!).toList(),
+          'attendeeNames': _selectedAttendees.map((g) => g['name']!).toList(),
+          'attendeeCount': attendeeCount,
         };
       }
 
@@ -1241,7 +1285,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                   children: [
                     if (widget.workOrders.isNotEmpty) ...[
                       DropdownButtonFormField<WorkOrderModel>(
-                        value: _selectedWorkOrder,
+                        initialValue: _selectedWorkOrder,
                         decoration: const InputDecoration(
                           labelText: 'Link to Work Order',
                           prefixIcon: Icon(Icons.assignment_turned_in_rounded),
@@ -1313,6 +1357,62 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           decoration: const InputDecoration(labelText: 'Visit Date', prefixIcon: Icon(Icons.calendar_today_rounded)),
         ),
         const SizedBox(height: 16),
+        // GPS Location Capture
+        InkWell(
+          onTap: _gpsLoading ? null : () => _captureGpsLocation(),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: _visitLocation != null
+                  ? const Color(0xFF4CAF50).withValues(alpha: 0.08)
+                  : const Color(0xFF2196F3).withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: _visitLocation != null
+                    ? const Color(0xFF4CAF50).withValues(alpha: 0.3)
+                    : const Color(0xFF2196F3).withValues(alpha: 0.2),
+              ),
+            ),
+            child: _gpsLoading
+                ? const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                      SizedBox(width: 12),
+                      Text('Getting location...'),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Icon(
+                        _visitLocation != null ? Icons.location_on_rounded : Icons.gps_fixed_rounded,
+                        size: 20,
+                        color: _visitLocation != null ? const Color(0xFF4CAF50) : const Color(0xFF2196F3),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        _visitLocation != null
+                            ? '📍 Location Captured (${_visitLocation!['lat']!.toStringAsFixed(5)}, ${_visitLocation!['lng']!.toStringAsFixed(5)})'
+                            : '📡 Tap to Capture GPS Location',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: _visitLocation != null ? const Color(0xFF4CAF50) : const Color(0xFF2196F3),
+                        ),
+                      ),
+                      const Spacer(),
+                      if (_visitLocation != null)
+                        GestureDetector(
+                          onTap: () { setState(() => _visitLocation = null); },
+                          child: const Icon(Icons.close_rounded, size: 18, color: Colors.grey),
+                        ),
+                    ],
+                  ),
+          ),
+        ),
+        const SizedBox(height: 16),
         Row(
           children: [
             Expanded(child: TextField(controller: _visitPresentCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Guards Present'))),
@@ -1338,18 +1438,203 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           decoration: const InputDecoration(labelText: 'Training Date', prefixIcon: Icon(Icons.calendar_today_rounded)),
         ),
         const SizedBox(height: 16),
-        TextField(controller: _trainingTopicCtrl, decoration: const InputDecoration(labelText: 'Training Topic')),
+        TextField(
+          controller: _trainingTopicCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Training Topic *',
+            hintText: 'e.g. Fire Safety, SOP, Client Procedures',
+          ),
+        ),
         const SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: TextField(controller: _trainingDurationCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Duration (Min)'))),
+            Expanded(child: TextField(controller: _trainingDurationCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Duration (Min)')))
+,
             const SizedBox(width: 16),
             Expanded(child: TextField(controller: _trainingAttendeeCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Attendee Count'))),
           ],
         ),
         const SizedBox(height: 16),
+        _buildAttendeePicker(),
+        const SizedBox(height: 16),
         TextField(controller: _trainingDescCtrl, maxLines: 4, decoration: const InputDecoration(labelText: 'Notes/Outcomes')),
       ],
+    );
+  }
+
+  Widget _buildAttendeePicker() {
+    final tokens = CissThemeTokens.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'TRAINING ATTENDEES',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: tokens.inkMuted, letterSpacing: 1),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () => _showGuardPicker(context),
+              icon: const Icon(Icons.person_add_rounded, size: 16),
+              label: const Text('Add Guards'),
+              style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+            ),
+          ],
+        ),
+        if (_selectedAttendees.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'No guards selected. Use "Add Guards" to select training attendees.',
+              style: TextStyle(fontSize: 12, color: tokens.inkMuted),
+            ),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: _selectedAttendees.map((g) => Chip(
+              avatar: CircleAvatar(
+                radius: 12,
+                backgroundColor: tokens.accent.withValues(alpha: 0.15),
+                child: Text(
+                  g['name']!.isNotEmpty ? g['name']![0].toUpperCase() : 'G',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: tokens.accent),
+                ),
+              ),
+              label: Text(g['name']!, style: const TextStyle(fontSize: 12)),
+              deleteIcon: const Icon(Icons.close_rounded, size: 14),
+              onDeleted: () {
+                setState(() => _selectedAttendees.removeWhere((item) => item['userId'] == g['userId']));
+              },
+              visualDensity: VisualDensity.compact,
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            )).toList(),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _loadGuardsForPicker() async {
+    if (_guardsLoaded || _selectedWorkOrder == null) return;
+    try {
+      final repo = ref.read(mobileRepositoryProvider);
+      final guards = await repo.fetchGuardsForSite(
+        clientId: _selectedWorkOrder!.clientId,
+        siteId: _selectedWorkOrder!.siteId,
+      );
+      if (mounted) {
+        setState(() {
+          _availableGuards.clear();
+          for (final g in guards) {
+            if (g['id'] is String && g['name'] is String) {
+              _availableGuards.add({'userId': g['id'] as String, 'name': g['name'] as String});
+            }
+          }
+          _guardsLoaded = true;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        // Fallback: if fetch fails, still allow picking
+        _guardsLoaded = true;
+      }
+    }
+  }
+
+  void _showGuardPicker(BuildContext context) async {
+    await _loadGuardsForPicker();
+    if (!mounted) return;
+
+    final selected = List<Map<String, String>>.from(_selectedAttendees);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        final tokens = CissThemeTokens.of(ctx);
+        return StatefulBuilder(
+          builder: (_, setModalState) => DraggableScrollableSheet(
+            initialChildSize: 0.6,
+            maxChildSize: 0.9,
+            minChildSize: 0.3,
+            expand: false,
+            builder: (_, scrollCtrl) => Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Text('Select Guard Attendees', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                      const Spacer(),
+                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (_availableGuards.isEmpty)
+                    Expanded(
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.people_outline_rounded, size: 48, color: tokens.inkMuted),
+                            const SizedBox(height: 12),
+                            Text('No guards found for this site.', style: TextStyle(color: tokens.inkMuted)),
+                            const SizedBox(height: 8),
+                            Text('You can still enter attendee count manually.', style: TextStyle(fontSize: 12, color: tokens.inkMuted)),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: ListView(
+                        controller: scrollCtrl,
+                        children: _availableGuards.map((g) {
+                          final isSelected = selected.any((s) => s['userId'] == g['userId']);
+                          return CheckboxListTile(
+                            value: isSelected,
+                            title: Text(g['name']!),
+                            subtitle: Text('Guard', style: TextStyle(fontSize: 12, color: tokens.inkMuted)),
+                            onChanged: (v) {
+                              setModalState(() {
+                                if (v == true && !isSelected) {
+                                  selected.add(g);
+                                } else {
+                                  selected.removeWhere((s) => s['userId'] == g['userId']);
+                                }
+                              });
+                            },
+                            controlAffinity: ListTileControlAffinity.leading,
+                            dense: true,
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: FilledButton(
+                      onPressed: () {
+                        setState(() {
+                          _selectedAttendees.clear();
+                          _selectedAttendees.addAll(selected);
+                        });
+                        Navigator.pop(ctx);
+                      },
+                      child: Text('Confirm ${selected.length} Attendee(s)'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 

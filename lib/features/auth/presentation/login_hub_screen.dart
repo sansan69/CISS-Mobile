@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -147,7 +145,7 @@ class _LoginHubScreenState extends State<LoginHubScreen>
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                   child: SizedBox(
-                    height: 240,
+                    height: 248,
                     child: FadeTransition(
                       opacity: _fade(0.15, 0.6),
                       child: SlideTransition(
@@ -174,7 +172,7 @@ class _LoginHubScreenState extends State<LoginHubScreen>
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
                   child: SizedBox(
-                    height: 240,
+                    height: 248,
                     child: FadeTransition(
                       opacity: _fade(0.25, 0.7),
                       child: SlideTransition(
@@ -242,7 +240,6 @@ class _RoleCard extends StatefulWidget {
     required this.infographic,
     required this.introDelay,
     required this.onTap,
-    this.onLongPress,
   });
 
   final String title;
@@ -254,7 +251,6 @@ class _RoleCard extends StatefulWidget {
   final _InfographicType infographic;
   final Duration introDelay;
   final VoidCallback onTap;
-  final VoidCallback? onLongPress;
 
   @override
   State<_RoleCard> createState() => _RoleCardState();
@@ -299,7 +295,6 @@ class _RoleCardState extends State<_RoleCard>
         widget.onTap();
       },
       onTapCancel: () => setState(() => _pressed = false),
-      onLongPress: widget.onLongPress,
       child: AnimatedScale(
         scale: _pressed ? 0.97 : 1.0,
         duration: const Duration(milliseconds: 120),

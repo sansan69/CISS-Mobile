@@ -359,7 +359,6 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
   String _query = '';
   bool _loading = true;
   bool _saving = false;
-  String? _error;
 
   @override
   void initState() {
@@ -387,10 +386,7 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _error = e.toString().replaceFirst('Exception: ', '');
-          _loading = false;
-        });
+        setState(() => _loading = false);
       }
     }
   }
@@ -415,10 +411,7 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _saving = false;
-          _error = e.toString().replaceFirst('Exception: ', '');
-        });
+        setState(() => _saving = false);
       }
     }
   }

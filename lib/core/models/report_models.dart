@@ -65,6 +65,28 @@ class VisitReportModel {
   }
 }
 
+class TrainingAttendee {
+  const TrainingAttendee({
+    required this.userId,
+    required this.name,
+  });
+
+  final String userId;
+  final String name;
+
+  factory TrainingAttendee.fromJson(Map<String, dynamic> json) {
+    return TrainingAttendee(
+      userId: (json['userId'] as String?) ?? (json['id'] as String?) ?? '',
+      name: (json['name'] as String?) ?? (json['fullName'] as String?) ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'userId': userId,
+    'name': name,
+  };
+}
+
 class TrainingReportModel {
   const TrainingReportModel({
     required this.id,
@@ -81,6 +103,8 @@ class TrainingReportModel {
     this.attachmentUrls = const <String>[],
     this.clientReportUrl,
     this.visitLocation,
+    this.attendeeNames = const <String>[],
+    this.attendees = const <TrainingAttendee>[],
   });
 
   final String id;
@@ -107,6 +131,12 @@ class TrainingReportModel {
 
   /// GPS location where the training was conducted
   final Map<String, double>? visitLocation;
+
+  /// Names of guards who attended the training
+  final List<String> attendeeNames;
+
+  /// Detailed attendee list with IDs and names
+  final List<TrainingAttendee> attendees;
 
   factory TrainingReportModel.fromJson(Map<String, dynamic> json) {
     Map<String, double>? location;
@@ -141,6 +171,15 @@ class TrainingReportModel {
           const <String>[],
       clientReportUrl: json['clientReportUrl'] as String?,
       visitLocation: location,
+      attendeeNames: (json['attendeeNames'] as List<dynamic>?)
+              ?.whereType<String>()
+              .toList() ??
+          const <String>[],
+      attendees: (json['attendees'] as List<dynamic>?)
+              ?.whereType<Map<String, dynamic>>()
+              .map(TrainingAttendee.fromJson)
+              .toList() ??
+          const <TrainingAttendee>[],
     );
   }
 }

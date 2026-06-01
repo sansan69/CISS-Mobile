@@ -239,7 +239,7 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                 GuardFormCard(
                   children: <Widget>[
                     DropdownButtonFormField<String>(
-                      value: _category,
+                      initialValue: _category,
                       items: ['Safety', 'Security', 'Maintenance', 'Medical', 'Other']
                           .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                           .toList(),
@@ -248,7 +248,7 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: _severity,
+                      initialValue: _severity,
                       items: ['low', 'medium', 'high', 'critical']
                           .map((s) => DropdownMenuItem(value: s, child: Text(s.toUpperCase())))
                           .toList(),
@@ -260,7 +260,7 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                       loading: () => const LinearProgressIndicator(),
                       error: (err, stack) => const Text('Error loading sites'),
                       data: (sites) => DropdownButtonFormField<SiteOptionModel>(
-                        value: _selectedSite,
+                        initialValue: _selectedSite,
                         items: sites
                             .map((s) => DropdownMenuItem(value: s, child: Text(s.siteName)))
                             .toList(),

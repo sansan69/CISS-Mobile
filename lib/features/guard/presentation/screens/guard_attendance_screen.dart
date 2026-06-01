@@ -952,155 +952,412 @@ class _AttendanceHistorySection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SectionCard(
-          title: 'Recent Attendance',
-          subtitle: 'Your recent check-in and check-out records',
+          title: 'Attendance Log',
+          subtitle: 'Your check-in and check-out history',
           icon: Icons.history_rounded,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         historyAsync.when(
-          loading:
-              () => const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-          error:
-              (error, _) => StateBlock(
-                icon: Icons.error_outline_rounded,
-                title: 'Could not load history',
-                message: error.toString().replaceFirst('Exception: ', ''),
-                action: FilledButton.tonal(
-                  onPressed: () => ref.invalidate(attendanceHistoryProvider),
-                  child: const Text('Retry'),
-                ),
-              ),
+          loading: () => _buildLoadingSkeleton(tokens),
+          error: (error, _) => StateBlock(
+            icon: Icons.error_outline_rounded,
+            title: 'Could not load history',
+            message: error.toString().replaceFirst('Exception: ', ''),
+            action: FilledButton.tonal(
+              onPressed: () => ref.invalidate(attendanceHistoryProvider),
+              child: const Text('Retry'),
+            ),
+          ),
           data: (records) {
             if (records.isEmpty) {
               return const StateBlock(
                 icon: Icons.history_toggle_off_rounded,
                 title: 'No attendance records yet',
-                message:
-                    'Your check-in and check-out records will appear here.',
+                message: 'Your check-in and check-out records will appear here.',
               );
             }
-
-            return Column(
-              children:
-                  records.take(10).map((record) {
-                    final isIn = record.status == 'In';
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: PortalSurfaceCard(
-                        accentColor: isIn ? tokens.success : tokens.warning,
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: (isIn ? tokens.success : tokens.warning)
-                                    .withValues(alpha: 0.12),
-                                borderRadius: BorderRadius.circular(
-                                  AppRadius.sm,
-                                ),
-                              ),
-                              child: Icon(
-                                isIn
-                                    ? Icons.login_rounded
-                                    : Icons.logout_rounded,
-                                color: isIn ? tokens.success : tokens.warning,
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    record.siteName,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${record.dateLabel}${record.time != null ? ' · ${record.time}' : ''}${record.shiftLabel.isNotEmpty ? ' · ${record.shiftLabel}' : ''}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: tokens.inkMuted,
-                                    ),
-                                  ),
-                                  if (record.distanceMeters != null) ...[
-                                    const SizedBox(height: 1),
-                                    Text(
-                                      record.distanceMeters! < 1000
-                                          ? '${record.distanceMeters!.round()} m'
-                                          : '${(record.distanceMeters! / 1000).toStringAsFixed(1)} km',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color:
-                                            record.distanceMeters! > 200
-                                                ? tokens.danger
-                                                : tokens.inkMuted,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                            if (record.photoUrl != null &&
-                                record.photoUrl!.isNotEmpty)
-                              GestureDetector(
-                                onTap:
-                                    () => Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder:
-                                            (_) => Scaffold(
-                                              backgroundColor: Colors.black,
-                                              appBar: AppBar(
-                                                backgroundColor: Colors.black,
-                                                foregroundColor: Colors.white,
-                                              ),
-                                              body: Center(
-                                                child: InteractiveViewer(
-                                                  child: Image.network(
-                                                    record.photoUrl!,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                      ),
-                                    ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(
-                                    AppRadius.sm,
-                                  ),
-                                  child: Image.network(
-                                    record.photoUrl!,
-                                    width: 40,
-                                    height: 40,
-                                    fit: BoxFit.cover,
-                                  ),
-                                ),
-                              ),
-                            const SizedBox(width: 8),
-                            StatusChip(
-                              label: record.status,
-                              tone:
-                                  isIn
-                                      ? StatusChipTone.success
-                                      : StatusChipTone.warning,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }).toList(),
-            );
+            return _buildAttendanceLog(records, tokens, context);
           },
         ),
       ],
+    );
+  }
+
+  Widget _buildLoadingSkeleton(CissThemeTokens tokens) {
+    return Column(
+      children: List.generate(5, (_) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Container(
+          height: 72,
+          decoration: BoxDecoration(
+            color: tokens.surface,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: tokens.border.withValues(alpha: 0.3)),
+          ),
+        ),
+      )),
+    );
+  }
+
+  Widget _buildAttendanceLog(
+    List<AttendanceRecordModel> records,
+    CissThemeTokens tokens,
+    BuildContext context,
+  ) {
+    // Group records by month (YYYY-MM)
+    final grouped = <String, List<AttendanceRecordModel>>{};
+    for (final record in records) {
+      String monthKey;
+      try {
+        final dt = DateTime.tryParse(record.createdAt);
+        if (dt != null) {
+          monthKey = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
+        } else {
+          monthKey = record.dateLabel.isNotEmpty ? record.dateLabel : 'Unknown';
+        }
+      } catch (_) {
+        monthKey = record.dateLabel.isNotEmpty ? record.dateLabel : 'Unknown';
+      }
+      grouped.putIfAbsent(monthKey, () => <AttendanceRecordModel>[]).add(record);
+    }
+
+    // Sort month keys descending
+    final sortedMonths = grouped.keys.toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    final allWidgets = <Widget>[];
+
+    // ── Summary Statistics Card ──
+    allWidgets.add(_buildSummaryCard(records, tokens));
+    allWidgets.add(const SizedBox(height: 16));
+
+    // ── Month-Sectioned Records ──
+    for (final monthKey in sortedMonths) {
+      final monthRecords = grouped[monthKey]!;
+      allWidgets.add(_buildMonthHeader(monthKey, monthRecords.length, tokens));
+      allWidgets.add(const SizedBox(height: 8));
+
+      for (final record in monthRecords) {
+        allWidgets.add(_buildAttendanceCard(record, tokens, context));
+        allWidgets.add(const SizedBox(height: 6));
+      }
+      allWidgets.add(const SizedBox(height: 12));
+    }
+
+    return Column(children: allWidgets);
+  }
+
+  /// Summary statistics: total, present, absent, late
+  Widget _buildSummaryCard(List<AttendanceRecordModel> records, CissThemeTokens tokens) {
+    final total = records.length;
+    final presentCount = records.where((r) => r.status == 'In' || r.status == 'Present').length;
+    final absentCount = records.where((r) => r.status == 'Absent').length;
+    final lateCount = records.where((r) => r.status == 'Late').length;
+    // Check-out records are the OUT ones
+    final outCount = records.where((r) => r.status == 'Out').length;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: tokens.accent.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: tokens.accent.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.bar_chart_rounded, size: 18, color: tokens.accent),
+              const SizedBox(width: 8),
+              Text(
+                'SUMMARY',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: tokens.accent, letterSpacing: 1.2),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _buildStatItem('Total', '$total', tokens.accent, tokens),
+              _buildStatDivider(tokens),
+              _buildStatItem('Present', '$presentCount', tokens.success, tokens),
+              _buildStatDivider(tokens),
+              _buildStatItem('Out', '$outCount', tokens.warning, tokens),
+              _buildStatDivider(tokens),
+              _buildStatItem('Absent', '$absentCount', tokens.danger, tokens),
+            ],
+          ),
+          if (lateCount > 0) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 14, color: tokens.warning),
+                const SizedBox(width: 6),
+                Text(
+                  '$lateCount late check-in(s)',
+                  style: TextStyle(fontSize: 12, color: tokens.warning, fontWeight: FontWeight.w500),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, Color color, CissThemeTokens tokens) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color, height: 1.1)),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(fontSize: 10, color: tokens.inkMuted, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatDivider(CissThemeTokens tokens) {
+    return Container(
+      width: 1,
+      height: 36,
+      color: tokens.border.withValues(alpha: 0.3),
+    );
+  }
+
+  /// Month section header with count badge
+  Widget _buildMonthHeader(String monthKey, int count, CissThemeTokens tokens) {
+    String displayTitle;
+    try {
+      final parts = monthKey.split('-');
+      if (parts.length == 2) {
+        final y = int.parse(parts[0]);
+        final m = int.parse(parts[1]);
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        displayTitle = '${monthNames[m - 1]} $y';
+      } else {
+        displayTitle = monthKey;
+      }
+    } catch (_) {
+      displayTitle = monthKey;
+    }
+
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 18,
+          decoration: BoxDecoration(
+            color: tokens.accent,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          displayTitle,
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: tokens.ink, letterSpacing: -0.2),
+        ),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: tokens.accent.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            '$count records',
+            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: tokens.accent),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Redesigned attendance record card
+  Widget _buildAttendanceCard(
+    AttendanceRecordModel record,
+    CissThemeTokens tokens,
+    BuildContext context,
+  ) {
+    final isIn = record.status == 'In' || record.status == 'Present';
+    final isLate = record.status == 'Late';
+    final isOut = record.status == 'Out';
+    final isAbsent = record.status == 'Absent';
+
+    final Color accentColor;
+    final String statusLabel;
+    final IconData statusIcon;
+    final StatusChipTone chipTone;
+
+    if (isIn) {
+      accentColor = tokens.success;
+      statusLabel = 'Check-in';
+      statusIcon = Icons.login_rounded;
+      chipTone = StatusChipTone.success;
+    } else if (isLate) {
+      accentColor = tokens.warning;
+      statusLabel = 'Late In';
+      statusIcon = Icons.warning_amber_rounded;
+      chipTone = StatusChipTone.warning;
+    } else if (isOut) {
+      accentColor = tokens.warning;
+      statusLabel = 'Check-out';
+      statusIcon = Icons.logout_rounded;
+      chipTone = StatusChipTone.warning;
+    } else if (isAbsent) {
+      accentColor = tokens.danger;
+      statusLabel = 'Absent';
+      statusIcon = Icons.cancel_rounded;
+      chipTone = StatusChipTone.danger;
+    } else {
+      accentColor = tokens.inkMuted;
+      statusLabel = record.status;
+      statusIcon = Icons.info_outline_rounded;
+      chipTone = StatusChipTone.neutral;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: tokens.border.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          // Date badge (left)
+          _buildDateBadge(record, accentColor, tokens),
+          const SizedBox(width: 14),
+          // Center info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  record.siteName.isNotEmpty ? record.siteName : 'Unknown Site',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: tokens.ink),
+                ),
+                const SizedBox(height: 4),
+                if (record.shiftLabel.isNotEmpty || record.time != null)
+                  Row(
+                    children: [
+                      Icon(Icons.access_time_rounded, size: 12, color: tokens.inkMuted),
+                      const SizedBox(width: 4),
+                      Text(
+                        [
+                          if (record.time != null) record.time!,
+                          if (record.shiftLabel.isNotEmpty) record.shiftLabel,
+                        ].join(' · '),
+                        style: TextStyle(fontSize: 11, color: tokens.inkMuted),
+                      ),
+                    ],
+                  ),
+                if (record.distanceMeters != null) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Icon(Icons.pin_drop_rounded, size: 12, color: record.distanceMeters! > 200 ? tokens.danger : tokens.inkMuted),
+                      const SizedBox(width: 4),
+                      Text(
+                        record.distanceMeters! < 1000
+                            ? '${record.distanceMeters!.round()} m from site'
+                            : '${(record.distanceMeters! / 1000).toStringAsFixed(1)} km from site',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: record.distanceMeters! > 200 ? tokens.danger : tokens.inkMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          // Right side: photo thumbnail + status
+          if (record.photoUrl != null && record.photoUrl!.isNotEmpty)
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => Scaffold(
+                    backgroundColor: Colors.black,
+                    appBar: AppBar(
+                      backgroundColor: Colors.black,
+                      foregroundColor: Colors.white,
+                      title: const Text('Photo'),
+                    ),
+                    body: Center(
+                      child: InteractiveViewer(
+                        child: Image.network(record.photoUrl!),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: Image.network(
+                  record.photoUrl!,
+                  width: 44,
+                  height: 44,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => Container(
+                    width: 44,
+                    height: 44,
+                    color: tokens.inkMuted.withValues(alpha: 0.1),
+                    child: Icon(Icons.photo_rounded, color: tokens.inkMuted, size: 18),
+                  ),
+                ),
+              ),
+            ),
+          const SizedBox(width: 10),
+          StatusChip(label: statusLabel, tone: chipTone),
+        ],
+      ),
+    );
+  }
+
+  /// Circular date badge showing day + weekday
+  Widget _buildDateBadge(AttendanceRecordModel record, Color accentColor, CissThemeTokens tokens) {
+    String dayStr = '--';
+    String weekdayStr = '';
+    try {
+      final dt = DateTime.tryParse(record.createdAt);
+      if (dt != null) {
+        dayStr = '${dt.day}';
+        const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+        weekdayStr = weekdays[dt.weekday - 1];
+      } else if (record.dateLabel.isNotEmpty) {
+        // Try parsing from dateLabel
+        final parts = record.dateLabel.split(' ');
+        if (parts.isNotEmpty) {
+          dayStr = parts.last;
+          weekdayStr = parts.length > 1 ? parts.first : '';
+        }
+      }
+    } catch (_) {}
+
+    return Container(
+      width: 44,
+      height: 48,
+      decoration: BoxDecoration(
+        color: accentColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            dayStr,
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: accentColor, height: 1),
+          ),
+          if (weekdayStr.isNotEmpty)
+            Text(
+              weekdayStr,
+              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: accentColor.withValues(alpha: 0.7)),
+            ),
+        ],
+      ),
     );
   }
 }

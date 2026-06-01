@@ -940,6 +940,28 @@ class MobileRepository {
         .toList();
   }
 
+  /// Fetch guards for a specific client/site (used by guard attendee picker)
+  Future<List<Map<String, dynamic>>> fetchGuardsForSite({
+    required String clientId,
+    required String siteId,
+  }) async {
+    final data = await _getJson(
+      '/api/field-officer/guards',
+      queryParameters: <String, dynamic>{
+        if (clientId.isNotEmpty) 'clientId': clientId,
+        if (siteId.isNotEmpty) 'siteId': siteId,
+      },
+    );
+    final guards = data['guards'] as List<dynamic>? ?? const <dynamic>[];
+    return guards
+        .whereType<Map<String, dynamic>>()
+        .map((g) => <String, dynamic>{
+              'id': g['id']?.toString() ?? '',
+              'name': g['name']?.toString() ?? g['fullName']?.toString() ?? '',
+            })
+        .toList();
+  }
+
   Future<void> assignGuardsToWorkOrder({
     required String workOrderId,
     required List<Map<String, dynamic>> assignedGuards,

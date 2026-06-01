@@ -8,6 +8,8 @@ import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/section_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/status_chip.dart';
+import '../../../../../shared/widgets/glass_card.dart';
+import '../../../../../app/theme/app_tokens.dart';
 import '../widgets/guard_portal_widgets.dart';
 
 final FutureProvider<List<TrainingAssignmentModel>> guardTrainingProvider =
@@ -20,7 +22,9 @@ class GuardTrainingScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = CissThemeTokens.of(context);
     final assignmentsAsync = ref.watch(guardTrainingProvider);
+
     return assignmentsAsync.when(
       loading: () =>
           const GuardLoadingScaffold(label: 'Loading training modules...'),
@@ -30,9 +34,21 @@ class GuardTrainingScreen extends ConsumerWidget {
         onRetry: () => ref.invalidate(guardTrainingProvider),
       ),
       data: (assignments) {
+        final completed = assignments
+            .where((a) => a.status.toLowerCase().contains('complete') ||
+                a.status.toLowerCase().contains('viewed') ||
+                a.status.toLowerCase().contains('acknowledged'))
+            .toList();
+        final pending = assignments
+            .where((a) => !completed.contains(a))
+            .toList();
+        final progress = assignments.isEmpty
+            ? 0.0
+            : completed.length / assignments.length;
+
         return ScreenScaffold(
           title: 'Training',
-          subtitle: 'Assigned modules and evaluations',
+          subtitle: '${completed.length} of ${assignments.length} modules completed',
           onRefresh: () async => ref.invalidate(guardTrainingProvider),
           actions: <Widget>[
             IconButton(
@@ -41,12 +57,37 @@ class GuardTrainingScreen extends ConsumerWidget {
             ),
           ],
           children: <Widget>[
-            SectionCard(
-              title: 'Assigned Modules',
-              subtitle:
-                  '${assignments.length} module${assignments.length == 1 ? '' : 's'} assigned',
-              icon: Icons.menu_book_rounded,
-            ),
+            // ── Progress Card ──
+            _buildProgressCard(tokens, progress, completed.length, assignments.length),
+            const SizedBox(height: 16),
+
+            // ── Pending Modules Section ──
+            if (pending.isNotEmpty) ...[
+              SectionCard(
+                title: 'Pending',
+                subtitle: '${pending.length} module${pending.length == 1 ? '' : 's'} awaiting acknowledgment',
+                icon: Icons.pending_actions_rounded,
+              ),
+              ...pending.map((assignment) => _buildTrainingCard(
+                context, ref, assignment, tokens, isCompleted: false,
+              )),
+              const SizedBox(height: 8),
+            ],
+
+            // ── Completed Modules Section ──
+            if (completed.isNotEmpty) ...[
+              SectionCard(
+                title: 'Completed',
+                subtitle: '${completed.length} module${completed.length == 1 ? '' : 's'} acknowledged',
+                icon: Icons.check_circle_outline_rounded,
+              ),
+              ...completed.map((assignment) => _buildTrainingCard(
+                context, ref, assignment, tokens, isCompleted: true,
+              )),
+              const SizedBox(height: 8),
+            ],
+
+            // ── Empty State ──
             if (assignments.isEmpty)
               const StateBlock(
                 icon: Icons.school_rounded,
@@ -54,59 +95,8 @@ class GuardTrainingScreen extends ConsumerWidget {
                 message:
                     'New training modules and briefings will appear here when assigned by the office.',
               ),
-            ...assignments.map(
-              (assignment) {
-                final bool isCompleted = assignment.status.toLowerCase().contains('complete') || 
-                                       assignment.status.toLowerCase().contains('viewed');
-                return GuardRecordCard(
-                  title: assignment.title,
-                  subtitle: assignment.contentFileName != null
-                      ? '${assignment.status} • ${assignment.contentFileName}'
-                      : assignment.contentType != null
-                      ? '${assignment.status} • ${assignment.contentType}'
-                      : assignment.status,
-                  icon: Icons.assignment_rounded,
-                  chip: StatusChip(
-                    label: assignment.status,
-                    tone: isCompleted
-                        ? StatusChipTone.success
-                        : StatusChipTone.info,
-                  ),
-                  trailing: isCompleted 
-                      ? null 
-                      : IconButton(
-                          icon: const Icon(Icons.check_circle_outline_rounded),
-                          tooltip: 'Acknowledge',
-                          onPressed: () async {
-                            try {
-                              await ref.read(mobileRepositoryProvider).acknowledgeTraining(assignment.id);
-                              ref.invalidate(guardTrainingProvider);
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Error: $e')),
-                                );
-                              }
-                            }
-                          },
-                        ),
-                  onTap:
-                      assignment.contentUrl == null ||
-                          assignment.contentUrl!.isEmpty
-                      ? null
-                      : () async {
-                          final uri = Uri.tryParse(assignment.contentUrl!);
-                          if (uri != null && await canLaunchUrl(uri)) {
-                            await launchUrl(
-                              uri,
-                              mode: LaunchMode.externalApplication,
-                            );
-                          }
-                        },
-                );
-              },
-            ),
-            const SizedBox(height: 4),
+
+            // ── Evaluations Section ──
             SectionCard(
               title: 'Evaluations',
               subtitle:
@@ -116,6 +106,230 @@ class GuardTrainingScreen extends ConsumerWidget {
           ],
         );
       },
+    );
+  }
+
+  Widget _buildProgressCard(
+    CissThemeTokens tokens,
+    double progress,
+    int completed,
+    int total,
+  ) {
+    final percentage = (progress * 100).round();
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            tokens.accent.withValues(alpha: 0.06),
+            tokens.accent.withValues(alpha: 0.02),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: tokens.accent.withValues(alpha: 0.12)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(Icons.trending_up_rounded, color: tokens.accent, size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'TRAINING PROGRESS',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: tokens.accent,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      total == 0
+                          ? 'No modules assigned'
+                          : percentage == 100
+                              ? '🎉 All modules completed!'
+                              : '$percentage% complete',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: tokens.inkMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                '$completed/$total',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: tokens.accent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 8,
+              backgroundColor: tokens.accent.withValues(alpha: 0.1),
+              valueColor: AlwaysStoppedAnimation(tokens.accent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrainingCard(
+    BuildContext context,
+    WidgetRef ref,
+    TrainingAssignmentModel assignment,
+    CissThemeTokens tokens, {
+    required bool isCompleted,
+  }) {
+    final bool hasContent = assignment.contentUrl != null &&
+        assignment.contentUrl!.isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: hasContent
+              ? () async {
+                  final uri = Uri.tryParse(assignment.contentUrl!);
+                  if (uri != null && await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                }
+              : null,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: GlassCard(
+            padding: const EdgeInsets.all(14),
+            accentColor: isCompleted ? tokens.success : tokens.accent,
+            child: Row(
+              children: [
+                // Left icon
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: (isCompleted ? tokens.success : tokens.accent)
+                        .withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                  child: Icon(
+                    isCompleted ? Icons.check_circle_rounded : Icons.assignment_rounded,
+                    color: isCompleted ? tokens.success : tokens.accent,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                // Center info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        assignment.title,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: tokens.inkPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Icon(Icons.calendar_today_rounded,
+                              size: 11, color: tokens.inkMuted),
+                          const SizedBox(width: 4),
+                          Text(
+                            assignment.dueLabel.isNotEmpty
+                                ? assignment.dueLabel
+                                : 'No date',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: tokens.inkMuted,
+                            ),
+                          ),
+                          if (assignment.contentType != null) ...[
+                            const SizedBox(width: 8),
+                            Icon(Icons.insert_drive_file_rounded,
+                                size: 11, color: tokens.inkMuted),
+                            const SizedBox(width: 4),
+                            Text(
+                              assignment.contentType!,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: tokens.inkMuted,
+                              ),
+                            ),
+                          ],
+                          if (hasContent) ...[
+                            const SizedBox(width: 8),
+                            Icon(Icons.open_in_new_rounded,
+                                size: 11, color: tokens.accent),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                // Right: status chip + acknowledge button
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    StatusChip(
+                      label: isCompleted ? 'Completed' : assignment.status,
+                      tone: isCompleted ? StatusChipTone.success : StatusChipTone.info,
+                    ),
+                    if (!isCompleted) ...[
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 30,
+                        child: FilledButton.tonalIcon(
+                          onPressed: () async {
+                            try {
+                              await ref
+                                  .read(mobileRepositoryProvider)
+                                  .acknowledgeTraining(assignment.id);
+                              ref.invalidate(guardTrainingProvider);
+                            } catch (e) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Error: $e')),
+                                );
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.check_rounded, size: 14),
+                          label: const Text('Acknowledge', style: TextStyle(fontSize: 11)),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            minimumSize: Size.zero,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

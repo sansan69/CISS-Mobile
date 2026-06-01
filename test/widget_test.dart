@@ -11,9 +11,11 @@ void main() {
     await tester.pumpWidget(
       const ProviderScope(child: MaterialApp(home: LoginHubScreen())),
     );
-    await tester.pumpAndSettle();
+    // pumpAndSettle can't settle because of infinite animation.
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(seconds: 1));
 
-    expect(find.text('Select your portal'), findsOneWidget);
+    expect(find.text('SELECT YOUR PORTAL'), findsOneWidget);
     expect(find.text('GUARD\nOPERATIONS'), findsOneWidget);
     expect(find.text('FIELD\nCOMMAND'), findsOneWidget);
   });
@@ -24,9 +26,12 @@ void main() {
         child: MaterialApp(home: RoleLoginScreen.guard()),
       ),
     );
-    await tester.pumpAndSettle();
+    // pumpAndSettle can't settle because SecurityGridBackground runs
+    // an infinite AnimationController.repeat(). Use pump to skip forward.
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(seconds: 1));
 
-    expect(find.text('Guard duty login'), findsOneWidget);
+    expect(find.text('GUARD ACCESS'), findsOneWidget);
     expect(find.text('Employee ID or phone'), findsOneWidget);
     expect(find.text('Duty PIN'), findsOneWidget);
     expect(find.text('Set up PIN for first-time login'), findsOneWidget);
@@ -40,9 +45,12 @@ void main() {
           child: MaterialApp(home: RoleLoginScreen.fieldOfficer()),
         ),
       );
-    await tester.pumpAndSettle();
+    // pumpAndSettle can't settle because SecurityGridBackground runs
+    // an infinite AnimationController.repeat(). Use pump to skip forward.
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(seconds: 1));
 
-    expect(find.text('Field officer command login'), findsOneWidget);
+    expect(find.text('OFFICER ACCESS'), findsOneWidget);
     expect(find.text('Official email'), findsOneWidget);
     expect(find.text('Account password'), findsOneWidget);
   },
