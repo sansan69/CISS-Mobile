@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/haptics.dart';
@@ -28,6 +29,8 @@ class QrAttendanceFlow extends ConsumerStatefulWidget {
 }
 
 class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
+  static const Uuid _uuid = Uuid();
+
   _QrFlowStep _step = _QrFlowStep.scan;
 
   PublicAttendanceEmployeeModel? _employee;
@@ -107,7 +110,11 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                 child: Row(
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                      icon: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 28,
+                      ),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ],
@@ -119,9 +126,10 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                 height: 260,
                 decoration: BoxDecoration(
                   border: Border.all(
-                    color: _loading
-                        ? tokens.warning
-                        : Colors.white.withValues(alpha: 0.7),
+                    color:
+                        _loading
+                            ? tokens.warning
+                            : Colors.white.withValues(alpha: 0.7),
                     width: 2.5,
                   ),
                   borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -142,8 +150,11 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                         ),
                       )
                     else ...[
-                      const Icon(Icons.qr_code_scanner_rounded,
-                          color: Colors.white70, size: 32),
+                      const Icon(
+                        Icons.qr_code_scanner_rounded,
+                        color: Colors.white70,
+                        size: 32,
+                      ),
                       const SizedBox(height: 12),
                       Text(
                         'Align QR code within the frame',
@@ -159,7 +170,9 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                       const SizedBox(height: 12),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 10),
+                          horizontal: 20,
+                          vertical: 10,
+                        ),
                         decoration: BoxDecoration(
                           color: tokens.danger.withValues(alpha: 0.85),
                           borderRadius: BorderRadius.circular(8),
@@ -167,17 +180,22 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                         child: Text(
                           _error!,
                           style: const TextStyle(
-                              color: Colors.white, fontSize: 14),
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
                       TextButton(
-                        onPressed: () => setState(() {
-                          _error = null;
-                          _lastScannedAt = null;
-                        }),
-                        child: const Text('Try again',
-                            style: TextStyle(color: Colors.white)),
+                        onPressed:
+                            () => setState(() {
+                              _error = null;
+                              _lastScannedAt = null;
+                            }),
+                        child: const Text(
+                          'Try again',
+                          style: TextStyle(color: Colors.white),
+                        ),
                       ),
                     ],
                   ],
@@ -224,8 +242,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
         nearest = _findNearestSite(sites, position);
       }
 
-      final status =
-          employee.attendanceHint?.lastStatus == 'In' ? 'Out' : 'In';
+      final status = employee.attendanceHint?.lastStatus == 'In' ? 'Out' : 'In';
 
       if (!mounted) return;
       setState(() {
@@ -239,7 +256,8 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Could not verify guard. '
+        _error =
+            'Could not verify guard. '
             '${e.toString().replaceFirst('Exception: ', '')}';
         _loading = false;
         _lastScannedAt = null;
@@ -248,7 +266,9 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
   }
 
   SiteOptionModel? _findNearestSite(
-      List<SiteOptionModel> sites, Position position) {
+    List<SiteOptionModel> sites,
+    Position position,
+  ) {
     SiteOptionModel? best;
     double bestDist = double.infinity;
     for (final site in sites) {
@@ -270,23 +290,26 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
   void _showExitConfirmation() {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Cancel attendance?'),
-        content:
-            const Text('You haven\'t submitted yet. Leave without recording?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Stay')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            child: const Text('Leave'),
+      builder:
+          (_) => AlertDialog(
+            title: const Text('Cancel attendance?'),
+            content: const Text(
+              'You haven\'t submitted yet. Leave without recording?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Stay'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.pop(context);
+                },
+                child: const Text('Leave'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -298,7 +321,9 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
     final tokens = CissThemeTokens.of(context);
     final employee = _employee;
     if (employee == null) {
-      return const Center(child: Text('Employee data missing. Please scan again.'));
+      return const Center(
+        child: Text('Employee data missing. Please scan again.'),
+      );
     }
     final site = _selectedSite;
     final hint = employee.attendanceHint;
@@ -321,9 +346,10 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                   style: TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.w800,
-                    color: _attendanceStatus == 'In'
-                        ? tokens.success
-                        : tokens.danger,
+                    color:
+                        _attendanceStatus == 'In'
+                            ? tokens.success
+                            : tokens.danger,
                     letterSpacing: 2,
                   ),
                 ),
@@ -364,8 +390,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline,
-                        size: 20, color: tokens.warning),
+                    Icon(Icons.info_outline, size: 20, color: tokens.warning),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -398,7 +423,9 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                   label: Text(
                     'CAPTURE PHOTO (optional)',
                     style: TextStyle(
-                        fontWeight: FontWeight.w700, letterSpacing: 1),
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1,
+                    ),
                   ),
                 ),
               ),
@@ -409,28 +436,30 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
               child: FilledButton(
                 onPressed: _loading ? null : _submitAttendance,
                 style: FilledButton.styleFrom(
-                  backgroundColor: _attendanceStatus == 'In'
-                      ? tokens.success
-                      : tokens.danger,
+                  backgroundColor:
+                      _attendanceStatus == 'In'
+                          ? tokens.success
+                          : tokens.danger,
                 ),
-                child: _loading
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2.5,
+                child:
+                    _loading
+                        ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.5,
+                          ),
+                        )
+                        : Text(
+                          _attendanceStatus == 'In' ? 'MARK IN' : 'MARK OUT',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 2,
+                            color: Colors.white,
+                          ),
                         ),
-                      )
-                    : Text(
-                        _attendanceStatus == 'In' ? 'MARK IN' : 'MARK OUT',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 2,
-                          color: Colors.white,
-                        ),
-                      ),
               ),
             ),
           ],
@@ -451,15 +480,19 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
 
     final selected = await showModalBottomSheet<SiteOptionModel>(
       context: context,
-      builder: (_) => ListView.builder(
-        itemCount: sites.length,
-        itemBuilder: (_, i) => ListTile(
-          title: Text(sites[i].siteName),
-          subtitle: Text('${sites[i].clientName} · ${sites[i].district}'),
-          selected: sites[i].id == current?.id,
-          onTap: () => Navigator.pop(context, sites[i]),
-        ),
-      ),
+      builder:
+          (_) => ListView.builder(
+            itemCount: sites.length,
+            itemBuilder:
+                (_, i) => ListTile(
+                  title: Text(sites[i].siteName),
+                  subtitle: Text(
+                    '${sites[i].clientName} · ${sites[i].district}',
+                  ),
+                  selected: sites[i].id == current?.id,
+                  onTap: () => Navigator.pop(context, sites[i]),
+                ),
+          ),
     );
 
     if (selected != null && mounted) {
@@ -490,9 +523,19 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
     final site = _selectedSite;
     final employee = _employee;
     if (site == null || employee == null) return;
+    if (site.lat == null || site.lng == null) {
+      setState(() => _error = 'Selected site does not have GPS coordinates.');
+      return;
+    }
+    if (_photoDataUrl == null) {
+      setState(() => _error = 'Please capture a photo before submitting.');
+      return;
+    }
 
     setState(() => _loading = true);
     Haptics.heavy();
+
+    Map<String, dynamic>? submissionPayload;
 
     try {
       final repo = ref.read(mobileRepositoryProvider);
@@ -507,41 +550,27 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
           ),
         );
       } catch (_) {}
-
-      // Upload photo if taken
-      String? photoUrl;
-      if (_photoPath != null && _photoDataUrl != null) {
-        try {
-          final uploadResult = await repo.uploadAttendancePhoto(
-            path:
-                'attendance-qr/${employee.id}/${DateTime.now().millisecondsSinceEpoch}.jpg',
-            dataUrl: _photoDataUrl!,
-          );
-          photoUrl = uploadResult['url'] as String?;
-        } catch (_) {
-          // Non-blocking — continue without photo
-        }
+      if (pos == null) {
+        throw Exception('Could not capture GPS location. Please try again.');
       }
 
-      final dutyPoint = site.dutyPoints.isNotEmpty
-          ? site.dutyPoints.first
-          : null;
-      final shift =
-          resolveActiveShiftTemplate(
-            dutyPoint?.shiftTemplates.isNotEmpty == true
-                ? dutyPoint!.shiftTemplates
-                : site.shiftTemplates,
-          );
+      final dutyPoint =
+          site.dutyPoints.isNotEmpty ? site.dutyPoints.first : null;
+      final shift = resolveActiveShiftTemplate(
+        dutyPoint?.shiftTemplates.isNotEmpty == true
+            ? dutyPoint!.shiftTemplates
+            : site.shiftTemplates,
+      );
 
       final now = DateTime.now();
+      final clientRequestId = _uuid.v4();
 
-      // Compute distance from site if we have both coordinates
-      double distanceMeters = 0;
-      if (pos != null && site.lat != null && site.lng != null) {
-        distanceMeters = Geolocator.distanceBetween(
-          pos.latitude, pos.longitude, site.lat!, site.lng!,
-        );
-      }
+      final distanceMeters = Geolocator.distanceBetween(
+        pos.latitude,
+        pos.longitude,
+        site.lat!,
+        site.lng!,
+      );
 
       final payload = <String, dynamic>{
         'employeeId': employee.employeeCode ?? employee.id,
@@ -560,30 +589,35 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
         if (shift != null) 'shiftLabel': shift.label,
         if (shift != null) 'shiftStartTime': shift.startTime,
         if (shift != null) 'shiftEndTime': shift.endTime,
-        if (site.lat != null && site.lng != null)
-          'siteCoords': <String, dynamic>{
-            'lat': site.lat,
-            'lng': site.lng,
-          },
-        // GPS location data (matches GuardAttendanceScreen payload shape)
-        if (pos case final currentPos?)
-          'locationCoords': <String, dynamic>{
-            'lat': currentPos.latitude,
-            'lon': currentPos.longitude,
-            'accuracyMeters': currentPos.accuracy,
-          },
-        if (pos case final currentPos?) 'gpsAccuracyMeters': currentPos.accuracy,
-        if (pos case final currentPos?)
-          'locationAccuracyMeters': currentPos.accuracy,
+        'siteCoords': <String, dynamic>{'lat': site.lat, 'lng': site.lng},
+        'locationText':
+            'GPS ${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}',
+        'locationCoords': <String, dynamic>{
+          'lat': pos.latitude,
+          'lon': pos.longitude,
+          'accuracyMeters': pos.accuracy,
+        },
+        'gpsAccuracyMeters': pos.accuracy,
+        'locationAccuracyMeters': pos.accuracy,
         'distanceMeters': distanceMeters,
         'geofenceRadiusAtTime': site.geofenceRadiusMeters,
         'sourceCollection': site.sourceCollection,
         'photoCapturedAt': now.toUtc().toIso8601String(),
         'deviceInfo': <String, dynamic>{'userAgent': 'flutter-mobile-qr'},
+        'clientRequestId': clientRequestId,
       };
-      if (photoUrl != null) {
-        payload['photoUrl'] = photoUrl;
+      submissionPayload = payload;
+
+      final uploadResult = await repo.uploadAttendancePhoto(
+        path:
+            'attendance-qr/${employee.id}/${DateTime.now().millisecondsSinceEpoch}.jpg',
+        dataUrl: _photoDataUrl!,
+      );
+      final photoUrl = uploadResult['url'] as String?;
+      if (photoUrl == null || photoUrl.isEmpty) {
+        throw Exception('Photo upload did not return a URL.');
       }
+      payload['photoUrl'] = photoUrl;
 
       await repo.submitAttendance(payload);
 
@@ -602,14 +636,18 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
       }
 
       // Notify field officers
-      await ref.read(notificationServiceProvider).triggerSystemNotification(
-        type: 'attendance_marked',
-        title: 'Guard ${_attendanceStatus == 'In' ? 'Checked In' : 'Checked Out'}',
-        body: '${employee.fullName} marked ${_attendanceStatus.toLowerCase()} at ${_selectedSite!.siteName}',
-        role: 'fieldOfficer',
-        district: site.district,
-        data: {'employeeId': employee.employeeCode ?? employee.id},
-      );
+      await ref
+          .read(notificationServiceProvider)
+          .triggerSystemNotification(
+            type: 'attendance_marked',
+            title:
+                'Guard ${_attendanceStatus == 'In' ? 'Checked In' : 'Checked Out'}',
+            body:
+                '${employee.fullName} marked ${_attendanceStatus.toLowerCase()} at ${_selectedSite!.siteName}',
+            role: 'fieldOfficer',
+            district: site.district,
+            data: {'employeeId': employee.employeeCode ?? employee.id},
+          );
     } on DioException catch (e) {
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.sendTimeout ||
@@ -617,25 +655,13 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
           e.type == DioExceptionType.connectionError) {
         // Offline: queue for sync
         try {
-          await ref.read(offlineQueueProvider).enqueue(
-            path: '/api/attendance/submit',
-            method: 'POST',
-            body: {
-              'employeeId': employee.employeeCode ?? employee.id,
-              'employeeName': employee.fullName,
-              'employeeDocId': employee.id,
-              'employeePhoneNumber': employee.phoneNumber ?? '',
-              'employeeClientName': employee.clientName ?? '',
-              'status': _attendanceStatus,
-              'district': site.district,
-              'clientName': site.clientName,
-              'siteId': site.id,
-              'siteName': site.siteName,
-              'sourceCollection': site.sourceCollection,
-              'deviceInfo': <String, dynamic>{'userAgent': 'flutter-mobile-qr'},
-              if (_photoDataUrl != null) 'photoDataUrl': _photoDataUrl,
-            },
-          );
+          await ref
+              .read(offlineQueueProvider)
+              .enqueue(
+                path: '/api/attendance/submit',
+                method: 'POST',
+                body: {...?submissionPayload, 'photoDataUrl': _photoDataUrl},
+              );
 
           if (!mounted) return;
           // Still write to Firestore so FO can see the guard
@@ -653,7 +679,9 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
           });
 
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Offline: Attendance queued for sync.')),
+            const SnackBar(
+              content: Text('Offline: Attendance queued for sync.'),
+            ),
           );
         } catch (_) {
           if (!mounted) return;
@@ -671,9 +699,9 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              'Failed: ${e.toString().replaceFirst('Exception: ', '')}'),
-          action: SnackBarAction(
-              label: 'Retry', onPressed: _submitAttendance),
+            'Failed: ${e.toString().replaceFirst('Exception: ', '')}',
+          ),
+          action: SnackBarAction(label: 'Retry', onPressed: _submitAttendance),
         ),
       );
     }
@@ -688,23 +716,25 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
     final site = _selectedSite;
     if (employee == null || site == null) return;
     try {
-      await LiveLocationService().setLocation(GuardLocationData(
-        employeeId: employee.employeeCode ?? employee.id,
-        guardName: employee.fullName,
-        siteId: site.id,
-        siteName: site.siteName,
-        clientName: employee.clientName ?? '',
-        district: site.district,
-        lat: pos?.latitude ?? 0,
-        lng: pos?.longitude ?? 0,
-        accuracy: pos?.accuracy ?? 0,
-        isOutOfZone: false,
-        status: _attendanceStatus,
-        updatedAt: DateTime.now(),
-        siteLat: site.lat,
-        siteLng: site.lng,
-        geofenceRadius: site.geofenceRadiusMeters.toDouble(),
-      ));
+      await LiveLocationService().setLocation(
+        GuardLocationData(
+          employeeId: employee.employeeCode ?? employee.id,
+          guardName: employee.fullName,
+          siteId: site.id,
+          siteName: site.siteName,
+          clientName: employee.clientName ?? '',
+          district: site.district,
+          lat: pos?.latitude ?? 0,
+          lng: pos?.longitude ?? 0,
+          accuracy: pos?.accuracy ?? 0,
+          isOutOfZone: false,
+          status: _attendanceStatus,
+          updatedAt: DateTime.now(),
+          siteLat: site.lat,
+          siteLng: site.lng,
+          geofenceRadius: site.geofenceRadiusMeters.toDouble(),
+        ),
+      );
     } catch (e) {
       debugPrint('QR LiveLocation write error: $e');
     }
@@ -720,7 +750,9 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
     final site = _selectedSite;
     final attendanceTime = _attendanceTime;
     if (employee == null || site == null || attendanceTime == null) {
-      return const Center(child: Text('Attendance data incomplete. Please scan again.'));
+      return const Center(
+        child: Text('Attendance data incomplete. Please scan again.'),
+      );
     }
 
     final shareText = '''
@@ -748,8 +780,11 @@ Verified by CISS Workforce Platform''';
                   color: tokens.successSoft,
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.check_rounded,
-                    color: tokens.success, size: 48),
+                child: Icon(
+                  Icons.check_rounded,
+                  color: tokens.success,
+                  size: 48,
+                ),
               ),
               const SizedBox(height: 20),
               Text(
@@ -766,10 +801,9 @@ Verified by CISS Workforce Platform''';
                 _attendanceStatus == 'In'
                     ? 'You are clocked IN'
                     : 'You are clocked OUT',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: tokens.inkMuted),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: tokens.inkMuted),
               ),
               const SizedBox(height: 28),
               _ConfirmationCard(
@@ -783,17 +817,22 @@ Verified by CISS Workforce Platform''';
                 width: double.infinity,
                 height: 52,
                 child: FilledButton.icon(
-                  onPressed: () => Share.share(shareText,
-                      subject: 'CISS Attendance Confirmation'),
+                  onPressed:
+                      () => Share.share(
+                        shareText,
+                        subject: 'CISS Attendance Confirmation',
+                      ),
                   style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF25D366)),
+                    backgroundColor: const Color(0xFF25D366),
+                  ),
                   icon: const Icon(Icons.chat_rounded, color: Colors.white),
                   label: Text(
                     'Share via WhatsApp',
                     style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        fontSize: 16),
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
               ),
@@ -802,12 +841,16 @@ Verified by CISS Workforce Platform''';
                 width: double.infinity,
                 height: 48,
                 child: OutlinedButton.icon(
-                  onPressed: () => Share.share(shareText,
-                      subject: 'CISS Attendance Confirmation'),
+                  onPressed:
+                      () => Share.share(
+                        shareText,
+                        subject: 'CISS Attendance Confirmation',
+                      ),
                   icon: const Icon(Icons.share_rounded, size: 20),
-                  label: Text('Share',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700)),
+                  label: Text(
+                    'Share',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -816,9 +859,10 @@ Verified by CISS Workforce Platform''';
                 child: Text(
                   'Done',
                   style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1,
-                      fontSize: 16),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
+                    fontSize: 16,
+                  ),
                 ),
               ),
             ],
@@ -873,11 +917,10 @@ class _InfoCard extends StatelessWidget {
                   children: [
                     Text(
                       label,
-                      style: Theme.of(context)
-                          .textTheme
-                          .labelSmall
-                          ?.copyWith(
-                              color: tokens.inkMuted, letterSpacing: 1),
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: tokens.inkMuted,
+                        letterSpacing: 1,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -890,8 +933,10 @@ class _InfoCard extends StatelessWidget {
                     ),
                     if (subValue != null) ...[
                       const SizedBox(height: 2),
-                      Text(subValue!,
-                          style: Theme.of(context).textTheme.bodySmall),
+                      Text(
+                        subValue!,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ],
                   ],
                 ),
@@ -938,12 +983,9 @@ class _ConfirmationCard extends StatelessWidget {
           _row(context, 'Time', formatAttendanceDateTime(time)),
           const SizedBox(height: 8),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             decoration: BoxDecoration(
-              color: status == 'In'
-                  ? tokens.successSoft
-                  : tokens.dangerSoft,
+              color: status == 'In' ? tokens.successSoft : tokens.dangerSoft,
               borderRadius: BorderRadius.circular(20),
             ),
             child: Text(
@@ -968,13 +1010,16 @@ class _ConfirmationCard extends StatelessWidget {
         children: [
           SizedBox(
             width: 60,
-            child: Text(label,
-                style: TextStyle(color: tokens.inkMuted, fontSize: 12)),
+            child: Text(
+              label,
+              style: TextStyle(color: tokens.inkMuted, fontSize: 12),
+            ),
           ),
           Expanded(
-            child: Text(value,
-                style: TextStyle(
-                    fontWeight: FontWeight.w600, fontSize: 16)),
+            child: Text(
+              value,
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+            ),
           ),
         ],
       ),

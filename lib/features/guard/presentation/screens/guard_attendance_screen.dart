@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/haptics.dart';
@@ -34,6 +35,8 @@ class GuardAttendanceScreen extends ConsumerStatefulWidget {
 }
 
 class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
+  static const Uuid _uuid = Uuid();
+
   SiteOptionModel? _site;
   DutyPointModel? _dutyPoint;
   ShiftTemplateModel? _shift;
@@ -78,12 +81,13 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     if (_position != null) {
       final sites = await ref.read(attendanceSitesProvider.future);
       final profile = await ref.read(guardProfileProvider.future);
-      
+
       final guardDist = profile.district.trim().toLowerCase();
-      var filtered = sites
-          .where((s) => s.district.trim().toLowerCase() == guardDist)
-          .toList();
-      
+      var filtered =
+          sites
+              .where((s) => s.district.trim().toLowerCase() == guardDist)
+              .toList();
+
       // Fallback: If no sites match the district, use all sites so guard isn't blocked
       if (filtered.isEmpty) {
         filtered = sites;
@@ -128,7 +132,9 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
 
     try {
       final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       ).timeout(const Duration(seconds: 10));
       if (!mounted) return;
       setState(() {
@@ -137,7 +143,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       });
     } on TimeoutException {
       if (!mounted) return;
-      setState(() => _error = 'GPS timed out. Please ensure location services are enabled and try again.');
+      setState(
+        () =>
+            _error =
+                'GPS timed out. Please ensure location services are enabled and try again.',
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = 'Could not get location: $e');
@@ -172,114 +182,121 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
       ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) {
-          final filtered = sites
-              .where(
-                (s) =>
-                    s.siteName.toLowerCase().contains(
-                      searchQuery.toLowerCase(),
-                    ) ||
-                    s.district.toLowerCase().contains(searchQuery.toLowerCase()),
-              )
-              .toList();
+      builder:
+          (context) => StatefulBuilder(
+            builder: (context, setModalState) {
+              final filtered =
+                  sites
+                      .where(
+                        (s) =>
+                            s.siteName.toLowerCase().contains(
+                              searchQuery.toLowerCase(),
+                            ) ||
+                            s.district.toLowerCase().contains(
+                              searchQuery.toLowerCase(),
+                            ),
+                      )
+                      .toList();
 
-          return DraggableScrollableSheet(
-            initialChildSize: 0.9,
-            minChildSize: 0.5,
-            maxChildSize: 1.0,
-            expand: false,
-            builder: (context, scrollController) {
-              return Column(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: tokens.inkMuted.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: TextField(
-                      autofocus: true,
-                      style: TextStyle(color: tokens.ink),
-                      decoration: InputDecoration(
-                        hintText: 'Search site name or district...',
-                        prefixIcon: Icon(
-                          Icons.search_rounded,
-                          color: tokens.inkMuted,
-                        ),
-                        filled: true,
-                        fillColor: tokens.surfaceMuted,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.md),
-                          borderSide: BorderSide.none,
+              return DraggableScrollableSheet(
+                initialChildSize: 0.9,
+                minChildSize: 0.5,
+                maxChildSize: 1.0,
+                expand: false,
+                builder: (context, scrollController) {
+                  return Column(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.symmetric(vertical: 12),
+                        decoration: BoxDecoration(
+                          color: tokens.inkMuted.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
-                      onChanged: (value) {
-                        setModalState(() {
-                          searchQuery = value;
-                        });
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: ListView.builder(
-                      controller: scrollController,
-                      itemCount: filtered.length,
-                      padding: const EdgeInsets.only(bottom: 16),
-                      itemBuilder: (context, index) {
-                        final site = filtered[index];
-                        final isSelected = _site?.id == site.id;
-                        return ListTile(
-                          title: Text(
-                            site.siteName,
-                            style: TextStyle(
-                              color:
-                                  isSelected ? tokens.primary : tokens.ink,
-                              fontWeight:
-                                  isSelected ? FontWeight.bold : FontWeight.normal,
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: TextField(
+                          autofocus: true,
+                          style: TextStyle(color: tokens.ink),
+                          decoration: InputDecoration(
+                            hintText: 'Search site name or district...',
+                            prefixIcon: Icon(
+                              Icons.search_rounded,
+                              color: tokens.inkMuted,
+                            ),
+                            filled: true,
+                            fillColor: tokens.surfaceMuted,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(AppRadius.md),
+                              borderSide: BorderSide.none,
                             ),
                           ),
-                          subtitle: Text(
-                            site.district,
-                            style: TextStyle(color: tokens.inkMuted),
-                          ),
-                          trailing:
-                              isSelected
-                                  ? Icon(
-                                    Icons.check_circle_rounded,
-                                    color: tokens.primary,
-                                  )
-                                  : null,
-                          onTap: () {
-                            setState(() {
-                              _site = site;
-                              _dutyPoint =
-                                  site.dutyPoints.isNotEmpty == true
-                                      ? site.dutyPoints.first
-                                      : null;
-                              _shift =
-                                  _dutyPoint?.shiftTemplates.isNotEmpty == true
-                                      ? _dutyPoint!.shiftTemplates.first
-                                      : null;
+                          onChanged: (value) {
+                            setModalState(() {
+                              searchQuery = value;
                             });
-                            Navigator.pop(context);
                           },
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: ListView.builder(
+                          controller: scrollController,
+                          itemCount: filtered.length,
+                          padding: const EdgeInsets.only(bottom: 16),
+                          itemBuilder: (context, index) {
+                            final site = filtered[index];
+                            final isSelected = _site?.id == site.id;
+                            return ListTile(
+                              title: Text(
+                                site.siteName,
+                                style: TextStyle(
+                                  color:
+                                      isSelected ? tokens.primary : tokens.ink,
+                                  fontWeight:
+                                      isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                ),
+                              ),
+                              subtitle: Text(
+                                site.district,
+                                style: TextStyle(color: tokens.inkMuted),
+                              ),
+                              trailing:
+                                  isSelected
+                                      ? Icon(
+                                        Icons.check_circle_rounded,
+                                        color: tokens.primary,
+                                      )
+                                      : null,
+                              onTap: () {
+                                setState(() {
+                                  _site = site;
+                                  _dutyPoint =
+                                      site.dutyPoints.isNotEmpty == true
+                                          ? site.dutyPoints.first
+                                          : null;
+                                  _shift =
+                                      _dutyPoint?.shiftTemplates.isNotEmpty ==
+                                              true
+                                          ? _dutyPoint!.shiftTemplates.first
+                                          : null;
+                                });
+                                Navigator.pop(context);
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  );
+                },
               );
             },
-          );
-        },
-      ),
+          ),
     );
   }
 
@@ -314,8 +331,9 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     }
     if (_site!.lat == null || _site!.lng == null) {
       setState(
-        () => _error =
-            'Selected site does not have GPS coordinates. Please contact the office.',
+        () =>
+            _error =
+                'Selected site does not have GPS coordinates. Please contact the office.',
       );
       return;
     }
@@ -326,7 +344,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     if (_position == null) {
       await _captureLocation();
       if (_position == null) {
-        setState(() => _error = 'Could not determine your location. Please check GPS and try again.');
+        setState(
+          () =>
+              _error =
+                  'Could not determine your location. Please check GPS and try again.',
+        );
         return;
       }
     }
@@ -353,6 +375,12 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                 ? dutyPoint!.shiftTemplates
                 : _site!.shiftTemplates,
           );
+      final distanceMeters = Geolocator.distanceBetween(
+        _position!.latitude,
+        _position!.longitude,
+        _site!.lat!,
+        _site!.lng!,
+      );
 
       final payload = <String, dynamic>{
         'employeeId': profile.employeeId,
@@ -379,13 +407,14 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           'lon': _position!.longitude,
           'accuracyMeters': _position!.accuracy,
         },
-        'distanceMeters': 0,
+        'distanceMeters': distanceMeters,
         'gpsAccuracyMeters': _position!.accuracy,
         'locationAccuracyMeters': _position!.accuracy,
         'geofenceRadiusAtTime': _site!.geofenceRadiusMeters,
         'sourceCollection': _site!.sourceCollection,
         'photoCapturedAt': DateTime.now().toUtc().toIso8601String(),
         'deviceInfo': <String, dynamic>{'userAgent': 'flutter-mobile'},
+        'clientRequestId': _uuid.v4(),
       };
 
       try {
@@ -416,14 +445,18 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           // Write initial location to Firestore for live tracking
           _writeLiveLocation(profile, _status);
           // Notify field officers
-          await ref.read(notificationServiceProvider).triggerSystemNotification(
-            type: 'attendance_marked',
-            title: 'Guard ${_status == 'In' ? 'Checked In' : 'Checked Out'}',
-            body: '${profile.fullName} marked ${_status.toLowerCase()} at ${_site!.siteName}',
-            role: 'fieldOfficer',
-            district: profile.district,
-            data: {'employeeId': profile.employeeId, 'siteId': _site!.id},
-          );
+          await ref
+              .read(notificationServiceProvider)
+              .triggerSystemNotification(
+                type: 'attendance_marked',
+                title:
+                    'Guard ${_status == 'In' ? 'Checked In' : 'Checked Out'}',
+                body:
+                    '${profile.fullName} marked ${_status.toLowerCase()} at ${_site!.siteName}',
+                role: 'fieldOfficer',
+                district: profile.district,
+                data: {'employeeId': profile.employeeId, 'siteId': _site!.id},
+              );
         } else {
           BackgroundTrackingService.stop();
           // Mark OUT in Firestore
@@ -432,7 +465,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
 
         if (mounted) {
           Haptics.heavy();
-        setState(() {
+          setState(() {
             _photoPath = null;
             _error = 'Attendance submitted successfully.';
           });
@@ -445,16 +478,15 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                 uploadOrSubmitError.type == DioExceptionType.receiveTimeout ||
                 uploadOrSubmitError.type == DioExceptionType.connectionError)) {
           // If network failed, queue the request WITH the base64 photo data.
-          // The backend /api/attendance/submit must be updated to handle 
+          // The backend /api/attendance/submit must be updated to handle
           // 'photoDataUrl' directly if 'photoUrl' is missing.
-          await ref.read(offlineQueueProvider).enqueue(
-            path: '/api/attendance/submit',
-            method: 'POST',
-            body: {
-              ...payload,
-              'photoDataUrl': dataUrl,
-            },
-          );
+          await ref
+              .read(offlineQueueProvider)
+              .enqueue(
+                path: '/api/attendance/submit',
+                method: 'POST',
+                body: {...payload, 'photoDataUrl': dataUrl},
+              );
           if (mounted) {
             Haptics.medium();
             // Still write to Firestore so FO can see live location
@@ -484,27 +516,32 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     }
   }
 
-  Future<void> _writeLiveLocation(GuardProfileModel profile, String status) async {
+  Future<void> _writeLiveLocation(
+    GuardProfileModel profile,
+    String status,
+  ) async {
     final site = _site;
     if (site == null || _position == null) return;
     try {
-      await LiveLocationService().setLocation(GuardLocationData(
-        employeeId: profile.employeeId,
-        guardName: profile.fullName,
-        siteId: site.id,
-        siteName: site.siteName,
-        clientName: profile.clientName,
-        district: profile.district,
-        lat: _position!.latitude,
-        lng: _position!.longitude,
-        accuracy: _position!.accuracy,
-        isOutOfZone: false,
-        status: status,
-        updatedAt: DateTime.now(),
-        siteLat: site.lat,
-        siteLng: site.lng,
-        geofenceRadius: site.geofenceRadiusMeters.toDouble(),
-      ));
+      await LiveLocationService().setLocation(
+        GuardLocationData(
+          employeeId: profile.employeeId,
+          guardName: profile.fullName,
+          siteId: site.id,
+          siteName: site.siteName,
+          clientName: profile.clientName,
+          district: profile.district,
+          lat: _position!.latitude,
+          lng: _position!.longitude,
+          accuracy: _position!.accuracy,
+          isOutOfZone: false,
+          status: status,
+          updatedAt: DateTime.now(),
+          siteLat: site.lat,
+          siteLng: site.lng,
+          geofenceRadius: site.geofenceRadiusMeters.toDouble(),
+        ),
+      );
     } catch (e) {
       debugPrint('LiveLocation write error: $e');
     }
@@ -522,7 +559,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         ref.invalidate(attendanceSitesProvider);
         ref.invalidate(guardProfileProvider);
       },
-          actions: <Widget>[
+      actions: <Widget>[
         IconButton(
           onPressed: () => ref.invalidate(attendanceSitesProvider),
           icon: const Icon(Icons.refresh_rounded),
@@ -530,34 +567,41 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       ],
       children: <Widget>[
         profileAsync.when(
-          loading: () => const StateBlock(
-            icon: Icons.person_outline_rounded,
-            title: 'Loading profile',
-            message: 'Fetching employee details...',
-          ),
-          error: (Object error, StackTrace stackTrace) => SectionCard(
-            title: 'Profile error',
-            subtitle: guardErrorMessage(error),
-            icon: Icons.error_outline_rounded,
-          ),
-          data: (profile) {
-            return sitesAsync.when(
-              loading: () => const StateBlock(
-                icon: Icons.place_rounded,
-                title: 'Loading sites',
-                message: 'Fetching duty centers...',
+          loading:
+              () => const StateBlock(
+                icon: Icons.person_outline_rounded,
+                title: 'Loading profile',
+                message: 'Fetching employee details...',
               ),
-              error: (Object error, StackTrace stackTrace) => SectionCard(
-                title: 'Site error',
+          error:
+              (Object error, StackTrace stackTrace) => SectionCard(
+                title: 'Profile error',
                 subtitle: guardErrorMessage(error),
                 icon: Icons.error_outline_rounded,
               ),
+          data: (profile) {
+            return sitesAsync.when(
+              loading:
+                  () => const StateBlock(
+                    icon: Icons.place_rounded,
+                    title: 'Loading sites',
+                    message: 'Fetching duty centers...',
+                  ),
+              error:
+                  (Object error, StackTrace stackTrace) => SectionCard(
+                    title: 'Site error',
+                    subtitle: guardErrorMessage(error),
+                    icon: Icons.error_outline_rounded,
+                  ),
               data: (sites) {
                 final guardDist = profile.district.trim().toLowerCase();
-                var filteredSites = sites
-                    .where((s) => s.district.trim().toLowerCase() == guardDist)
-                    .toList();
-                
+                var filteredSites =
+                    sites
+                        .where(
+                          (s) => s.district.trim().toLowerCase() == guardDist,
+                        )
+                        .toList();
+
                 bool isFiltered = true;
                 if (filteredSites.isEmpty) {
                   filteredSites = sites;
@@ -587,12 +631,19 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                           ),
                           child: Row(
                             children: [
-                              Icon(Icons.info_outline_rounded, color: tokens.warning, size: 20),
+                              Icon(
+                                Icons.info_outline_rounded,
+                                color: tokens.warning,
+                                size: 20,
+                              ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
                                   'No sites found for your district (${profile.district}). Showing all available sites.',
-                                  style: TextStyle(color: tokens.warning, fontSize: 13),
+                                  style: TextStyle(
+                                    color: tokens.warning,
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ),
                             ],
@@ -635,28 +686,32 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<DutyPointModel>(
                           isExpanded: true,
-                          value: _dutyPoint,
-                          items: dutyPoints
-                              .map(
-                                (dutyPoint) => DropdownMenuItem<DutyPointModel>(
-                                  value: dutyPoint,
-                                  child: Text(
-                                    '${dutyPoint.name} • ${dutyPoint.dutyHours} hrs',
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: dutyPoints.isEmpty
-                              ? null
-                              : (dutyPoint) {
-                                  setState(() {
-                                    _dutyPoint = dutyPoint;
-                                    _shift = resolveAttendanceShiftTemplate(
-                                      dutyPoint?.shiftTemplates ??
-                                          const <ShiftTemplateModel>[],
-                                    );
-                                  });
-                                },
+                          initialValue: _dutyPoint,
+                          items:
+                              dutyPoints
+                                  .map(
+                                    (
+                                      dutyPoint,
+                                    ) => DropdownMenuItem<DutyPointModel>(
+                                      value: dutyPoint,
+                                      child: Text(
+                                        '${dutyPoint.name} • ${dutyPoint.dutyHours} hrs',
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged:
+                              dutyPoints.isEmpty
+                                  ? null
+                                  : (dutyPoint) {
+                                    setState(() {
+                                      _dutyPoint = dutyPoint;
+                                      _shift = resolveAttendanceShiftTemplate(
+                                        dutyPoint?.shiftTemplates ??
+                                            const <ShiftTemplateModel>[],
+                                      );
+                                    });
+                                  },
                           decoration: const InputDecoration(
                             labelText: 'Duty Point',
                           ),
@@ -664,7 +719,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<ShiftTemplateModel>(
                           isExpanded: true,
-                          value: _shift,
+                          initialValue: _shift,
                           items:
                               (_dutyPoint?.shiftTemplates ??
                                       const <ShiftTemplateModel>[])
@@ -681,8 +736,8 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                                   .toList(),
                           onChanged:
                               (_dutyPoint?.shiftTemplates.isNotEmpty == true)
-                              ? (shift) => setState(() => _shift = shift)
-                              : null,
+                                  ? (shift) => setState(() => _shift = shift)
+                                  : null,
                           decoration: const InputDecoration(labelText: 'Shift'),
                         ),
                         const SizedBox(height: 12),
@@ -734,9 +789,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                             decoration: BoxDecoration(
                               color:
                                   _error!.toLowerCase().contains('success') ||
-                                      _error!.toLowerCase().contains('queued')
-                                  ? tokens.successSoft
-                                  : tokens.dangerSoft,
+                                          _error!.toLowerCase().contains(
+                                            'queued',
+                                          )
+                                      ? tokens.successSoft
+                                      : tokens.dangerSoft,
                               borderRadius: BorderRadius.circular(AppRadius.sm),
                             ),
                             child: Text(
@@ -744,9 +801,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                               style: TextStyle(
                                 color:
                                     _error!.toLowerCase().contains('success') ||
-                                        _error!.toLowerCase().contains('queued')
-                                    ? tokens.success
-                                    : tokens.danger,
+                                            _error!.toLowerCase().contains(
+                                              'queued',
+                                            )
+                                        ? tokens.success
+                                        : tokens.danger,
                               ),
                             ),
                           ),
@@ -754,20 +813,20 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                         SizedBox(
                           width: double.infinity,
                           child: FilledButton(
-                            onPressed: _busy
-                                ? null
-                                : () => _submitAttendance(profile),
-                          child: _busy
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator.adaptive(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(
-                                  'Submit ${_status == 'In' ? 'Check-In' : 'Check-Out'}',
-                                ),
+                            onPressed:
+                                _busy ? null : () => _submitAttendance(profile),
+                            child:
+                                _busy
+                                    ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator.adaptive(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                    : Text(
+                                      'Submit ${_status == 'In' ? 'Check-In' : 'Check-Out'}',
+                                    ),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -775,15 +834,17 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                     ),
                     SectionCard(
                       title: 'Selected Site Details',
-                      subtitle: _site == null
-                          ? 'Select a site to load duty points and shifts.'
-                          : '${_site!.siteName} • ${_site!.district} • ${_site!.dutyPoints.length} duty points',
+                      subtitle:
+                          _site == null
+                              ? 'Select a site to load duty points and shifts.'
+                              : '${_site!.siteName} • ${_site!.district} • ${_site!.dutyPoints.length} duty points',
                       icon: Icons.location_on_rounded,
                       trailing: StatusChip(
                         label: _site == null ? 'Pending' : 'Ready',
-                        tone: _site == null
-                            ? StatusChipTone.neutral
-                            : StatusChipTone.success,
+                        tone:
+                            _site == null
+                                ? StatusChipTone.neutral
+                                : StatusChipTone.success,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -897,128 +958,145 @@ class _AttendanceHistorySection extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         historyAsync.when(
-          loading: () => const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(child: CircularProgressIndicator()),
-          ),
-          error: (error, _) => StateBlock(
-            icon: Icons.error_outline_rounded,
-            title: 'Could not load history',
-            message: error.toString().replaceFirst('Exception: ', ''),
-            action: FilledButton.tonal(
-              onPressed: () => ref.invalidate(attendanceHistoryProvider),
-              child: const Text('Retry'),
-            ),
-          ),
+          loading:
+              () => const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+          error:
+              (error, _) => StateBlock(
+                icon: Icons.error_outline_rounded,
+                title: 'Could not load history',
+                message: error.toString().replaceFirst('Exception: ', ''),
+                action: FilledButton.tonal(
+                  onPressed: () => ref.invalidate(attendanceHistoryProvider),
+                  child: const Text('Retry'),
+                ),
+              ),
           data: (records) {
             if (records.isEmpty) {
               return const StateBlock(
                 icon: Icons.history_toggle_off_rounded,
                 title: 'No attendance records yet',
-                message: 'Your check-in and check-out records will appear here.',
+                message:
+                    'Your check-in and check-out records will appear here.',
               );
             }
 
             return Column(
-              children: records.take(10).map((record) {
-                final isIn = record.status == 'In';
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: PortalSurfaceCard(
-                    accentColor: isIn ? tokens.success : tokens.warning,
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: (isIn ? tokens.success : tokens.warning)
-                                .withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(AppRadius.sm),
-                          ),
-                          child: Icon(
-                            isIn ? Icons.login_rounded : Icons.logout_rounded,
-                            color: isIn ? tokens.success : tokens.warning,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                record.siteName,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
+              children:
+                  records.take(10).map((record) {
+                    final isIn = record.status == 'In';
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: PortalSurfaceCard(
+                        accentColor: isIn ? tokens.success : tokens.warning,
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: (isIn ? tokens.success : tokens.warning)
+                                    .withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.sm,
                                 ),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${record.dateLabel}${record.time != null ? ' · ${record.time}' : ''}${record.shiftLabel.isNotEmpty ? ' · ${record.shiftLabel}' : ''}',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: tokens.inkMuted,
-                                ),
+                              child: Icon(
+                                isIn
+                                    ? Icons.login_rounded
+                                    : Icons.logout_rounded,
+                                color: isIn ? tokens.success : tokens.warning,
+                                size: 20,
                               ),
-                              if (record.distanceMeters != null) ...[
-                                const SizedBox(height: 1),
-                                Text(
-                                  record.distanceMeters! < 1000
-                                      ? '${record.distanceMeters!.round()} m'
-                                      : '${(record.distanceMeters! / 1000).toStringAsFixed(1)} km',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: record.distanceMeters! > 200
-                                        ? tokens.danger
-                                        : tokens.inkMuted,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        if (record.photoUrl != null && record.photoUrl!.isNotEmpty)
-                          GestureDetector(
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => Scaffold(
-                                  backgroundColor: Colors.black,
-                                  appBar: AppBar(
-                                    backgroundColor: Colors.black,
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  body: Center(
-                                    child: InteractiveViewer(
-                                      child: Image.network(record.photoUrl!),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    record.siteName,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${record.dateLabel}${record.time != null ? ' · ${record.time}' : ''}${record.shiftLabel.isNotEmpty ? ' · ${record.shiftLabel}' : ''}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: tokens.inkMuted,
+                                    ),
+                                  ),
+                                  if (record.distanceMeters != null) ...[
+                                    const SizedBox(height: 1),
+                                    Text(
+                                      record.distanceMeters! < 1000
+                                          ? '${record.distanceMeters!.round()} m'
+                                          : '${(record.distanceMeters! / 1000).toStringAsFixed(1)} km',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color:
+                                            record.distanceMeters! > 200
+                                                ? tokens.danger
+                                                : tokens.inkMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            if (record.photoUrl != null &&
+                                record.photoUrl!.isNotEmpty)
+                              GestureDetector(
+                                onTap:
+                                    () => Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                        builder:
+                                            (_) => Scaffold(
+                                              backgroundColor: Colors.black,
+                                              appBar: AppBar(
+                                                backgroundColor: Colors.black,
+                                                foregroundColor: Colors.white,
+                                              ),
+                                              body: Center(
+                                                child: InteractiveViewer(
+                                                  child: Image.network(
+                                                    record.photoUrl!,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                      ),
+                                    ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.sm,
+                                  ),
+                                  child: Image.network(
+                                    record.photoUrl!,
+                                    width: 40,
+                                    height: 40,
+                                    fit: BoxFit.cover,
+                                  ),
                                 ),
                               ),
+                            const SizedBox(width: 8),
+                            StatusChip(
+                              label: record.status,
+                              tone:
+                                  isIn
+                                      ? StatusChipTone.success
+                                      : StatusChipTone.warning,
                             ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(AppRadius.sm),
-                              child: Image.network(
-                                record.photoUrl!,
-                                width: 40,
-                                height: 40,
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ),
-                        const SizedBox(width: 8),
-                        StatusChip(
-                          label: record.status,
-                          tone: isIn
-                              ? StatusChipTone.success
-                              : StatusChipTone.warning,
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
+                      ),
+                    );
+                  }).toList(),
             );
           },
         ),
