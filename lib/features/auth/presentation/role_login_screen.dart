@@ -172,9 +172,8 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
             .signInAsFieldOfficer(email: loginId, password: pin);
       }
       if (mounted) {
-        context.go(
-          session.role == AppRole.fieldOfficer ? '/field-officer' : '/',
-        );
+        // AuthGate routes to the correct shell based on session role.
+        context.go('/');
       }
     } catch (error) {
       setState(() {
