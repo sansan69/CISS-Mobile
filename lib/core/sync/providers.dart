@@ -9,7 +9,10 @@ final offlineQueueProvider = ChangeNotifierProvider<OfflineQueue>((ref) {
 });
 
 final syncServiceProvider = Provider<SyncService>((ref) {
-  final repository = ref.watch(mobileRepositoryProvider);
-  final queue = ref.watch(offlineQueueProvider);
-  return SyncService(repository, queue);
+  final repository = ref.read(mobileRepositoryProvider);
+  final queue = ref.read(offlineQueueProvider);
+  final service = SyncService(repository, queue);
+  service.start();
+  ref.onDispose(service.stop);
+  return service;
 });

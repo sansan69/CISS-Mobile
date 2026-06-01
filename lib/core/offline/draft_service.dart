@@ -34,4 +34,4 @@ class DraftService extends ChangeNotifier {
   }
 }
 
-final draftServiceProvider = Provider((ref) => DraftService());
+final draftServiceProvider = ChangeNotifierProvider<DraftService>((ref) => DraftService());

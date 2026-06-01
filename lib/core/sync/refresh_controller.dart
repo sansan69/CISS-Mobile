@@ -54,5 +54,8 @@ class RefreshController {
 }
 
 final refreshControllerProvider = Provider<RefreshController>((ref) {
-  return RefreshController(ref);
+  final controller = RefreshController(ref);
+  controller.start();
+  ref.onDispose(controller.stop);
+  return controller;
 });
