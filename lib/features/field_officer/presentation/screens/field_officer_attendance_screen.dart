@@ -417,7 +417,7 @@ class _LiveGuardRow extends StatelessWidget {
                 Text(
                   entry.status.toUpperCase(),
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: 11,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.5,
                     color: glow,

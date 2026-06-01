@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/brand.dart';
-import '../../../shared/widgets/screen_scaffold.dart';
+import '../../../shared/widgets/auth/login_background.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Screen
@@ -27,7 +27,7 @@ class _LoginHubScreenState extends State<LoginHubScreen>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 560),
+      duration: const Duration(milliseconds: 700),
     )..forward();
   }
 
@@ -39,11 +39,11 @@ class _LoginHubScreenState extends State<LoginHubScreen>
 
   Animation<double> _fade(double from, double to) => CurvedAnimation(
         parent: _ctrl,
-        curve: Interval(from, to, curve: Curves.easeOut),
+        curve: Interval(from, to, curve: Curves.easeOutCubic),
       );
 
   Animation<Offset> _slide(double from, double to) =>
-      Tween<Offset>(begin: const Offset(0, 0.055), end: Offset.zero).animate(
+      Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero).animate(
         CurvedAnimation(
           parent: _ctrl,
           curve: Interval(from, to, curve: Curves.easeOutCubic),
@@ -53,123 +53,174 @@ class _LoginHubScreenState extends State<LoginHubScreen>
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
+    final theme = Theme.of(context);
 
-    return ScreenScaffold(
-      title: 'Select your portal',
-      subtitle: 'Choose the workspace for your role',
-      children: <Widget>[
-        // Brand mark — prominent identity on login screen
-        FadeTransition(
-          opacity: _fade(0.0, 0.5),
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Column(
-                children: <Widget>[
-                  Container(
-                    width: 72,
-                    height: 72,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: tokens.primarySoft,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: tokens.primary.withValues(alpha: 0.18),
-                          blurRadius: 28,
-                          spreadRadius: 4,
+    return Scaffold(
+      body: SecurityGridBackground(
+        child: SafeArea(
+          child: CustomScrollView(
+            slivers: <Widget>[
+              // Brand mark
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 40, 20, 0),
+                  child: FadeTransition(
+                    opacity: _fade(0.0, 0.4),
+                    child: SlideTransition(
+                      position: _slide(0.0, 0.4),
+                      child: Column(
+                        children: <Widget>[
+                          // Logo with glow
+                          Container(
+                            width: 80,
+                            height: 80,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: tokens.primarySoft,
+                              shape: BoxShape.circle,
+                              boxShadow: <BoxShadow>[
+                                BoxShadow(
+                                  color: tokens.primary.withValues(alpha: 0.18),
+                                  blurRadius: 32,
+                                  spreadRadius: 6,
+                                ),
+                              ],
+                            ),
+                            child: Image.asset(
+                              kCompanyLogoAsset,
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            kCompanyName.toUpperCase(),
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w800,
+                              color: tokens.primary,
+                              letterSpacing: 3.5,
+                              height: 1,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            kCompanyTagline,
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: tokens.inkMuted,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Instructions
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 36, 20, 0),
+                  child: FadeTransition(
+                    opacity: _fade(0.1, 0.5),
+                    child: SlideTransition(
+                      position: _slide(0.1, 0.5),
+                      child: Text(
+                        'SELECT YOUR PORTAL',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: tokens.inkMuted,
+                          letterSpacing: 2,
                         ),
-                      ],
-                    ),
-                    child: Image.asset(kCompanyLogoAsset, fit: BoxFit.contain),
-                  ),
-                  const SizedBox(height: 14),
-                  Text(
-                    kCompanyName.toUpperCase(),
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w800,
-                      color: tokens.primary,
-                      letterSpacing: 3,
-                      height: 1,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    kCompanyTagline,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: tokens.inkMuted,
-                      letterSpacing: 0.5,
+                ),
+              ),
+
+              // Guard portal card
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                  child: SizedBox(
+                    height: 240,
+                    child: FadeTransition(
+                      opacity: _fade(0.15, 0.6),
+                      child: SlideTransition(
+                        position: _slide(0.15, 0.65),
+                        child: _RoleCard(
+                          title: 'GUARD\nOPERATIONS',
+                          tagline: 'Attendance  ·  Shifts  ·  Duty reports',
+                          icon: Icons.verified_user_rounded,
+                          accentColor: tokens.primary,
+                          softColor: tokens.primarySoft,
+                          darkSoftColor: tokens.primary.withValues(alpha: 0.12),
+                          infographic: _InfographicType.guard,
+                          introDelay: const Duration(milliseconds: 360),
+                          onTap: () => context.go('/login/guard'),
+                        ),
+                      ),
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ),
 
-        const SizedBox(height: 20),
-
-        // Guard portal
-        SizedBox(
-          height: 230,
-          child: FadeTransition(
-            opacity: _fade(0.12, 0.65),
-            child: SlideTransition(
-              position: _slide(0.12, 0.75),
-              child: _RoleCard(
-                title: 'GUARD\nOPERATIONS',
-                tagline: 'Attendance  ·  Shifts  ·  Duty reports',
-                icon: Icons.verified_user_rounded,
-                accentColor: tokens.primary,
-                softColor: tokens.primarySoft,
-                infographic: _InfographicType.guard,
-                introDelay: const Duration(milliseconds: 360),
-                    onTap: () => context.go('/login/guard'),
-              ),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 10),
-
-        // Field command portal
-        SizedBox(
-          height: 230,
-          child: FadeTransition(
-            opacity: _fade(0.22, 0.75),
-            child: SlideTransition(
-              position: _slide(0.22, 0.85),
-              child: _RoleCard(
-                title: 'FIELD\nCOMMAND',
-                tagline: 'Districts  ·  Work orders  ·  Reports',
-                icon: Icons.admin_panel_settings_rounded,
-                accentColor: tokens.accent,
-                softColor: tokens.warningSoft,
-                infographic: _InfographicType.field,
-                introDelay: const Duration(milliseconds: 490),
-                onTap: () => context.go('/login/field-officer'),
-              ),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 16),
-
-        FadeTransition(
-          opacity: _fade(0.5, 1.0),
-          child: Center(
-            child: Text(
-              '© 2026 $kCompanyName · Secured',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: tokens.inkMuted,
+              // Field command card
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                  child: SizedBox(
+                    height: 240,
+                    child: FadeTransition(
+                      opacity: _fade(0.25, 0.7),
+                      child: SlideTransition(
+                        position: _slide(0.25, 0.75),
+                        child: _RoleCard(
+                          title: 'FIELD\nCOMMAND',
+                          tagline: 'Districts  ·  Work orders  ·  Reports',
+                          icon: Icons.admin_panel_settings_rounded,
+                          accentColor: tokens.accent,
+                          softColor: tokens.accent.withValues(alpha: 0.1),
+                          darkSoftColor:
+                              tokens.accent.withValues(alpha: 0.12),
+                          infographic: _InfographicType.field,
+                          introDelay: const Duration(milliseconds: 490),
+                          onTap: () => context.go('/login/field-officer'),
+                        ),
+                      ),
+                    ),
                   ),
-            ),
+                ),
+              ),
+
+              // Footer
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+                  child: FadeTransition(
+                    opacity: _fade(0.5, 1.0),
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Text(
+                        '© 2026 $kCompanyName · Secured by CISS Core',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: tokens.inkMuted.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -187,6 +238,7 @@ class _RoleCard extends StatefulWidget {
     required this.icon,
     required this.accentColor,
     required this.softColor,
+    required this.darkSoftColor,
     required this.infographic,
     required this.introDelay,
     required this.onTap,
@@ -198,6 +250,7 @@ class _RoleCard extends StatefulWidget {
   final IconData icon;
   final Color accentColor;
   final Color softColor;
+  final Color darkSoftColor;
   final _InfographicType infographic;
   final Duration introDelay;
   final VoidCallback onTap;
@@ -248,127 +301,177 @@ class _RoleCardState extends State<_RoleCard>
       onTapCancel: () => setState(() => _pressed = false),
       onLongPress: widget.onLongPress,
       child: AnimatedScale(
-        scale: _pressed ? 0.974 : 1.0,
-        duration: const Duration(milliseconds: 110),
+        scale: _pressed ? 0.97 : 1.0,
+        duration: const Duration(milliseconds: 120),
         curve: Curves.easeOut,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 140),
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: tokens.surface.withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                border: Border.all(
-                  color: _pressed
-                      ? widget.accentColor.withValues(alpha: 0.5)
-                      : tokens.border.withValues(alpha: 0.5),
-                ),
-                boxShadow: _pressed ? const <BoxShadow>[] : AppShadows.card,
-              ),
-              child: Stack(
-                children: <Widget>[
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: 4,
-                    child: ColoredBox(
-                      color: widget.accentColor.withValues(alpha: 0.55),
+        child: Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: tokens.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: _pressed
+                  ? widget.accentColor.withValues(alpha: 0.5)
+                  : tokens.border.withValues(alpha: 0.6),
+              width: _pressed ? 1.5 : 1,
+            ),
+            boxShadow: _pressed
+                ? const <BoxShadow>[]
+                : const <BoxShadow>[
+                    BoxShadow(
+                      color: Color(0x0A0C2A43),
+                      blurRadius: 20,
+                      offset: Offset(0, 8),
+                      spreadRadius: -2,
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        Container(
-                          width: 46,
-                          height: 46,
-                          decoration: BoxDecoration(
-                            color: widget.softColor,
-                            borderRadius: BorderRadius.circular(AppRadius.sm),
-                          ),
-                          child: Icon(
-                            widget.icon,
-                            color: widget.accentColor,
-                            size: 23,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Expanded(
-                          child: Center(
-                            child: AnimatedBuilder(
-                              animation: _introAnim,
-                              builder: (context, _) {
-                                return widget.infographic ==
-                                        _InfographicType.guard
-                                    ? CustomPaint(
-                                        painter: _AttendancePainter(
-                                          color: widget.accentColor,
-                                          progress: _introAnim.value,
-                                        ),
-                                        size: const Size(92, 66),
-                                      )
-                                    : CustomPaint(
-                                        painter: _NetworkPainter(
-                                          color: widget.accentColor,
-                                          progress: _introAnim.value,
-                                        ),
-                                        size: const Size(92, 80),
-                                      );
-                              },
-                            ),
-                          ),
-                        ),
-                        Text(
-                          widget.title,
-                          style: TextStyle(
-                            fontSize: 38,
-                            fontWeight: FontWeight.w700,
-                            color: tokens.ink,
-                            height: 0.95,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                        const SizedBox(height: 7),
-                        Text(
-                          widget.tagline,
-                          style:
-                              Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: tokens.inkMuted,
-                                    letterSpacing: 0.1,
-                                  ),
-                        ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: <Widget>[
-                            Text(
-                              'Enter portal',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelMedium
-                                  ?.copyWith(
-                                    color: widget.accentColor,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.arrow_forward_rounded,
-                              color: widget.accentColor,
-                              size: 14,
-                            ),
-                          ],
-                        ),
+                  ],
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            children: <Widget>[
+              // Top accent bar
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 4,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        widget.accentColor.withValues(alpha: 0.8),
+                        widget.accentColor.withValues(alpha: 0.3),
                       ],
                     ),
                   ),
-                ],
+                ),
               ),
-            ),
+              // Background pattern
+              Positioned(
+                top: 0,
+                right: 0,
+                bottom: 0,
+                width: 140,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        Colors.transparent,
+                        widget.darkSoftColor,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // Content
+              Padding(
+                padding: const EdgeInsets.fromLTRB(22, 20, 22, 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    // Icon
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: widget.softColor,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(
+                        widget.icon,
+                        color: widget.accentColor,
+                        size: 26,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Infographic
+                    Expanded(
+                      child: Center(
+                        child: AnimatedBuilder(
+                          animation: _introAnim,
+                          builder: (context, _) {
+                            return widget.infographic == _InfographicType.guard
+                                ? CustomPaint(
+                                    painter: _AttendancePainter(
+                                      color: widget.accentColor,
+                                      progress: _introAnim.value,
+                                    ),
+                                    size: const Size(100, 72),
+                                  )
+                                : CustomPaint(
+                                    painter: _NetworkPainter(
+                                      color: widget.accentColor,
+                                      progress: _introAnim.value,
+                                    ),
+                                    size: const Size(100, 88),
+                                  );
+                          },
+                        ),
+                      ),
+                    ),
+                    // Title
+                    Text(
+                      widget.title,
+                      style: TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.w800,
+                        color: tokens.ink,
+                        height: 0.95,
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Tagline
+                    Text(
+                      widget.tagline,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: tokens.inkMuted,
+                            letterSpacing: 0.1,
+                          ),
+                    ),
+                    const SizedBox(height: 16),
+                    // CTA row
+                    Row(
+                      children: <Widget>[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: widget.softColor,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Text(
+                                'Enter portal',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelMedium
+                                    ?.copyWith(
+                                      color: widget.accentColor,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                              ),
+                              const SizedBox(width: 6),
+                              Icon(
+                                Icons.arrow_forward_rounded,
+                                color: widget.accentColor,
+                                size: 16,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -389,9 +492,9 @@ class _AttendancePainter extends CustomPainter {
   static const int _cols = 5;
   static const int _rows = 4;
   static const int _total = _cols * _rows;
-  static const double _dotR = 4.6;
-  static const double _colGap = 16.0;
-  static const double _rowGap = 16.0;
+  static const double _dotR = 4.8;
+  static const double _colGap = 17.0;
+  static const double _rowGap = 17.0;
 
   static const Set<int> _present = {
     0, 1, 2, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16,

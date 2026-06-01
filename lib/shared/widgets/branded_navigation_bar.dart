@@ -37,7 +37,7 @@ class BrandedNavigationBar extends StatelessWidget {
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
             return TextStyle(
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: FontWeight.w800,
               color: tokens.primaryStrong,
               height: 1.0,
@@ -45,7 +45,7 @@ class BrandedNavigationBar extends StatelessWidget {
             );
           }
           return TextStyle(
-            fontSize: 10,
+            fontSize: 11,
             fontWeight: FontWeight.w500,
             color: tokens.inkMuted,
             height: 1.0,

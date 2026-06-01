@@ -112,7 +112,7 @@ class _ActionItem extends StatelessWidget {
                           action.badge!,
                           style: TextStyle(
                             color: tokens.surface,
-                            fontSize: 9,
+                            fontSize: 11,
                             fontWeight: FontWeight.w800,
                             height: 1,
                           ),

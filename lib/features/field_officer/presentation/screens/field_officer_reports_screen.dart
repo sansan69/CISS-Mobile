@@ -265,7 +265,7 @@ class _FieldOfficerReportsScreenState
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(color: tokens.primarySoft, borderRadius: BorderRadius.circular(4)),
-                            child: Text('Active', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: tokens.primary)),
+                            child: Text('Active', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: tokens.primary)),
                           ),
                         ],
                       ],
@@ -539,7 +539,7 @@ class _VisitBriefingCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 '📍 ${report.visitLocation!['lat']?.toStringAsFixed(5) ?? '?'}, ${report.visitLocation!['lng']?.toStringAsFixed(5) ?? '?'}',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: tokens.inkMuted),
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: tokens.inkMuted),
               ),
             ],
           ],
@@ -674,7 +674,7 @@ class _TrainingBriefingCard extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 '📍 ${report.visitLocation!['lat']?.toStringAsFixed(5) ?? '?'}, ${report.visitLocation!['lng']?.toStringAsFixed(5) ?? '?'}',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: tokens.inkMuted),
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: tokens.inkMuted),
               ),
             ],
           ],

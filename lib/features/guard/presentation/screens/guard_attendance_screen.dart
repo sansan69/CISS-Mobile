@@ -1038,7 +1038,7 @@ class _AttendanceHistorySection extends ConsumerWidget {
                                           ? '${record.distanceMeters!.round()} m'
                                           : '${(record.distanceMeters! / 1000).toStringAsFixed(1)} km',
                                       style: TextStyle(
-                                        fontSize: 10,
+                                        fontSize: 11,
                                         color:
                                             record.distanceMeters! > 200
                                                 ? tokens.danger

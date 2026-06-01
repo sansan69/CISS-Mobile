@@ -10,6 +10,8 @@ import '../../../core/models/app_role.dart';
 import '../../../core/models/auth_session.dart';
 import '../../../app/theme/theme_mode_controller.dart';
 import '../../../core/auth/biometric_service.dart';
+import '../../../core/brand.dart';
+import '../../../shared/widgets/auth/login_background.dart';
 import '../../field_officer/presentation/field_officer_shell.dart';
 import '../../guard/presentation/guard_shell.dart';
 import 'login_hub_screen.dart';
@@ -193,39 +195,62 @@ class _AppLoadingScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: tokens.canvas,
-      body: SafeArea(
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Brand mark
-              Container(
-                width: 72,
-                height: 72,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: tokens.primarySoft,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: tokens.primary.withValues(alpha: 0.15),
-                      blurRadius: 24,
-                      spreadRadius: 4,
+      body: SecurityGridBackground(
+        child: SafeArea(
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Brand mark with gradient ring
+                Container(
+                  width: 84,
+                  height: 84,
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        tokens.primary,
+                        tokens.primaryStrong,
+                      ],
                     ),
-                  ],
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: tokens.canvas,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Image.asset(
+                      kCompanyLogoAsset,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
                 ),
-                child: Image.asset('assets/ciss-logo.png', fit: BoxFit.contain),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: 32,
-                height: 3,
-                child: LinearProgressIndicator(
-                  backgroundColor: tokens.surfaceMuted,
-                  color: tokens.primary,
+                const SizedBox(height: 28),
+                Text(
+                  kCompanyName.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: tokens.inkMuted,
+                    letterSpacing: 3,
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: 36,
+                  height: 3,
+                  child: LinearProgressIndicator(
+                    backgroundColor: tokens.surfaceMuted,
+                    color: tokens.primary,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -245,35 +270,100 @@ class _BiometricLockScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = Theme.of(context).extension<CissThemeTokens>()!;
+
     return Scaffold(
-      body: SafeArea(
-        child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.lock_outline_rounded,
-              size: 64,
-              color: tokens.inkMuted,
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'App Locked',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text('Unlock with biometrics to continue'),
-            const SizedBox(height: 32),
-            if (isAuthenticating)
-              const CircularProgressIndicator()
-            else
-              FilledButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.fingerprint),
-                label: const Text('Unlock App'),
+      body: SecurityGridBackground(
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Lock icon with gradient background
+                  Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          tokens.primary,
+                          tokens.primaryStrong,
+                        ],
+                      ),
+                      shape: BoxShape.circle,
+                      boxShadow: <BoxShadow>[
+                        BoxShadow(
+                          color: tokens.primary.withValues(alpha: 0.25),
+                          blurRadius: 32,
+                          spreadRadius: 4,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.lock_outline_rounded,
+                      size: 44,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  Text(
+                    'App Locked',
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      color: tokens.ink,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Unlock with biometrics to continue accessing your workspace',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: tokens.inkMuted,
+                          height: 1.4,
+                        ),
+                  ),
+                  const SizedBox(height: 40),
+                  if (isAuthenticating)
+                    SizedBox(
+                      width: 44,
+                      height: 44,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 3,
+                        color: tokens.primary,
+                      ),
+                    )
+                  else
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: FilledButton.icon(
+                        onPressed: onRetry,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: tokens.primary,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        icon: const Icon(Icons.fingerprint_rounded),
+                        label: const Text('Unlock App'),
+                      ),
+                    ),
+                ],
               ),
-          ],
-        ),
+            ),
+          ),
         ),
       ),
     );

@@ -327,7 +327,7 @@ class _RadialProgress extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 11,
               fontWeight: FontWeight.w800,
               color: color,
             ),
