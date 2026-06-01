@@ -677,7 +677,9 @@ class MobileRepository {
 
   Future<GuardProfileModel> fetchGuardProfile() async {
     final data = await _getJson('/api/guard/profile');
-    final employee = Map<String, dynamic>.from(data['employee'] as Map);
+    final employee = data['employee'] is Map<String, dynamic>
+        ? Map<String, dynamic>.from(data['employee'] as Map)
+        : <String, dynamic>{};
     return GuardProfileModel.fromJson(
       employee,
       id: employee['id'] as String? ?? '',
@@ -700,7 +702,9 @@ class MobileRepository {
       '/api/public/attendance/employee',
       queryParameters: <String, dynamic>{'employeeId': employeeId},
     );
-    final employee = Map<String, dynamic>.from(data['employee'] as Map);
+    final employee = data['employee'] is Map<String, dynamic>
+        ? Map<String, dynamic>.from(data['employee'] as Map)
+        : <String, dynamic>{};
     final hint = employee['attendanceHint'] is Map<String, dynamic>
         ? Map<String, dynamic>.from(employee['attendanceHint'] as Map)
         : null;
