@@ -1009,7 +1009,7 @@ class _AttendanceHistorySection extends ConsumerWidget {
     for (final record in records) {
       String monthKey;
       try {
-        final dt = DateTime.tryParse(record.createdAt);
+        final dt = DateTime.tryParse(record.dateLabel);
         if (dt != null) {
           monthKey = '${dt.year}-${dt.month.toString().padLeft(2, '0')}';
         } else {
@@ -1322,7 +1322,7 @@ class _AttendanceHistorySection extends ConsumerWidget {
     String dayStr = '--';
     String weekdayStr = '';
     try {
-      final dt = DateTime.tryParse(record.createdAt);
+      final dt = DateTime.tryParse(record.dateLabel);
       if (dt != null) {
         dayStr = '${dt.day}';
         const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];

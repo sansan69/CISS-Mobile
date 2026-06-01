@@ -102,7 +102,7 @@ class _FieldOfficerGuardAttendanceScreenState
                 elevation: 0,
                 title: Text(
                   'Attendance',
-                  style: TextStyle(fontWeight: FontWeight.w800, color: tokens.inkPrimary),
+                  style: TextStyle(fontWeight: FontWeight.w800, color: tokens.ink),
                 ),
                 actions: [
                   const SyncStatusBadge(),
@@ -392,7 +392,7 @@ class _FieldOfficerGuardAttendanceScreenState
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: isSelected ? Colors.white : tokens.inkPrimary,
+                  color: isSelected ? Colors.white : tokens.ink,
                 ),
               ),
               onSelected: (v) {

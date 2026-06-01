@@ -245,7 +245,7 @@ class GuardTrainingScreen extends ConsumerWidget {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: tokens.inkPrimary,
+                          color: tokens.ink,
                         ),
                       ),
                       const SizedBox(height: 4),
