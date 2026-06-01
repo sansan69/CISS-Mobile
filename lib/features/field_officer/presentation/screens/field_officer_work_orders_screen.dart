@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/guard_profile.dart';
@@ -94,7 +95,7 @@ class _FieldOfficerWorkOrdersScreenState
                   ],
                 ),
               ),
-              
+
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -205,6 +206,7 @@ class _WorkOrderCard extends ConsumerWidget {
         workOrder.totalManpower > 0 &&
         workOrder.assignedCount >= workOrder.totalManpower;
     final accent = isCovered ? tokens.success : tokens.warning;
+    final String formattedDate = _formatWorkOrderDate(workOrder.dateLabel);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -238,9 +240,42 @@ class _WorkOrderCard extends ConsumerWidget {
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
+                          const SizedBox(height: 4),
                           Text(
-                            '${workOrder.examName} · ${workOrder.district}',
-                            style: Theme.of(context).textTheme.bodySmall,
+                            workOrder.examName,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: tokens.ink,
+                            ),
+                          ),
+                          if (workOrder.clientName.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Icon(Icons.business, size: 12, color: tokens.inkMuted),
+                                const SizedBox(width: 4),
+                                Text(
+                                  workOrder.clientName,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: tokens.inkMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Icon(Icons.location_on_outlined, size: 12, color: tokens.inkMuted),
+                              const SizedBox(width: 4),
+                              Text(
+                                workOrder.district,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: tokens.inkMuted,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -259,7 +294,7 @@ class _WorkOrderCard extends ConsumerWidget {
                     Icon(Icons.calendar_today_rounded, size: 14, color: tokens.inkMuted),
                     const SizedBox(width: 6),
                     Text(
-                      workOrder.dateLabel,
+                      formattedDate,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -279,6 +314,27 @@ class _WorkOrderCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  String _formatWorkOrderDate(String raw) {
+    if (raw.isEmpty) return 'Date not set';
+    final dt = DateTime.tryParse(raw);
+    if (dt != null) {
+      final day = DateFormat('d').format(dt);
+      final suffix = _daySuffix(int.parse(day));
+      return DateFormat("d'$suffix' MMM yyyy, h:mm a").format(dt);
+    }
+    return raw;
+  }
+
+  String _daySuffix(int day) {
+    if (day >= 11 && day <= 13) return 'th';
+    switch (day % 10) {
+      case 1: return 'st';
+      case 2: return 'nd';
+      case 3: return 'rd';
+      default: return 'th';
+    }
   }
 
   void _openAssignSheet(BuildContext context, WidgetRef ref) {
