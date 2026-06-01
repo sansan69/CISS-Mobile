@@ -43,7 +43,7 @@ class OfflineRequest {
 
   OfflineRequest copyWith({
     int? retryCount,
-    String? lastError,
+    Object? lastError = _sentinel,
     Map<String, dynamic>? body,
   }) {
     return OfflineRequest(
@@ -53,7 +53,9 @@ class OfflineRequest {
       body: body ?? this.body,
       createdAt: createdAt,
       retryCount: retryCount ?? this.retryCount,
-      lastError: lastError ?? this.lastError,
+      lastError: lastError == _sentinel ? this.lastError : lastError as String?,
     );
   }
+
+  static const Object _sentinel = Object();
 }

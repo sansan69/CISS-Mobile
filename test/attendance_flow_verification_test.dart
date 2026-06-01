@@ -11,9 +11,9 @@ void main() {
 
       // Verification of DOB format handling logic (internal)
       // The backend expects YYYY-MM-DD
-      final dobInternal = dummyDob; 
+      final dobInternal = dummyDob;
       expect(dobInternal, matches(RegExp(r'^\d{4}-\d{2}-\d{2}$')));
-      
+
       // Simulation of site selection and coordinate safety
       const mockSite = SiteOptionModel(
         id: 'site-123',
@@ -78,8 +78,9 @@ void main() {
       ];
 
       const guardDistrict = 'Ernakulam';
-      final filteredSites =
-          sites.where((s) => s.district == guardDistrict).toList();
+      final filteredSites = sites
+          .where((s) => s.district == guardDistrict)
+          .toList();
 
       expect(filteredSites.length, 1);
       expect(filteredSites.first.siteName, 'Site A');
@@ -128,7 +129,8 @@ void main() {
       // Note: In real code we use Geolocator.distanceBetween
       // Here we do a simple squared distance for logical verification
       for (final site in sites) {
-        final dist = (currentLat - site.lat!) * (currentLat - site.lat!) +
+        final dist =
+            (currentLat - site.lat!) * (currentLat - site.lat!) +
             (currentLng - site.lng!) * (currentLng - site.lng!);
         if (dist < minDistance) {
           minDistance = dist;
@@ -138,6 +140,70 @@ void main() {
 
       expect(nearest?.id, '2');
       expect(nearest?.siteName, 'Near Site');
+    });
+
+    test(
+      'checkout prefers the open session shift instead of the current clock shift',
+      () {
+        const shifts = <ShiftTemplateModel>[
+          ShiftTemplateModel(
+            code: 'day',
+            label: 'Day Shift',
+            startTime: '08:00',
+            endTime: '20:00',
+          ),
+          ShiftTemplateModel(
+            code: 'night',
+            label: 'Night Shift',
+            startTime: '20:00',
+            endTime: '08:00',
+          ),
+        ];
+
+        const hint = AttendanceHintModel(
+          lastStatus: 'In',
+          lastShiftCode: 'night',
+          openSessionId: 'session-1',
+        );
+
+        final selected = resolveAttendanceSubmissionShiftTemplate(
+          shifts,
+          status: 'Out',
+          attendanceHint: hint,
+          at: DateTime(2026, 5, 20, 8, 8),
+        );
+
+        expect(selected?.code, 'night');
+      },
+    );
+
+    test('new check-in still uses the active clock shift', () {
+      const shifts = <ShiftTemplateModel>[
+        ShiftTemplateModel(
+          code: 'day',
+          label: 'Day Shift',
+          startTime: '08:00',
+          endTime: '20:00',
+        ),
+        ShiftTemplateModel(
+          code: 'night',
+          label: 'Night Shift',
+          startTime: '20:00',
+          endTime: '08:00',
+        ),
+      ];
+
+      final selected = resolveAttendanceSubmissionShiftTemplate(
+        shifts,
+        status: 'In',
+        attendanceHint: const AttendanceHintModel(
+          lastStatus: 'Out',
+          lastShiftCode: 'night',
+        ),
+        at: DateTime(2026, 5, 20, 8, 8),
+      );
+
+      expect(selected?.code, 'day');
     });
 
     group('Date Formatting Consistency', () {

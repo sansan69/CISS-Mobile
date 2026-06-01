@@ -19,38 +19,54 @@ class PermissionOnboardingScreen extends StatefulWidget {
 class _PermissionOnboardingScreenState
     extends State<PermissionOnboardingScreen> {
   bool _isProcessing = false;
+  String? _warning;
 
   Future<void> _requestPermissions() async {
-    setState(() => _isProcessing = true);
+    setState(() {
+      _isProcessing = true;
+      _warning = null;
+    });
 
-    // Request the two core permissions first.
-    await Permission.location.request();
+    final locationStatus = await Permission.location.request();
     await Permission.locationAlways.request();
-    await Permission.camera.request();
-
-    // Request notification permission — not blocking if denied, but we need
-    // POST_NOTIFICATIONS granted before we can initialize the background
-    // tracking service on Android 14+ (API 34).
+    final cameraStatus = await Permission.camera.request();
     await Permission.notification.request();
 
-    // Now that POST_NOTIFICATIONS has been requested, initialize the background
-    // tracking service. On Android 14+, startForeground() crashes without it.
-    // main.dart skipped this when the permission wasn't already granted.
+    // Initialize background tracking after notification permission.
     try {
       await BackgroundTrackingService.initialize();
     } catch (e) {
       debugPrint('Background service init after permissions: $e');
     }
 
-    setState(() => _isProcessing = false);
-
     if (mounted) {
+      setState(() => _isProcessing = false);
+
+      // Check if critical permissions were permanently denied.
+      if (locationStatus.isPermanentlyDenied || cameraStatus.isPermanentlyDenied) {
+        setState(() {
+          _warning = 'Some permissions were denied. Please enable Location and '
+              'Camera in app settings for attendance to work.';
+        });
+        return;
+      }
+
+      // Check if critical permissions are still denied (not permanently).
+      if (locationStatus.isDenied) {
+        setState(() {
+          _warning = 'Location permission is required for attendance. '
+              'Please grant it to continue.';
+        });
+        return;
+      }
+
       context.go('/');
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
     return ScreenScaffold(
       title: 'Guard setup',
       subtitle: 'Enable the required permissions before starting duty',
@@ -90,6 +106,35 @@ class _PermissionOnboardingScreenState
           description:
               'Receive shift updates, site alerts, and emergency escalations.',
         ),
+        if (_warning != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: tokens.warningSoft,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: tokens.warning, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _warning!,
+                    style: TextStyle(color: tokens.warning, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () => openAppSettings(),
+            icon: const Icon(Icons.settings_rounded),
+            label: const Text('Open App Settings'),
+          ),
+        ],
+        const SizedBox(height: 8),
         FilledButton(
           onPressed: _isProcessing ? null : _requestPermissions,
           child: _isProcessing

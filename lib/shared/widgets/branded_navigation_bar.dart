@@ -31,50 +31,20 @@ class BrandedNavigationBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    return NavigationBarTheme(
-      data: NavigationBarThemeData(
-        height: 64,
-        labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: tokens.primaryStrong,
-              height: 1.0,
-              letterSpacing: -0.3,
-            );
-          }
-          return TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w500,
-            color: tokens.inkMuted,
-            height: 1.0,
-            letterSpacing: -0.3,
-          );
-        }),
-        indicatorShape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-        ),
-        indicatorColor: tokens.primarySoft,
-        backgroundColor: tokens.surface,
-        surfaceTintColor: Colors.transparent,
-        shadowColor: Colors.transparent,
-      ),
-      child: NavigationBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: onSelected,
-        animationDuration: const Duration(milliseconds: 300),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: items
-            .map(
-              (BrandedNavigationItem item) => NavigationDestination(
-                icon: Icon(item.icon, size: 20, color: tokens.inkMuted),
-                selectedIcon: Icon(item.activeIcon, size: 20, color: tokens.primaryStrong),
-                label: item.label,
-              ),
-            )
-            .toList(),
-      ),
+    return NavigationBar(
+      selectedIndex: selectedIndex,
+      onDestinationSelected: onSelected,
+      animationDuration: const Duration(milliseconds: 300),
+      labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+      destinations: items
+          .map(
+            (BrandedNavigationItem item) => NavigationDestination(
+              icon: Icon(item.icon, size: 20, color: tokens.inkMuted),
+              selectedIcon: Icon(item.activeIcon, size: 20, color: tokens.primaryStrong),
+              label: item.label,
+            ),
+          )
+          .toList(),
     );
   }
 }

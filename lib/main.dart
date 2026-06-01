@@ -11,6 +11,7 @@ import 'core/fcm/providers.dart';
 import 'core/location/background_tracking_service.dart';
 import 'core/offline/offline_queue.dart';
 import 'core/offline/draft_service.dart';
+import 'core/offline/local_report_store.dart';
 import 'core/sync/providers.dart';
 import 'core/sync/refresh_controller.dart';
 import 'app/theme/theme_mode_controller.dart';
@@ -23,45 +24,75 @@ Future<void> main() async {
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   final container = ProviderContainer();
+
+  // ── Phase 1: Storage (must complete before anything that reads/writes) ──
   final queue = container.read(offlineQueueProvider);
   final cipher = await queue.getEncryptionCipher();
 
   await Hive.initFlutter();
-  await Hive.openBox<Map>(OfflineQueue.boxName, encryptionCipher: cipher);
-  await Hive.openBox<Map>(DraftService.boxName); // Non-encrypted for high-frequency drafts
+  // Open both boxes in parallel
+  await Future.wait([
+    Hive.openBox<Map>(OfflineQueue.boxName, encryptionCipher: cipher),
+    Hive.openBox<Map>(LocalReportStore.boxName, encryptionCipher: cipher),
+  ]);
+  await DraftService.init(); // Encrypted box, separate cipher.
   await container.read(appSettingsControllerProvider.notifier).init(cipher);
 
-  try {
-    await Firebase.initializeApp(
+  // ── Phase 2: Fire all remaining init in parallel ──────────────────────────
+  await Future.wait([
+    // 2a. Firebase init
+    Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
-    );
+    ).then((_) {
+      // After Firebase is ready, spawn non-blocking background init
+      _spawnBackgroundInit(container);
+      return true;
+    }).catchError((e) {
+      debugPrint('Firebase init error: $e');
+      return false;
+    }),
 
-    // Android 14+ (API 34): startForeground() hard-crashes if POST_NOTIFICATIONS
-    // is not granted. Skip background service initialization here on Android — it
-    // is initialized from permission_onboarding_screen.dart after the user grants
-    // the permission. On subsequent launches (permission already granted) we init
-    // here normally. On iOS there is no such restriction.
-    final bool canInitTracking = defaultTargetPlatform != TargetPlatform.android
-        || await Permission.notification.isGranted;
+    // 2b. Pre-warm permissions check (Android notification check is fast)
+    _checkNotificationPermission(),
+  ]);
 
-    if (canInitTracking) {
-      await BackgroundTrackingService.initialize();
-    }
-
-    container.read(syncServiceProvider).start();
-    container.read(refreshControllerProvider).start();
-    await container.read(notificationServiceProvider).init().timeout(
-      const Duration(seconds: 5),
-      onTimeout: () => debugPrint('Notification initialization timed out'),
-    );
-  } catch (e) {
-    debugPrint('Initialization error: $e');
-  }
-
+  // 2a succeeds or not — we still launch the app
   runApp(
     UncontrolledProviderScope(
       container: container,
       child: const CissMobileApp(),
     ),
+  );
+}
+
+/// Fast non-blocking check for notification permission.
+Future<bool> _checkNotificationPermission() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return false;
+  try {
+    return await Permission.notification.isGranted;
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Non-blocking background initialization: runs after the app is already
+/// visible so the user never sees a blank screen.
+void _spawnBackgroundInit(ProviderContainer container) {
+  // Tracking service init (needs notification permission on Android)
+  Permission.notification.isGranted.then((granted) {
+    final canInit = defaultTargetPlatform != TargetPlatform.android || granted;
+    if (canInit) {
+      BackgroundTrackingService.initialize();
+    }
+  });
+
+  // Sync & refresh — started immediately, they don't block the UI
+  container.read(syncServiceProvider).start();
+  container.read(refreshControllerProvider).start();
+
+  // FCM Notifications — with timeout to avoid hanging
+  container.read(notificationServiceProvider).init().timeout(
+    const Duration(seconds: 5),
+    onTimeout: () => debugPrint('Notification init timed out'),
   );
 }

@@ -7,11 +7,12 @@ import '../../../../../shared/widgets/section_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
+import '../../../../../core/cache/skeleton_widgets.dart';
 import '../widgets/guard_portal_widgets.dart';
 
 final FutureProvider<List<EvaluationModel>> guardEvaluationsProvider =
     FutureProvider<List<EvaluationModel>>((Ref ref) {
-      return ref.read(mobileRepositoryProvider).fetchEvaluations();
+      return ref.watch(mobileRepositoryProvider).fetchEvaluations();
     });
 
 class GuardEvaluationsScreen extends ConsumerWidget {
@@ -21,8 +22,7 @@ class GuardEvaluationsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final evaluationsAsync = ref.watch(guardEvaluationsProvider);
     return evaluationsAsync.when(
-      loading: () =>
-          const GuardLoadingScaffold(label: 'Loading evaluations...'),
+      loading: () => const SkeletonPage(cardCount: 2),
       error: (Object error, StackTrace stackTrace) => GuardErrorScaffold(
         title: 'Could not load evaluations',
         error: error,

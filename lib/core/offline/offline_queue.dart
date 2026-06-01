@@ -9,6 +9,7 @@ import 'offline_request.dart';
 class OfflineQueue extends ChangeNotifier {
   static const String boxName = 'offline_queue';
   static const String _keyName = 'hive_encryption_key';
+  static const int _maxQueueSize = 100;
   final _uuid = const Uuid();
   final _secureStorage = const FlutterSecureStorage();
 
@@ -31,11 +32,24 @@ class OfflineQueue extends ChangeNotifier {
 
   int get queueSize => _box.length;
 
-  Future<void> enqueue({
+  int get failedCount => getQueuedRequests().where((r) => r.retryCount >= 15).length;
+
+  int get pendingCount => getQueuedRequests().where((r) => r.retryCount < 15).length;
+
+  Future<String> enqueue({
     required String path,
     required String method,
     required Map<String, dynamic> body,
   }) async {
+    // Enforce max queue size: drop oldest items when limit exceeded
+    if (_box.length >= _maxQueueSize) {
+      final sorted = getQueuedRequests();
+      final toRemove = sorted.length - _maxQueueSize + 1;
+      for (var i = 0; i < toRemove; i++) {
+        await _box.delete(sorted[i].id);
+      }
+    }
+
     final id = _uuid.v4();
     final request = OfflineRequest(
       id: id,
@@ -46,6 +60,7 @@ class OfflineQueue extends ChangeNotifier {
     );
     await _box.put(id, request.toJson());
     notifyListeners();
+    return id;
   }
 
   List<OfflineRequest> getQueuedRequests() {
@@ -63,6 +78,24 @@ class OfflineQueue extends ChangeNotifier {
   Future<void> updateRequest(OfflineRequest request) async {
     await _box.put(request.id, request.toJson());
     notifyListeners();
+  }
+
+  Future<void> retryFailedRequests() async {
+    final requests = getQueuedRequests();
+    for (final request in requests) {
+      if (request.retryCount >= 15) {
+        await updateRequest(request.copyWith(retryCount: 0));
+      }
+    }
+  }
+
+  Future<void> clearFailedRequests() async {
+    final requests = getQueuedRequests();
+    for (final request in requests) {
+      if (request.retryCount >= 15) {
+        await removeRequest(request.id);
+      }
+    }
   }
 
   Future<void> clear() async {

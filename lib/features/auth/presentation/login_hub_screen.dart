@@ -92,7 +92,7 @@ class _LoginHubScreenState extends State<LoginHubScreen>
                         Text(
                           kCompanyName.toUpperCase(),
                           textAlign: TextAlign.center,
-                          style: GoogleFonts.rajdhani(
+                          style: GoogleFonts.roboto(
                             fontSize: 32,
                             fontWeight: FontWeight.w800,
                             color: tokens.primary,
@@ -359,7 +359,7 @@ class _RoleCardState extends State<_RoleCard>
                         // Role name in display font
                         Text(
                           widget.title,
-                          style: GoogleFonts.rajdhani(
+                          style: GoogleFonts.roboto(
                             fontSize: 38,
                             fontWeight: FontWeight.w700,
                             color: tokens.ink,

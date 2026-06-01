@@ -4,15 +4,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/network/providers.dart';
+import '../../../../../core/network/ciss_error.dart';
 import '../../../../../shared/widgets/metric_tile.dart';
+import '../../../../../shared/widgets/portal_primitives.dart';
+import '../../../../../core/cache/skeleton_widgets.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
+import '../../../auth/application/auth_controller.dart';
 
 final FutureProvider<List<GuardProfileModel>> fieldOfficerGuardsProvider =
     FutureProvider<List<GuardProfileModel>>((Ref ref) {
-      return ref.read(mobileRepositoryProvider).fetchFieldOfficerGuards();
-    });
+  final session = ref.watch(authSessionProvider).value;
+  final district = session?.assignedDistricts.isNotEmpty == true
+      ? session!.assignedDistricts.first
+      : null;
+  return ref
+      .watch(mobileRepositoryProvider)
+      .fetchFieldOfficerGuards(district: district);
+});
 
 class FieldOfficerGuardsScreen extends ConsumerStatefulWidget {
   const FieldOfficerGuardsScreen({super.key});
@@ -26,6 +36,9 @@ class _FieldOfficerGuardsScreenState
     extends ConsumerState<FieldOfficerGuardsScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
+  String _selectedClient = 'all';
+  String _selectedDistrict = 'all';
+  String _selectedStatus = 'all';
 
   @override
   void dispose() {
@@ -37,9 +50,7 @@ class _FieldOfficerGuardsScreenState
   Widget build(BuildContext context) {
     final guardsAsync = ref.watch(fieldOfficerGuardsProvider);
     return guardsAsync.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
+      loading: () => const SkeletonPage(cardCount: 5),
       error: (Object error, StackTrace stackTrace) => Scaffold(
         body: Padding(
           padding: const EdgeInsets.all(20),
@@ -47,7 +58,7 @@ class _FieldOfficerGuardsScreenState
             child: StateBlock(
               icon: Icons.groups_2_outlined,
               title: 'Could not load guards',
-              message: '$error',
+              message: CissError.parse(error),
               action: FilledButton.tonal(
                 onPressed: () => ref.invalidate(fieldOfficerGuardsProvider),
                 child: const Text('Try again'),
@@ -58,20 +69,28 @@ class _FieldOfficerGuardsScreenState
       ),
       data: (guards) {
         final filtered = _filter(guards);
-        final districts = guards
-            .map((guard) => guard.district)
-            .where((district) => district.trim().isNotEmpty)
+        final clientOptions = guards
+            .map((guard) => guard.clientName.trim())
+            .where((client) => client.isNotEmpty)
             .toSet()
-            .length;
-        final clients = guards
-            .map((guard) => guard.clientName)
-            .where((client) => client.trim().isNotEmpty)
+            .toList()
+          ..sort();
+        final districtOptions = guards
+            .map((guard) => guard.district.trim())
+            .where((district) => district.isNotEmpty)
             .toSet()
-            .length;
+            .toList()
+          ..sort();
+        final statusOptions = guards
+            .map((guard) => guard.status.trim())
+            .where((status) => status.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
 
         return ScreenScaffold(
           title: 'Guards',
-          subtitle: 'District guard directory',
+          subtitle: 'Employee directory for your districts',
           actions: <Widget>[
             IconButton(
               onPressed: () => ref.invalidate(fieldOfficerGuardsProvider),
@@ -84,8 +103,8 @@ class _FieldOfficerGuardsScreenState
                 Expanded(
                   child: MetricTile(
                     label: 'Visible',
-                    value: guards.length.toString(),
-                    helper: 'Active guards',
+                    value: filtered.length.toString(),
+                    helper: '${guards.length} total in scope',
                     icon: Icons.groups_2_outlined,
                   ),
                 ),
@@ -93,20 +112,71 @@ class _FieldOfficerGuardsScreenState
                 Expanded(
                   child: MetricTile(
                     label: 'Districts',
-                    value: districts.toString(),
-                    helper: '$clients client${clients == 1 ? '' : 's'}',
+                    value: districtOptions.length.toString(),
+                    helper:
+                        '${clientOptions.length} client${clientOptions.length == 1 ? '' : 's'}',
                     icon: Icons.map_outlined,
                   ),
                 ),
               ],
             ),
-            TextField(
-              controller: _searchController,
-              onChanged: (value) => setState(() => _query = value),
-              decoration: const InputDecoration(
-                labelText: 'Search guards',
-                hintText: 'Name, employee ID, client, district, phone',
-                prefixIcon: Icon(Icons.search_rounded),
+            PortalSurfaceCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  const PortalSectionHeading(title: 'Filters & Search'),
+                  const SizedBox(height: AppSpacing.md),
+                  const PortalFieldLabel('Search'),
+                  TextField(
+                    controller: _searchController,
+                    onChanged: (String value) => setState(() => _query = value),
+                    decoration: const InputDecoration(
+                      hintText: 'Search by name, ID, or phone',
+                      prefixIcon: Icon(Icons.search_rounded),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: _DirectoryFilter(
+                          label: 'Client',
+                          value: _selectedClient,
+                          options: clientOptions,
+                          allLabel: 'All Clients',
+                          onChanged: (String? value) {
+                            if (value == null) return;
+                            setState(() => _selectedClient = value);
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: _DirectoryFilter(
+                          label: 'District',
+                          value: _selectedDistrict,
+                          options: districtOptions,
+                          allLabel: 'All Districts',
+                          onChanged: (String? value) {
+                            if (value == null) return;
+                            setState(() => _selectedDistrict = value);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  _DirectoryFilter(
+                    label: 'Status',
+                    value: _selectedStatus,
+                    options: statusOptions,
+                    allLabel: 'All Statuses',
+                    onChanged: (String? value) {
+                      if (value == null) return;
+                      setState(() => _selectedStatus = value);
+                    },
+                  ),
+                ],
               ),
             ),
             if (guards.isEmpty)
@@ -120,7 +190,8 @@ class _FieldOfficerGuardsScreenState
               const StateBlock(
                 icon: Icons.search_off_rounded,
                 title: 'No matching guards',
-                message: 'Try a different name, ID, client, or district.',
+                message:
+                    'Try changing the search, client, district, or status filters.',
               )
             else
               ...filtered.map(_GuardDirectoryRow.new),
@@ -131,10 +202,19 @@ class _FieldOfficerGuardsScreenState
   }
 
   List<GuardProfileModel> _filter(List<GuardProfileModel> guards) {
-    final query = _query.trim().toLowerCase();
-    if (query.isEmpty) return guards;
-    return guards.where((guard) {
-      final haystack = [
+    final String query = _query.trim().toLowerCase();
+    return guards.where((GuardProfileModel guard) {
+      if (_selectedClient != 'all' && guard.clientName != _selectedClient) {
+        return false;
+      }
+      if (_selectedDistrict != 'all' && guard.district != _selectedDistrict) {
+        return false;
+      }
+      if (_selectedStatus != 'all' && guard.status != _selectedStatus) {
+        return false;
+      }
+      if (query.isEmpty) return true;
+      final String haystack = <String>[
         guard.fullName,
         guard.employeeId,
         guard.clientName,
@@ -144,6 +224,49 @@ class _FieldOfficerGuardsScreenState
       ].join(' ').toLowerCase();
       return haystack.contains(query);
     }).toList();
+  }
+}
+
+class _DirectoryFilter extends StatelessWidget {
+  const _DirectoryFilter({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.allLabel,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final List<String> options;
+  final String allLabel;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        PortalFieldLabel(label),
+        DropdownButtonFormField<String>(
+          initialValue: value,
+          items: <DropdownMenuItem<String>>[
+            DropdownMenuItem<String>(
+              value: 'all',
+              child: Text(allLabel),
+            ),
+            ...options.map(
+              (String option) => DropdownMenuItem<String>(
+                value: option,
+                child: Text(option, overflow: TextOverflow.ellipsis),
+              ),
+            ),
+          ],
+          onChanged: onChanged,
+          decoration: const InputDecoration(),
+        ),
+      ],
+    );
   }
 }
 
@@ -163,17 +286,13 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
     final tokens = CissThemeTokens.of(context);
     final theme = Theme.of(context);
     final guard = widget.guard;
-    final imageUrl = guard.profilePhotoUrl;
+    final String? imageUrl = guard.profilePhotoUrl;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: () => setState(() => _expanded = !_expanded),
-      child: Container(
-        decoration: BoxDecoration(
-          color: tokens.surface,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: tokens.border),
-        ),
+      child: PortalSurfaceCard(
+        padding: EdgeInsets.zero,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -185,11 +304,16 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
                   CircleAvatar(
                     radius: 24,
                     backgroundColor: tokens.primarySoft,
-                    backgroundImage: imageUrl == null || imageUrl.isEmpty ? null : NetworkImage(imageUrl),
+                    backgroundImage: imageUrl == null || imageUrl.isEmpty
+                        ? null
+                        : NetworkImage(imageUrl),
                     child: imageUrl == null || imageUrl.isEmpty
                         ? Text(
                             _initials(guard.fullName, guard.employeeId),
-                            style: theme.textTheme.labelLarge?.copyWith(color: tokens.primaryStrong, fontWeight: FontWeight.w900),
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: tokens.primaryStrong,
+                              fontWeight: FontWeight.w900,
+                            ),
                           )
                         : null,
                   ),
@@ -210,10 +334,7 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
                               ),
                             ),
                             const SizedBox(width: AppSpacing.xs),
-                            StatusChip(
-                              label: guard.status.isEmpty ? 'Active' : guard.status,
-                              tone: StatusChipTone.success,
-                            ),
+                            _statusChip(guard.status),
                           ],
                         ),
                         const SizedBox(height: AppSpacing.xxs),
@@ -232,9 +353,16 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
                           runSpacing: AppSpacing.xs,
                           children: <Widget>[
                             if (guard.district.isNotEmpty)
-                              StatusChip(label: guard.district, icon: Icons.place_outlined, tone: StatusChipTone.info),
+                              StatusChip(
+                                label: guard.district,
+                                icon: Icons.place_outlined,
+                                tone: StatusChipTone.info,
+                              ),
                             if (guard.phoneNumber.isNotEmpty)
-                              StatusChip(label: guard.phoneNumber, icon: Icons.call_outlined),
+                              StatusChip(
+                                label: guard.phoneNumber,
+                                icon: Icons.call_outlined,
+                              ),
                           ],
                         ),
                       ],
@@ -243,7 +371,11 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
                   AnimatedRotation(
                     turns: _expanded ? 0.5 : 0.0,
                     duration: const Duration(milliseconds: 200),
-                    child: Icon(Icons.expand_more_rounded, size: 18, color: tokens.inkMuted),
+                    child: Icon(
+                      Icons.expand_more_rounded,
+                      size: 18,
+                      color: tokens.inkMuted,
+                    ),
                   ),
                 ],
               ),
@@ -255,34 +387,76 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
                 child: Column(
                   children: <Widget>[
                     if (guard.employeeId.isNotEmpty)
-                      _InfoRow(icon: Icons.badge_outlined, label: 'Employee ID', value: guard.employeeId, tokens: tokens),
+                      _InfoRow(
+                        icon: Icons.badge_outlined,
+                        label: 'Employee ID',
+                        value: guard.employeeId,
+                        tokens: tokens,
+                      ),
                     if (guard.clientName.isNotEmpty) ...<Widget>[
                       const SizedBox(height: AppSpacing.xs),
-                      _InfoRow(icon: Icons.business_rounded, label: 'Client', value: guard.clientName, tokens: tokens),
+                      _InfoRow(
+                        icon: Icons.business_rounded,
+                        label: 'Client',
+                        value: guard.clientName,
+                        tokens: tokens,
+                      ),
                     ],
                     if (guard.district.isNotEmpty) ...<Widget>[
                       const SizedBox(height: AppSpacing.xs),
-                      _InfoRow(icon: Icons.place_outlined, label: 'District', value: guard.district, tokens: tokens),
+                      _InfoRow(
+                        icon: Icons.place_outlined,
+                        label: 'District',
+                        value: guard.district,
+                        tokens: tokens,
+                      ),
                     ],
                     if (guard.phoneNumber.isNotEmpty) ...<Widget>[
                       const SizedBox(height: AppSpacing.xs),
-                      _InfoRow(icon: Icons.call_outlined, label: 'Phone', value: guard.phoneNumber, tokens: tokens),
+                      _InfoRow(
+                        icon: Icons.call_outlined,
+                        label: 'Phone',
+                        value: guard.phoneNumber,
+                        tokens: tokens,
+                      ),
                     ],
                     if (guard.gender != null && guard.gender!.isNotEmpty) ...<Widget>[
                       const SizedBox(height: AppSpacing.xs),
-                      _InfoRow(icon: Icons.person_outline_rounded, label: 'Gender', value: guard.gender!, tokens: tokens),
+                      _InfoRow(
+                        icon: Icons.person_outline_rounded,
+                        label: 'Gender',
+                        value: guard.gender!,
+                        tokens: tokens,
+                      ),
                     ],
-                    if (guard.joiningDate != null && guard.joiningDate!.isNotEmpty) ...<Widget>[
+                    if (guard.joiningDate != null &&
+                        guard.joiningDate!.isNotEmpty) ...<Widget>[
                       const SizedBox(height: AppSpacing.xs),
-                      _InfoRow(icon: Icons.calendar_today_outlined, label: 'Joined', value: guard.joiningDate!, tokens: tokens),
+                      _InfoRow(
+                        icon: Icons.calendar_today_outlined,
+                        label: 'Joined',
+                        value: _formatDateLabel(guard.joiningDate!),
+                        tokens: tokens,
+                      ),
                     ],
-                    if (guard.resourceIdNumber != null && guard.resourceIdNumber!.isNotEmpty) ...<Widget>[
+                    if (guard.resourceIdNumber != null &&
+                        guard.resourceIdNumber!.isNotEmpty) ...<Widget>[
                       const SizedBox(height: AppSpacing.xs),
-                      _InfoRow(icon: Icons.fingerprint_rounded, label: 'ID Number', value: guard.resourceIdNumber!, tokens: tokens),
+                      _InfoRow(
+                        icon: Icons.fingerprint_rounded,
+                        label: 'ID Number',
+                        value: guard.resourceIdNumber!,
+                        tokens: tokens,
+                      ),
                     ],
                     if (guard.address != null && guard.address!.isNotEmpty) ...<Widget>[
                       const SizedBox(height: AppSpacing.xs),
-                      _InfoRow(icon: Icons.home_outlined, label: 'Address', value: guard.address!, tokens: tokens),
+                      _InfoRow(
+                        icon: Icons.home_outlined,
+                        label: 'Address',
+                        value: guard.address!,
+                        tokens: tokens,
+                      ),
                     ],
                   ],
                 ),
@@ -294,19 +468,51 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
     );
   }
 
+  StatusChip _statusChip(String status) {
+    final String normalized = status.trim().toLowerCase();
+    if (normalized == 'inactive') {
+      return const StatusChip(label: 'Inactive', tone: StatusChipTone.neutral);
+    }
+    if (normalized == 'onleave') {
+      return const StatusChip(label: 'OnLeave', tone: StatusChipTone.warning);
+    }
+    if (normalized == 'exited') {
+      return const StatusChip(label: 'Exited', tone: StatusChipTone.danger);
+    }
+    return StatusChip(
+      label: status.isEmpty ? 'Active' : status,
+      tone: StatusChipTone.success,
+    );
+  }
+
+  String _formatDateLabel(String raw) {
+    final DateTime? parsed = DateTime.tryParse(raw);
+    if (parsed == null) return raw;
+    return '${parsed.day.toString().padLeft(2, '0')}-${parsed.month.toString().padLeft(2, '0')}-${parsed.year}';
+  }
+
   String _initials(String name, String fallback) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
-    final initials = parts.map((p) => p[0]).take(2).join().toUpperCase();
+    final Iterable<String> parts = name
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((String p) => p.isNotEmpty);
+    final String initials = parts.map((String p) => p[0]).take(2).join().toUpperCase();
     if (initials.isNotEmpty) return initials;
-    final compactFallback = fallback.trim();
+    final String compactFallback = fallback.trim();
     if (compactFallback.isEmpty) return 'GU';
-    final end = compactFallback.length < 2 ? compactFallback.length : 2;
+    final int end = compactFallback.length < 2 ? compactFallback.length : 2;
     return compactFallback.substring(0, end).toUpperCase();
   }
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.icon, required this.label, required this.value, required this.tokens});
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.tokens,
+  });
+
   final IconData icon;
   final String label;
   final String value;
@@ -318,10 +524,21 @@ class _InfoRow extends StatelessWidget {
       children: <Widget>[
         Icon(icon, size: 16, color: tokens.inkMuted),
         const SizedBox(width: AppSpacing.sm),
-        Expanded(child: Text(label, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens.inkMuted))),
+        Expanded(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: tokens.inkMuted,
+            ),
+          ),
+        ),
         Flexible(
-          child: Text(value,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: tokens.ink, fontWeight: FontWeight.w600),
+          child: Text(
+            value,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: tokens.ink,
+              fontWeight: FontWeight.w600,
+            ),
             textAlign: TextAlign.end,
           ),
         ),

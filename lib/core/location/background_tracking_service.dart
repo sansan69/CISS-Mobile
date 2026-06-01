@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 class BackgroundTrackingService {
   static bool _configured = false;
@@ -46,6 +45,9 @@ class BackgroundTrackingService {
     required double lng,
     required double radiusMeters,
     required String employeeId,
+    required String guardName,
+    required String clientName,
+    required String district,
   }) {
     final service = FlutterBackgroundService();
     service.startService();
@@ -56,6 +58,9 @@ class BackgroundTrackingService {
       'lng': lng,
       'radius': radiusMeters,
       'employeeId': employeeId,
+      'guardName': guardName,
+      'clientName': clientName,
+      'district': district,
     });
   }
 
@@ -98,7 +103,7 @@ void onStart(ServiceInstance service) async {
       final lat = siteContext!['lat'] as num?;
       final lng = siteContext!['lng'] as num?;
       final radius = siteContext!['radius'] as num?;
-      
+
       if (lat == null || lng == null || radius == null) {
         debugPrint('BackgroundTracking: missing coordinates or radius');
         return;
@@ -144,22 +149,6 @@ void onStart(ServiceInstance service) async {
           'timestamp': DateTime.now().toIso8601String(),
         }),
       );
-
-      // ── Firestore live location update ──────────────────────────────────
-      try {
-        await FirebaseFirestore.instance
-            .collection('guardLocations')
-            .doc(siteContext!['employeeId'] as String)
-            .update({
-          'lat': position.latitude,
-          'lng': position.longitude,
-          'accuracy': position.accuracy,
-          'isOutOfZone': isOut,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      } catch (fsErr) {
-        debugPrint('Firestore location update error: $fsErr');
-      }
 
       if (service is AndroidServiceInstance) {
         service.setForegroundNotificationInfo(

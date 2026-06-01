@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/cache/preload_controller.dart';
@@ -10,6 +9,7 @@ import '../field_officer_tab_provider.dart';
 import '../../../shared/widgets/brand_banner.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/branded_navigation_bar.dart';
+import '../../../shared/widgets/portal_primitives.dart';
 import '../../../shared/widgets/theme_mode_selector.dart';
 import '../../../shared/widgets/security_settings_card.dart';
 import '../../../shared/widgets/sync_status_badge.dart';
@@ -20,6 +20,7 @@ import 'screens/field_officer_dashboard_screen.dart';
 import 'screens/field_officer_guards_screen.dart';
 import 'screens/field_officer_reports_screen.dart';
 import 'screens/field_officer_work_orders_screen.dart';
+import 'screens/live_tracking_screen.dart';
 
 class FieldOfficerShell extends ConsumerStatefulWidget {
   const FieldOfficerShell({super.key});
@@ -153,15 +154,7 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'PREFERENCES',
-                  style: GoogleFonts.rajdhani(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2,
-                    color: tokens.inkMuted,
-                  ),
-                ),
+                const PortalSectionHeading(title: 'PREFERENCES'),
                 const SizedBox(height: 12),
                 const ThemeModeSelector(),
                 const SizedBox(height: 12),
@@ -170,15 +163,7 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                 const SecuritySettingsCard(),
 
                 const SizedBox(height: 32),
-                Text(
-                  'SYSTEM TOOLS',
-                  style: GoogleFonts.rajdhani(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2,
-                    color: tokens.inkMuted,
-                  ),
-                ),
+                const PortalSectionHeading(title: 'SYSTEM TOOLS'),
                 const SizedBox(height: 12),
                 GridView.count(
                   shrinkWrap: true,
@@ -192,25 +177,53 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                       icon: Icons.assignment_late_outlined,
                       label: 'Incidents',
                       color: tokens.warning,
-                      onTap: () {},
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Incidents coming soon')),
+                        );
+                      },
                     ),
                     _ToolTile(
                       icon: Icons.place_outlined,
                       label: 'Sites',
                       color: tokens.primary,
-                      onTap: () {},
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Sites coming soon')),
+                        );
+                      },
+                    ),
+                    _ToolTile(
+                      icon: Icons.my_location_rounded,
+                      label: 'Live Track',
+                      color: tokens.success,
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const LiveTrackingScreen(),
+                          ),
+                        );
+                      },
                     ),
                     _ToolTile(
                       icon: Icons.sync_rounded,
                       label: 'Sync Logs',
                       color: tokens.success,
-                      onTap: () {},
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Sync logs coming soon')),
+                        );
+                      },
                     ),
                     _ToolTile(
                       icon: Icons.help_outline_rounded,
                       label: 'Support',
                       color: tokens.accent,
-                      onTap: () {},
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Support coming soon')),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -238,9 +251,7 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                                 Text(
                                   session?.displayName.toUpperCase() ??
                                       'OFFICER',
-                                  style: GoogleFonts.rajdhani(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w800,
+                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                     color: tokens.ink,
                                   ),
                                 ),
@@ -272,8 +283,7 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                           icon: const Icon(Icons.logout_rounded, size: 18),
                           label: Text(
                             'TERMINATE SESSION',
-                            style: GoogleFonts.rajdhani(
-                              fontWeight: FontWeight.w800,
+                            style: Theme.of(context).textTheme.labelLarge?.copyWith(
                               letterSpacing: 1,
                             ),
                           ),
@@ -324,9 +334,7 @@ class _ToolTile extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 label.toUpperCase(),
-                style: GoogleFonts.rajdhani(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
                   color: tokens.ink,
                   letterSpacing: 1,
                 ),
@@ -349,7 +357,7 @@ class _NotificationTile extends ConsumerWidget {
     return GlassCard(
       child: ListTile(
         leading: Icon(Icons.notifications_outlined, color: tokens.primary),
-        title: Text('Notifications', style: GoogleFonts.rajdhani(fontWeight: FontWeight.w700)),
+        title: Text('Notifications', style: Theme.of(context).textTheme.titleSmall),
         subtitle: Text(count > 0 ? '$count unread' : 'No new alerts'),
         trailing: const Icon(Icons.chevron_right),
         onTap: () {

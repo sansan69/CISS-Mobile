@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_tokens.dart';
+import 'portal_primitives.dart';
 
 class SectionCard extends StatelessWidget {
   const SectionCard({
@@ -22,68 +23,58 @@ class SectionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
 
-    // Material must be the ink surface — Container with a color on top clips the ripple.
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: tokens.border),
-      ),
-      child: Material(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+    return PortalSurfaceCard(
+      onTap: onTap,
+      accentColor: tokens.primary,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          Container(
+            height: 48,
+            width: 48,
+            decoration: BoxDecoration(
+              color: tokens.primarySoft,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              border: Border.all(
+                color: tokens.primary.withValues(alpha: 0.12),
+              ),
+            ),
+            child: Icon(icon, color: tokens.primaryStrong, size: 22),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Container(
-                  height: 44,
-                  width: 44,
-                  decoration: BoxDecoration(
-                    color: tokens.primarySoft,
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  child: Icon(icon, color: tokens.primaryStrong, size: 22),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        title,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: tokens.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        subtitle,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: tokens.inkMuted,
-                        ),
-                      ),
-                    ],
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: tokens.ink,
+                    height: 1.05,
                   ),
                 ),
-                if (trailing != null) ...<Widget>[
-                  const SizedBox(width: AppSpacing.xs),
-                  trailing!,
-                ] else if (onTap != null) ...<Widget>[
-                  const SizedBox(width: AppSpacing.xs),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 20,
+                const SizedBox(height: AppSpacing.xxs),
+                Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: tokens.inkMuted,
                   ),
-                ],
+                ),
               ],
             ),
           ),
-        ),
+          if (trailing != null) ...<Widget>[
+            const SizedBox(width: AppSpacing.xs),
+            trailing!,
+          ] else if (onTap != null) ...<Widget>[
+            const SizedBox(width: AppSpacing.xs),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: tokens.inkMuted,
+            ),
+          ],
+        ],
       ),
     );
   }

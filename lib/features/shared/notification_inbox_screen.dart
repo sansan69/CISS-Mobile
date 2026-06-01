@@ -19,14 +19,14 @@ class NotificationInboxScreen extends ConsumerWidget {
       backgroundColor: tokens.canvas,
       appBar: AppBar(
         title: Text('Notifications',
-            style: GoogleFonts.rajdhani(fontWeight: FontWeight.w800)),
+            style: GoogleFonts.roboto(fontWeight: FontWeight.w800)),
         backgroundColor: tokens.canvas,
         actions: [
           TextButton(
             onPressed: () =>
                 ref.read(notificationServiceProvider).markAllAsRead(),
             child: Text('Mark all read',
-                style: GoogleFonts.rajdhani(
+                style: GoogleFonts.roboto(
                     fontWeight: FontWeight.w700, fontSize: 13)),
           ),
         ],
@@ -72,7 +72,7 @@ class NotificationInboxScreen extends ConsumerWidget {
                 ),
                 title: Text(
                   n['title'] as String? ?? '',
-                  style: GoogleFonts.rajdhani(
+                  style: GoogleFonts.roboto(
                     fontWeight: isRead ? FontWeight.w600 : FontWeight.w800,
                     fontSize: 15,
                   ),

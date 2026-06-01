@@ -9,6 +9,8 @@ import '../../../app/theme/app_tokens.dart';
 import '../../../core/models/app_role.dart';
 import '../../../app/theme/theme_mode_controller.dart';
 import '../../../core/auth/biometric_service.dart';
+import '../../../core/network/ciss_error.dart';
+import '../../../shared/widgets/state_block.dart';
 import '../../field_officer/presentation/field_officer_shell.dart';
 import '../../guard/presentation/guard_shell.dart';
 import 'login_hub_screen.dart';
@@ -63,6 +65,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
     final sessionAsync = ref.watch(authSessionProvider);
     final settings = ref.watch(appSettingsControllerProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -79,10 +82,21 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
         // Show a branded skeleton on initial load instead of a bare spinner.
         loading: () => const _AppLoadingScreen(),
         error: (Object error, StackTrace stackTrace) => Scaffold(
-          body: Center(
+          backgroundColor: tokens.canvas,
+          body: SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text('Auth error: $error'),
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: Center(
+                child: StateBlock(
+                  icon: Icons.error_outline_rounded,
+                  title: 'Authentication Error',
+                  message: CissError.parse(error),
+                  action: FilledButton.tonal(
+                    onPressed: () => ref.invalidate(authSessionProvider),
+                    child: const Text('Try again'),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -196,35 +210,51 @@ class _BiometricLockScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+
     return Scaffold(
+      backgroundColor: tokens.canvas,
       body: SafeArea(
         child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.lock_outline_rounded,
-              size: 64,
-              color: Colors.blueGrey,
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'App Locked',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text('Unlock with biometrics to continue'),
-            const SizedBox(height: 32),
-            if (isAuthenticating)
-              const CircularProgressIndicator()
-            else
-              FilledButton.icon(
-                onPressed: onRetry,
-                icon: const Icon(Icons.fingerprint),
-                label: const Text('Unlock App'),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: tokens.primarySoft,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.lock_outline_rounded,
+                  size: 40,
+                  color: tokens.primary,
+                ),
               ),
-          ],
-        ),
+              const SizedBox(height: 24),
+              Text(
+                'App Locked',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Unlock with biometrics to continue',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: tokens.inkMuted,
+                ),
+              ),
+              const SizedBox(height: 32),
+              if (isAuthenticating)
+                CircularProgressIndicator(color: tokens.primary)
+              else
+                FilledButton.icon(
+                  onPressed: onRetry,
+                  icon: const Icon(Icons.fingerprint),
+                  label: const Text('Unlock App'),
+                ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,0 +1,694 @@
+{
+  "/Users/mymac/Documents/CISS-Mobile/macos/RunnerTests/RunnerTests.swift": {
+    "mtime": 1777445384.2653837,
+    "hash": "97d3a20fd20a063c192e886d1822b4a8"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/macos/Runner/MainFlutterWindow.swift": {
+    "mtime": 1766241715.04591,
+    "hash": "4a747b1f256d62a2bbb79bd976891eb5"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/macos/Runner/AppDelegate.swift": {
+    "mtime": 1766241715.0450432,
+    "hash": "2a7411ae3e7c6715525b94b6f8d2e80b"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/macos/Flutter/GeneratedPluginRegistrant.swift": {
+    "mtime": 1777920069.272552,
+    "hash": "28260d47d95d71ebd24303bcd8884f30"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/test/widget_test.dart": {
+    "mtime": 1777797764.8205585,
+    "hash": "5616ef9718da5f306265bc6131d53fbe"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/test/attendance_flow_verification_test.dart": {
+    "mtime": 1777998840.77489,
+    "hash": "6eca34f2accb941ee35f5c184ae762a6"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/test/app_role_test.dart": {
+    "mtime": 1777660040.881516,
+    "hash": "26710bc81226d05f2d876b03c1685ce8"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/RunnerTests/RunnerTests.swift": {
+    "mtime": 1777445384.2435505,
+    "hash": "a225a382d14d7b16b6f602a5c1d49331"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Runner-Bridging-Header.h": {
+    "mtime": 1766241715.0435314,
+    "hash": "e07862ac930ed4d8479185d52c6cc66d"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/GeneratedPluginRegistrant.h": {
+    "mtime": 1777445385.6954186,
+    "hash": "decb9041b5e91a07e66f4664e5dac408"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/AppDelegate.swift": {
+    "mtime": 1766241715.0422716,
+    "hash": "303ca46dbd58544be7b816861d70a27c"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/GeneratedPluginRegistrant.m": {
+    "mtime": 1777920069.272061,
+    "hash": "9ab9f6a834ee43d889b137cd69876fb7"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Flutter/ephemeral/flutter_lldb_helper.py": {
+    "mtime": 1777445385.6522803,
+    "hash": "98fc75412162af387e2e3461e4e58094"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/linux/runner/main.cc": {
+    "mtime": 1766241715.0441275,
+    "hash": "0643b8609698e96b3abd63c210361a87"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/linux/runner/my_application.h": {
+    "mtime": 1766241715.0442495,
+    "hash": "326a85d68857137fdfe8698a0c071baf"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/linux/runner/my_application.cc": {
+    "mtime": 1777445384.288079,
+    "hash": "60919a696eac94d887f5b3311bd38c08"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/linux/flutter/generated_plugin_registrant.cc": {
+    "mtime": 1777918634.4666529,
+    "hash": "1b238d11df96640fc6f4415e12cbda5f"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/linux/flutter/generated_plugin_registrant.h": {
+    "mtime": 1777445385.693241,
+    "hash": "d295462c9da9f7fef22dc86c34492318"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/android/gradlew": {
+    "mtime": 1777445384.3049893,
+    "hash": "7f1cd7eb3f75a1dc85cd37753972a6e2"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/android/build.gradle.kts": {
+    "mtime": 1777445384.2835195,
+    "hash": "f11f360aed44d4f6871b398346af14f0"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/android/settings.gradle.kts": {
+    "mtime": 1777537860.4753284,
+    "hash": "0d1421bfd968044bc1f66f8fe50a75cb"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/android/app/build.gradle.kts": {
+    "mtime": 1777537860.4755447,
+    "hash": "48c75e98a230cb226127f7bacf0b60a1"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java": {
+    "mtime": 1777920069.2673147,
+    "hash": "16f02e82342ebe6ffcb12785b1ab12c3"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/android/app/src/main/kotlin/co/in/ciss/ciss_mobile/MainActivity.kt": {
+    "mtime": 1777696084.0966606,
+    "hash": "9026d7ea5fdd433fb7be45bab90ffcd8"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/android/app/src/main/kotlin/co/in/ciss/ciss_mobile/CissMobileApplication.kt": {
+    "mtime": 1777696500.1385195,
+    "hash": "fe4f26668696fa1f1e7d186f4fd8960a"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/firebase_options.dart": {
+    "mtime": 1777537860.4749496,
+    "hash": "488fdb56724e2efbefa654d6d9400222"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/main.dart": {
+    "mtime": 1777960610.0675623,
+    "hash": "c4b23db23d717369a4cfe4e3406cfb3a"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/brand.dart": {
+    "mtime": 1777527324.0205324,
+    "hash": "c5508c27719dd7e81af69a154b7c4009"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/auth/biometric_service.dart": {
+    "mtime": 1777961046.3281868,
+    "hash": "79c69ed88a26717128102dfc70e84536"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/auth/saved_accounts_service.dart": {
+    "mtime": 1777989654.4617639,
+    "hash": "08e1b433f25b957688ba587d5eed121c"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/location/background_tracking_service.dart": {
+    "mtime": 1777919089.8544078,
+    "hash": "1f05ece19ec8e5ab44f3660bd6d11ea5"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/network/ciss_error.dart": {
+    "mtime": 1778000318.9318917,
+    "hash": "5129cfe4795c68859f6cc8d30464c830"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/network/api_config.dart": {
+    "mtime": 1777524282.8018754,
+    "hash": "e0e9c6266957e455a6af72fdc07869cc"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/network/providers.dart": {
+    "mtime": 1777696516.5384264,
+    "hash": "44861db4e32d9c8583542aaa9516c24f"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/network/mobile_repository.dart": {
+    "mtime": 1777996421.481189,
+    "hash": "8f4234e33ea5181435ed0fd427f4eb60"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/network/api_client.dart": {
+    "mtime": 1777534424.8801425,
+    "hash": "11a44f41f1b8bb418864bccdad78b881"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/models/auth_session.dart": {
+    "mtime": 1777488061.606739,
+    "hash": "ba1db3c21fbd4097a07f9f6a4a89b585"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/models/training_models.dart": {
+    "mtime": 1777524282.7982676,
+    "hash": "041c83e39c3373c3ec6dc77317f1f542"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/models/payroll_models.dart": {
+    "mtime": 1777488161.8403468,
+    "hash": "2708c82055c24b25f4673ce66791f02e"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/models/app_role.dart": {
+    "mtime": 1777660048.2909863,
+    "hash": "ae798a364b9b012cc683497ce5db4ea8"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/models/report_models.dart": {
+    "mtime": 1777992180.7074168,
+    "hash": "dbeb311f35ec8314611e2c9b88e5573f"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/models/attendance_models.dart": {
+    "mtime": 1777524282.7932978,
+    "hash": "8ab4aab5c6484bf913a8b9dcbf066448"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/models/guard_pin_status.dart": {
+    "mtime": 1777560623.0599222,
+    "hash": "4eb815a8dfe8135b51e29492936427ac"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/models/incident_models.dart": {
+    "mtime": 1777524282.7952518,
+    "hash": "41e15b4234ee98a38b82adfe2ad1cf9f"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/models/guard_profile.dart": {
+    "mtime": 1777995265.5902998,
+    "hash": "a0a828cb26b2c5e4b7759078d78db7bd"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/models/mobile_dashboard_models.dart": {
+    "mtime": 1777996412.4417992,
+    "hash": "653bc8a5fb46108380ab8d3d19915745"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/models/leave_models.dart": {
+    "mtime": 1777488176.7218626,
+    "hash": "412d504f391328c2a9416a878613619a"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/fcm/providers.dart": {
+    "mtime": 1777795913.316065,
+    "hash": "8c818839afa579c569d4b466a65e75b9"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/fcm/notification_service.dart": {
+    "mtime": 1778001448.0773637,
+    "hash": "4d2a7101b762ed3636ffbbfbd1c88293"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/sync/refresh_controller.dart": {
+    "mtime": 1777796185.5195205,
+    "hash": "c3b4747788febc56c633a32072dd1544"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/sync/providers.dart": {
+    "mtime": 1777528272.1511488,
+    "hash": "c119fe7dee6bcb2b7e5c175d274f3cd7"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/sync/sync_service.dart": {
+    "mtime": 1777919213.796415,
+    "hash": "31eb84e66099c34bd7456fd5b635bb12"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/offline/offline_request.dart": {
+    "mtime": 1777919184.4116354,
+    "hash": "75e7191e63a8af617f8fbf9cd72b259d"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/offline/offline_queue.dart": {
+    "mtime": 1777918475.482898,
+    "hash": "a62f2ce877e4e5afd928cdcb06178ea0"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/core/offline/draft_service.dart": {
+    "mtime": 1777960575.5855758,
+    "hash": "ff7841d9befbd4bb80f44bceb12b6e89"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/app/app.dart": {
+    "mtime": 1777960330.5231164,
+    "hash": "6c1e2b162b4d7bcf08633535dc8dd4cf"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/app/theme/app_theme.dart": {
+    "mtime": 1777993659.7306235,
+    "hash": "6354b58e32d7ee42eb10c98c9a79bdc6"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/app/theme/app_tokens.dart": {
+    "mtime": 1777561051.9057026,
+    "hash": "76a5a312537677ec168b0b0c3ffce7d4"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/app/theme/theme_mode_controller.dart": {
+    "mtime": 1777960305.9494174,
+    "hash": "576ffa7cf7e10c80c274473889d577ff"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/app/router/app_router.dart": {
+    "mtime": 1778001501.6930015,
+    "hash": "a689ee7b29256c094af1e0ab6ca55d08"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/field_officer/field_officer_tab_provider.dart": {
+    "mtime": 1777700078.6637754,
+    "hash": "5f3a7a3b07c58f496a4160bb6edf3808"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/field_officer/presentation/field_officer_shell.dart": {
+    "mtime": 1777967561.6096644,
+    "hash": "f86e2427d6598a02fbf84d64d0898c98"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/field_officer/presentation/screens/field_officer_dashboard_screen.dart": {
+    "mtime": 1778000436.0701184,
+    "hash": "6aa2ab73210f8e8f7951614254cfc838"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/field_officer/presentation/screens/field_officer_reports_screen.dart": {
+    "mtime": 1778000844.4696465,
+    "hash": "a5cbe71b525af294ecdeef9cd5b3ac0f"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/field_officer/presentation/screens/field_officer_work_orders_screen.dart": {
+    "mtime": 1778000888.8725233,
+    "hash": "f4bfea3fed835661315fd211c9821e5b"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/field_officer/presentation/screens/field_officer_guards_screen.dart": {
+    "mtime": 1777995350.97351,
+    "hash": "4165b20de1aa3dc7eb0cae157c2a119f"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/field_officer/presentation/screens/field_officer_attendance_screen.dart": {
+    "mtime": 1778000464.3923192,
+    "hash": "7a6cc4f0f8a9bdef34da701aa283cf67"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/auth/application/auth_controller.dart": {
+    "mtime": 1777989494.4902294,
+    "hash": "513fc4379a42b8d806655de305034892"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/auth/presentation/role_login_screen.dart": {
+    "mtime": 1778001538.0102487,
+    "hash": "04b3eee4eb81ee8d0f9e16f9ea8e0d27"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/auth/presentation/permission_onboarding_screen.dart": {
+    "mtime": 1777696153.3409202,
+    "hash": "1db452848871f5727afec7dcff3a09a2"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/auth/presentation/auth_gate_screen.dart": {
+    "mtime": 1777970675.5854573,
+    "hash": "f47cac14ca8f0f9bbe65dbb243b786ba"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/auth/presentation/guard_pin_setup_screen.dart": {
+    "mtime": 1778000857.9230952,
+    "hash": "c472498c481de9000b5b05974f5ba577"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/auth/presentation/login_hub_screen.dart": {
+    "mtime": 1777919851.1562831,
+    "hash": "e0d1d018a2bd16a46e121ff9f14342c2"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/guard/guard_tab_provider.dart": {
+    "mtime": 1777700077.493455,
+    "hash": "a9e6cba7e250ddda08b7783ff910cf0e"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/guard/presentation/guard_shell.dart": {
+    "mtime": 1777700095.4884567,
+    "hash": "dd2be24d6d0d4c6e442894464531af5e"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/guard/presentation/screens/guard_attendance_screen.dart": {
+    "mtime": 1778000933.712457,
+    "hash": "82a5d0def42c9db30850cc4d09216c8f"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/guard/presentation/screens/guard_profile_screen.dart": {
+    "mtime": 1777960424.8768897,
+    "hash": "4e234911885327489f9b639d5a5a4bc8"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/guard/presentation/screens/guard_dashboard_screen.dart": {
+    "mtime": 1777993782.71035,
+    "hash": "e91b6151c93da2a7fd94c819da726d8f"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/guard/presentation/screens/guard_payslips_screen.dart": {
+    "mtime": 1777662562.4810803,
+    "hash": "e8ce808be966ab0cfdee29fade58d5ac"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/guard/presentation/screens/guard_evaluations_screen.dart": {
+    "mtime": 1777662562.4801009,
+    "hash": "c262c25e5e11dadf7cc8360a1e6e8c76"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/guard/presentation/screens/guard_leave_screen.dart": {
+    "mtime": 1778000901.601473,
+    "hash": "f9441dd3224e96e9b15a9dada79747e6"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/guard/presentation/screens/guard_training_screen.dart": {
+    "mtime": 1777796437.9397044,
+    "hash": "a761b420f6c16ac7072c660ac7673ded"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/guard/presentation/screens/guard_incidents_screen.dart": {
+    "mtime": 1778000655.3845332,
+    "hash": "3f9e05b389d2f1ec458404be9c0dc8be"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/features/guard/presentation/widgets/guard_portal_widgets.dart": {
+    "mtime": 1778000330.6998355,
+    "hash": "23e535b71a1e1861f57f13f717d8db08"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/shared/widgets/portal_primitives.dart": {
+    "mtime": 1777993815.253618,
+    "hash": "88f42df74d60586ae81e0099fb54f1c2"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/shared/widgets/security_settings_card.dart": {
+    "mtime": 1777960946.414764,
+    "hash": "4ba5367099dd8d0229c607a40cc07907"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/shared/widgets/state_block.dart": {
+    "mtime": 1777561111.9910748,
+    "hash": "ffc8b32c3ba6ca955cf77bf130828090"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/shared/widgets/sync_status_badge.dart": {
+    "mtime": 1777561174.4495394,
+    "hash": "2a2b89b2e019b3aa4533b8ddd24525d8"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/shared/widgets/metric_tile.dart": {
+    "mtime": 1777993606.6846972,
+    "hash": "c409b191db058fc9422083ddf54c4a66"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/shared/widgets/page_header.dart": {
+    "mtime": 1777561174.4493623,
+    "hash": "949f90777aa4d0d7a228ad7225b70739"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/shared/widgets/glass_card.dart": {
+    "mtime": 1777993616.3633013,
+    "hash": "3125da1945eeb77b920eb6cfc4271e64"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/shared/widgets/section_card.dart": {
+    "mtime": 1777993598.801297,
+    "hash": "16540cda93c4448ba31f050a4144607f"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/shared/widgets/branded_navigation_bar.dart": {
+    "mtime": 1777993651.7384045,
+    "hash": "18df420b293b242579fa530453d275bb"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/shared/widgets/company_contact_card.dart": {
+    "mtime": 1777561325.5433784,
+    "hash": "8cd816e040d21ca5e4830a8c6eb8c815"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/shared/widgets/brand_banner.dart": {
+    "mtime": 1777993626.1344013,
+    "hash": "ac15eb2c01a1e183a1f5879e718beba2"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/shared/widgets/theme_mode_selector.dart": {
+    "mtime": 1777960353.3904994,
+    "hash": "55b249835ac3dcef722d4585bc8cb44f"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/shared/widgets/status_chip.dart": {
+    "mtime": 1777561174.4491234,
+    "hash": "a90d0763113293b21c95193b4d8536e0"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/lib/shared/widgets/screen_scaffold.dart": {
+    "mtime": 1777993791.393008,
+    "hash": "a031982d6db1d71365114d47f697adbe"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/windows/runner/flutter_window.cpp": {
+    "mtime": 1766241715.047094,
+    "hash": "9b92b95a9eecce25e3e9d356688d0cb6"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/windows/runner/utils.h": {
+    "mtime": 1766241715.0474825,
+    "hash": "c741fb9cddbf3a62f4688b6cca39ddcc"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/windows/runner/utils.cpp": {
+    "mtime": 1766241715.047431,
+    "hash": "9b5697b276c8ad67a02ec12ad2c09851"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/windows/runner/win32_window.h": {
+    "mtime": 1766241715.0475984,
+    "hash": "5a4cf051798d7e6931ee0405a4523c8f"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/windows/runner/win32_window.cpp": {
+    "mtime": 1766241715.0475526,
+    "hash": "928e86a2be27eca688669dce6c9177d9"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/windows/runner/resource.h": {
+    "mtime": 1766241715.047248,
+    "hash": "c8f809a4f8d3f2f625e358fd90f72fee"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/windows/runner/main.cpp": {
+    "mtime": 1777445384.2393365,
+    "hash": "63ab66dc4a3c45c6af3b7b10bde9a323"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/windows/runner/flutter_window.h": {
+    "mtime": 1766241715.047148,
+    "hash": "79bea736711adda00c49419a39a4a0b4"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/windows/flutter/generated_plugin_registrant.cc": {
+    "mtime": 1777920069.2702665,
+    "hash": "979c50ea7b90bceeda0cf3af28964206"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/windows/flutter/generated_plugin_registrant.h": {
+    "mtime": 1777445385.694363,
+    "hash": "0ea33875f9f8e118f9c2ded03e2e2835"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/README.md": {
+    "mtime": 1777527226.9190094,
+    "hash": "2dc9dad652a1a49ac5144e82eb08c8e5"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/Memory.md": {
+    "mtime": 1777795171.3704205,
+    "hash": "b689d7e22d5f321c7bbaba59ddad6d40"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/pubspec.yaml": {
+    "mtime": 1777920068.8683429,
+    "hash": "ee87593a26af57cfad71922beec4fef7"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/analysis_options.yaml": {
+    "mtime": 1777445384.285757,
+    "hash": "66d03d7647c8e438164feaf5b922d44a"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/GEMINI.md": {
+    "mtime": 1777795831.226634,
+    "hash": "343cc5a90d509c24d5d1972573a7e749"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/web/index.html": {
+    "mtime": 1777445384.262195,
+    "hash": "5a96f1f9479c6da58fe7f238ae94e3ba"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/plans/2026-05-05-guard-attendance-enhancements.md": {
+    "mtime": 1777998612.317416,
+    "hash": "56da8b0c9b29720e307c9a2298d4bbc3"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/plans/2026-04-30-ciss-mobile-implementation-plan.md": {
+    "mtime": 1777527846.5450559,
+    "hash": "0930796d6a4293bf6095c536badfac71"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/plans/2026-05-04-security-reliability-audit-fix-plan.md": {
+    "mtime": 1777917695.9120784,
+    "hash": "bac523a8b61cbc149aa2582d8319cf49"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/plans/2026-05-04-secure-storage-key-management.md": {
+    "mtime": 1777918462.17087,
+    "hash": "7353639ffbe800c6a0eec6f5841e05e7"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/plans/2026-05-04-redesign-foundation-implementation.md": {
+    "mtime": 1777965851.077517,
+    "hash": "a303893a0c36ce75142ae89d7ecaa45f"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/plans/2026-05-05-meaningful-error-messages.md": {
+    "mtime": 1778000266.9913301,
+    "hash": "2d5d97fef427431de5bd7bc1ad2760fa"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/plans/2026-04-30-ciss-mobile-redesign-implementation.md": {
+    "mtime": 1777559055.857286,
+    "hash": "e03d070ce648e8d44520227a3aaec991"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/plans/2026-05-04-enhanced-ciss-branding-plan.md": {
+    "mtime": 1777919580.446085,
+    "hash": "66af3fa86bfc044b20137888ed5f805c"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/plans/2026-05-04-field-officer-redesign-plan.md": {
+    "mtime": 1777965789.1947043,
+    "hash": "60d41004b1676f81481a307208e39bcb"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/plans/2026-04-30-android-native-tracking-plan.md": {
+    "mtime": 1777532521.4722717,
+    "hash": "9793fdfd58e38696c822d406ddec14a2"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/plans/2026-05-04-encrypted-initialization.md": {
+    "mtime": 1777918805.7380679,
+    "hash": "0212bb1117979be34a26560ee51b77f9"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/specs/2026-04-30-ciss-mobile-redesign-design.md": {
+    "mtime": 1777558923.1231198,
+    "hash": "6392ac51e1cfe4992b867dd4dc51575b"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/specs/2026-05-04-security-reliability-audit-fix-design.md": {
+    "mtime": 1777917461.1976635,
+    "hash": "b8aa1b8f0c0a232783bace68ec96f0bb"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/specs/2026-05-05-guard-attendance-location-site-design.md": {
+    "mtime": 1777998545.8414862,
+    "hash": "d6fc8fc78ffc2a785fd7473adf3e8c65"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/specs/2026-05-04-field-officer-redesign-spec.md": {
+    "mtime": 1777965730.1399012,
+    "hash": "9de80b3d505a4457a27e3a066e2d6493"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/docs/superpowers/specs/2026-05-02-field-officer-dashboard-redesign-design.md": {
+    "mtime": 1777704060.4826548,
+    "hash": "f19239292def381ebec65eac30350d96"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/LaunchImage.imageset/README.md": {
+    "mtime": 1766241715.0432591,
+    "hash": "e175e436acacf76c814d83532d0b662c"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/linux/CMakeLists.txt": {
+    "mtime": 1777445384.2889209,
+    "hash": "9fa0dd2ce8561cbb2a517e9f8f927a4e"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/linux/runner/CMakeLists.txt": {
+    "mtime": 1766241715.0440755,
+    "hash": "6d75431dc21756981b53a7494c836311"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/linux/flutter/CMakeLists.txt": {
+    "mtime": 1766241715.0439844,
+    "hash": "46690fb8ffaf7d227d8bc4713f31140d"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/windows/CMakeLists.txt": {
+    "mtime": 1777445384.2417462,
+    "hash": "b52a5b84f4195768c1fb599e1e7acd6d"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/windows/runner/CMakeLists.txt": {
+    "mtime": 1766241715.0469837,
+    "hash": "e99a99b5cc82a168fc557eb23b8d5a96"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/windows/flutter/CMakeLists.txt": {
+    "mtime": 1766241715.046898,
+    "hash": "0c500410e3259a9a053797dc1c28070e"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_16.png": {
+    "mtime": 1766241733.8244488,
+    "hash": "8bf511604bc6ed0a6aeb380c5113fdcf"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_1024.png": {
+    "mtime": 1766241733.830054,
+    "hash": "c9becc9105f8cabce934d20c7bfb6aac"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_256.png": {
+    "mtime": 1766241733.831384,
+    "hash": "dfe2c93d1536ae02f085cc63faa3430e"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_64.png": {
+    "mtime": 1766241733.8209696,
+    "hash": "04e7b6ef05346c70b663ca1d97de3ad5"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_512.png": {
+    "mtime": 1766241733.8235128,
+    "hash": "0ad44039155424738917502c69667699"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_128.png": {
+    "mtime": 1766241733.822553,
+    "hash": "3ded30823804caaa5ccc944067c54a36"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_32.png": {
+    "mtime": 1766241733.8255057,
+    "hash": "8e0ae58e362a6636bdfccbc04da2c58c"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/web/favicon.png": {
+    "mtime": 1766241715.0462508,
+    "hash": "5dcef449791fa27946b3d35ad8803796"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/web/icons/Icon-192.png": {
+    "mtime": 1766241715.046344,
+    "hash": "ac9a721a12bbc803b44f645561ecb1e1"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/web/icons/Icon-maskable-192.png": {
+    "mtime": 1766241733.9208295,
+    "hash": "c457ef57daa1d16f64b27b786ec2ea3c"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/web/icons/Icon-maskable-512.png": {
+    "mtime": 1766241733.9201918,
+    "hash": "301a7604d45b3e739efc881eb04896ea"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/web/icons/Icon-512.png": {
+    "mtime": 1766241715.04641,
+    "hash": "96e752610906ba2a93c65f8abe1645f1"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage@2x.png": {
+    "mtime": 1766241733.833925,
+    "hash": "978c1bee49d7ad5fc1a4d81099b13e18"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage@3x.png": {
+    "mtime": 1766241733.8325632,
+    "hash": "978c1bee49d7ad5fc1a4d81099b13e18"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/LaunchImage.imageset/LaunchImage.png": {
+    "mtime": 1766241733.8355207,
+    "hash": "978c1bee49d7ad5fc1a4d81099b13e18"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-76x76@2x.png": {
+    "mtime": 1766241733.855001,
+    "hash": "643842917530acf4c5159ae851b0baf2"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-29x29@1x.png": {
+    "mtime": 1766241733.8539987,
+    "hash": "be8887071dd7ec39cb754d236aa9584f"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-40x40@1x.png": {
+    "mtime": 1766241733.8400426,
+    "hash": "2247a840b6ee72b8a069208af170e5b1"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-20x20@1x.png": {
+    "mtime": 1766241733.8483407,
+    "hash": "a2f8558fb1d42514111fbbb19fb67314"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-1024x1024@1x.png": {
+    "mtime": 1766241733.8470216,
+    "hash": "c785f8932297af4acd5f5ccb7630f01c"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-83.5x83.5@2x.png": {
+    "mtime": 1766241733.8517869,
+    "hash": "665cb5e3c5729da6d639d26eff47a503"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-20x20@3x.png": {
+    "mtime": 1766241733.8507195,
+    "hash": "1b3b1538136316263c7092951e923e9d"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-20x20@2x.png": {
+    "mtime": 1766241733.8443558,
+    "hash": "2247a840b6ee72b8a069208af170e5b1"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-29x29@3x.png": {
+    "mtime": 1766241733.8497565,
+    "hash": "2b1452c4c1bda6177b4fbbb832df217f"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-40x40@2x.png": {
+    "mtime": 1766241733.8529017,
+    "hash": "8245359312aea1b0d2412f79a07b0ca5"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-60x60@3x.png": {
+    "mtime": 1766241733.8372111,
+    "hash": "e419d22a37bc40ba185aca1acb6d4ac6"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-60x60@2x.png": {
+    "mtime": 1766241733.8454175,
+    "hash": "5b3c0902200ce596e9848f22e1f0fe0e"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-76x76@1x.png": {
+    "mtime": 1766241733.8431895,
+    "hash": "36c0d7a7132bdde18898ffdfcfcdc4d2"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-40x40@3x.png": {
+    "mtime": 1766241733.841469,
+    "hash": "5b3c0902200ce596e9848f22e1f0fe0e"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-29x29@2x.png": {
+    "mtime": 1766241733.8389497,
+    "hash": "043119ef4faa026ff82bd03f241e5338"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/android/app/src/main/res/mipmap-mdpi/ic_launcher.png": {
+    "mtime": 1766241715.040312,
+    "hash": "6270344430679711b81476e29878caa7"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/android/app/src/main/res/mipmap-hdpi/ic_launcher.png": {
+    "mtime": 1766241715.0402224,
+    "hash": "13e9c72ec37fac220397aa819fa1ef2d"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": {
+    "mtime": 1766241715.040591,
+    "hash": "57838d52c318faff743130c3fcfae0c6"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png": {
+    "mtime": 1766241715.0405009,
+    "hash": "afe1b655b9f32da22f9a4301bb8e6ba8"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/android/app/src/main/res/mipmap-xhdpi/ic_launcher.png": {
+    "mtime": 1766241715.0404115,
+    "hash": "a0a8db5985280b3679d99a820ae2db79"
+  },
+  "/Users/mymac/Documents/CISS-Mobile/assets/ciss-logo.png": {
+    "mtime": 1777523714.611763,
+    "hash": "91e1fd43867d09e5d63744853dbef920"
+  }
+}

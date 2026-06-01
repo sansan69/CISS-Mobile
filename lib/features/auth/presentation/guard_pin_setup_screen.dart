@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../../core/network/ciss_error.dart';
 import '../../../shared/widgets/brand_banner.dart';
 
 class GuardPinSetupScreen extends ConsumerStatefulWidget {
@@ -57,10 +58,30 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
   Future<void> _submit() async {
     final String pin = _pinController.text.trim();
     final String confirmPin = _confirmPinController.text.trim();
+    final String phone = _phoneController.text.trim();
+
+    if (phone.isEmpty) {
+      setState(() => _error = 'Phone number is required.');
+      return;
+    }
+    if (_selectedDob == null && _dobController.text.trim().isEmpty) {
+      setState(() => _error = 'Date of birth is required.');
+      return;
+    }
+    if (pin.isEmpty) {
+      setState(() => _error = 'PIN is required.');
+      return;
+    }
+    if (pin.length < 4 || pin.length > 6) {
+      setState(() => _error = 'PIN must be 4 to 6 digits.');
+      return;
+    }
+    if (!RegExp(r'^\d+$').hasMatch(pin)) {
+      setState(() => _error = 'PIN must contain only digits.');
+      return;
+    }
     if (pin != confirmPin) {
-      setState(() {
-        _error = 'PIN confirmation does not match.';
-      });
+      setState(() => _error = 'PIN confirmation does not match.');
       return;
     }
 
@@ -87,7 +108,7 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
       context.go('/login/guard');
     } catch (error) {
       setState(() {
-        _error = error.toString().replaceFirst('Exception: ', '');
+        _error = CissError.parse(error);
       });
     } finally {
       if (mounted) {
@@ -228,7 +249,7 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
                     ),
                   ],
                   const SizedBox(height: AppSpacing.lg),
-                  ElevatedButton(
+                  FilledButton(
                     onPressed: _submitting ? null : _submit,
                     child: _submitting
                         ? const SizedBox(

@@ -23,12 +23,13 @@ class BiometricService {
 
       final didAuthenticate = await _auth.authenticate(
         localizedReason: localizedReason,
+        persistAcrossBackgrounding: true,
+        sensitiveTransaction: true,
       );
       return didAuthenticate;
     } on PlatformException catch (_) {
       return false;
     } catch (_) {
-      // Catch-all for any unexpected errors (e.g. plugin not registered)
       return false;
     }
   }

@@ -8,11 +8,12 @@ import '../../../../../shared/widgets/section_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/security_settings_card.dart';
+import '../../../../../core/cache/skeleton_widgets.dart';
 import '../widgets/guard_portal_widgets.dart';
 
 final FutureProvider<GuardProfileModel> guardProfileProvider =
     FutureProvider<GuardProfileModel>((Ref ref) {
-      return ref.read(mobileRepositoryProvider).fetchGuardProfile();
+      return ref.watch(mobileRepositoryProvider).fetchGuardProfile();
     });
 
 class GuardProfileScreen extends ConsumerWidget {
@@ -22,8 +23,7 @@ class GuardProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(guardProfileProvider);
     return profileAsync.when(
-      loading: () =>
-          const GuardLoadingScaffold(label: 'Loading guard profile...'),
+      loading: () => const SkeletonPage(cardCount: 2),
       error: (Object error, StackTrace stackTrace) => GuardErrorScaffold(
         title: 'Could not load profile',
         error: error,

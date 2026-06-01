@@ -26,11 +26,14 @@ class ScreenScaffold extends StatelessWidget {
     final tokens = CissThemeTokens.of(context);
     final double toolbarHeight =
         subtitle == null ? _toolbarBase : _toolbarWithSub;
+    final statusBarHeight = MediaQuery.of(context).padding.top;
 
     return Scaffold(
       appBar: PreferredSize(
-        preferredSize: Size.fromHeight(toolbarHeight),
-        child: AppBar(
+        preferredSize: Size.fromHeight(toolbarHeight + statusBarHeight),
+        child: SafeArea(
+          bottom: false,
+          child: AppBar(
           automaticallyImplyLeading: false,
           titleSpacing: 0,
           toolbarHeight: toolbarHeight,
@@ -102,15 +105,44 @@ class ScreenScaffold extends StatelessWidget {
           ],
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(1),
-            child: Container(height: 1, color: tokens.border),
+            child: Container(
+              height: 1,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: <Color>[
+                    tokens.accent.withValues(alpha: 0.28),
+                    tokens.border,
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
+        ),
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        itemBuilder: (BuildContext context, int index) => children[index],
-        separatorBuilder: (_, _) => const SizedBox(height: 12),
-        itemCount: children.length,
+      body: Stack(
+        children: <Widget>[
+          Positioned(
+            top: -120,
+            left: -40,
+            child: IgnorePointer(
+              child: Container(
+                width: 260,
+                height: 260,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: tokens.primarySoft.withValues(alpha: 0.42),
+                ),
+              ),
+            ),
+          ),
+          ListView.separated(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            itemBuilder: (BuildContext context, int index) => children[index],
+            separatorBuilder: (_, _) => const SizedBox(height: 12),
+            itemCount: children.length,
+          ),
+        ],
       ),
     );
   }

@@ -39,6 +39,7 @@ dependencies:
   firebase_auth: ^5.7.0
   geolocator: ^14.0.1
   image_picker: ^1.1.2
+  file_picker: ^11.0.2
   url_launcher: ^6.3.2
   intl: ^0.20.2
   json_annotation: ^4.9.0
@@ -73,6 +74,20 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   json_serializable: ^6.11.1
   build_runner: ^2.9.0
+  flutter_native_splash: ^2.4.0
+
+flutter_native_splash:
+  color: "#0B4F82"
+  image: assets/ciss-logo.png
+  color_dark: "#0B1220"
+  image_dark: assets/ciss-logo.png
+  android_12:
+    color: "#0B4F82"
+    image: assets/ciss-logo.png
+    color_dark: "#0B1220"
+    image_dark: assets/ciss-logo.png
+  android: true
+  ios: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

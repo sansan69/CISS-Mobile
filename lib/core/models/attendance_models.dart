@@ -177,14 +177,23 @@ class AttendanceHintModel {
   const AttendanceHintModel({
     this.lastAttendanceDate,
     this.lastStatus,
+    this.lastSiteId,
     this.lastDutyPointId,
     this.lastShiftCode,
+    this.openSessionId,
+    this.recommendedStatus,
   });
 
   final String? lastAttendanceDate;
   final String? lastStatus;
+  final String? lastSiteId;
   final String? lastDutyPointId;
   final String? lastShiftCode;
+  final String? openSessionId;
+  final String? recommendedStatus;
+
+  bool get hasOpenSession =>
+      openSessionId?.trim().isNotEmpty == true || lastStatus == 'In';
 }
 
 class PublicAttendanceEmployeeModel {
@@ -203,4 +212,25 @@ class PublicAttendanceEmployeeModel {
   final String? phoneNumber;
   final String? clientName;
   final AttendanceHintModel? attendanceHint;
+}
+
+ShiftTemplateModel? resolveAttendanceSubmissionShiftTemplate(
+  Iterable<ShiftTemplateModel> shiftTemplates, {
+  required String status,
+  AttendanceHintModel? attendanceHint,
+  DateTime? at,
+}) {
+  final shifts = shiftTemplates.toList(growable: false);
+  if (shifts.isEmpty) return null;
+
+  if (status == 'Out' &&
+      attendanceHint?.lastShiftCode?.trim().isNotEmpty == true) {
+    for (final shift in shifts) {
+      if (shift.code == attendanceHint!.lastShiftCode) {
+        return shift;
+      }
+    }
+  }
+
+  return resolveActiveShiftTemplate(shifts, at: at);
 }

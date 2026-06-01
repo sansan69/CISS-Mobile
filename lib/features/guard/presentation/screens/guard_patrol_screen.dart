@@ -14,7 +14,7 @@ import '../../../../../shared/widgets/state_block.dart';
 
 final FutureProvider<GuardPatrolStatusModel> guardPatrolStatusProvider =
     FutureProvider<GuardPatrolStatusModel>((Ref ref) {
-      return ref.read(mobileRepositoryProvider).fetchGuardPatrolStatus();
+      return ref.watch(mobileRepositoryProvider).fetchGuardPatrolStatus();
     });
 
 String _formatIsoLabel(String? value) {

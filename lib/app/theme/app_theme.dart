@@ -32,15 +32,15 @@ ThemeData buildCissTheme(Brightness brightness) {
     onErrorContainer: tokens.danger,
   );
 
-  final baseTextTheme = GoogleFonts.interTextTheme(
+  final baseTextTheme = GoogleFonts.robotoTextTheme(
     const TextTheme(),
   ).apply(
     bodyColor: tokens.ink,
     displayColor: tokens.ink,
   );
 
-  final headerStyle = GoogleFonts.spaceGrotesk(
-    fontWeight: FontWeight.w700,
+  final headerStyle = GoogleFonts.roboto(
+    fontWeight: FontWeight.w800,
     color: tokens.ink,
   );
 
@@ -126,8 +126,12 @@ ThemeData buildCissTheme(Brightness brightness) {
         height: 1.4,
       ),
       labelLarge: baseTextTheme.labelLarge?.copyWith(
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.1,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.2,
+      ),
+      labelSmall: baseTextTheme.labelSmall?.copyWith(
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.3,
       ),
     ),
 
@@ -135,7 +139,7 @@ ThemeData buildCissTheme(Brightness brightness) {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: tokens.surfaceStrong,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.sm),
         borderSide: BorderSide.none,
@@ -236,37 +240,42 @@ ThemeData buildCissTheme(Brightness brightness) {
       ),
     ),
 
-    // NavigationBar — M3 bottom nav (replaces custom BrandedNavigationBar)
+    // NavigationBar — M3 bottom nav
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: tokens.surface,
-      elevation: 8,
-      shadowColor: tokens.ink.withValues(alpha: 0.1),
-      surfaceTintColor: tokens.primary,
+      backgroundColor: tokens.surface.withValues(alpha: 0.96),
+      elevation: 0,
+      shadowColor: tokens.primaryStrong.withValues(alpha: 0.08),
+      surfaceTintColor: Colors.transparent,
       indicatorColor: tokens.primarySoft,
-      indicatorShape: const StadiumBorder(),
+      indicatorShape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+      ),
       iconTheme: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return IconThemeData(color: tokens.primaryStrong, size: 24);
+          return IconThemeData(color: tokens.primaryStrong, size: 20);
         }
-        return IconThemeData(color: tokens.inkMuted, size: 24);
+        return IconThemeData(color: tokens.inkMuted, size: 20);
       }),
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return GoogleFonts.inter(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
+          return TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w800,
             color: tokens.primaryStrong,
-            letterSpacing: 0.3,
+            height: 1.05,
+            letterSpacing: 0.2,
           );
         }
-        return GoogleFonts.inter(
-          fontSize: 11,
+        return TextStyle(
+          fontSize: 10.5,
           fontWeight: FontWeight.w500,
           color: tokens.inkMuted,
+          height: 1.05,
+          letterSpacing: 0.2,
         );
       }),
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-      height: 72,
+      height: 70,
     ),
 
     // ListTile — used on More/settings screens
@@ -288,7 +297,7 @@ ThemeData buildCissTheme(Brightness brightness) {
     // SnackBar — floating M3 style
     snackBarTheme: SnackBarThemeData(
       backgroundColor: isDark ? tokens.surfaceStrong : tokens.ink,
-      contentTextStyle: GoogleFonts.inter(
+      contentTextStyle: GoogleFonts.roboto(
         color: isDark ? tokens.ink : tokens.canvas,
         fontSize: 14,
         fontWeight: FontWeight.w500,

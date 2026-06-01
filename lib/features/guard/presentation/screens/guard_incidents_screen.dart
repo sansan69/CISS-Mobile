@@ -1,8 +1,6 @@
 import 'dart:io';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/incident_models.dart';
@@ -12,6 +10,7 @@ import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/offline/draft_service.dart';
+import '../../../../../shared/widgets/camera_capture_screen.dart';
 import '../../../../../shared/widgets/section_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
@@ -22,7 +21,7 @@ import 'guard_profile_screen.dart';
 
 final FutureProvider<List<IncidentModel>> guardIncidentsProvider =
     FutureProvider<List<IncidentModel>>((Ref ref) {
-      return ref.read(mobileRepositoryProvider).fetchGuardIncidents();
+      return ref.watch(mobileRepositoryProvider).fetchGuardIncidents();
     });
 
 class GuardIncidentsScreen extends ConsumerStatefulWidget {
@@ -33,6 +32,8 @@ class GuardIncidentsScreen extends ConsumerStatefulWidget {
       _GuardIncidentsScreenState();
 }
 
+enum _MessageTone { success, error }
+
 class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
   String _category = 'Safety';
   String _severity = 'medium';
@@ -40,10 +41,10 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
   
-  XFile? _photo;
-  final ImagePicker _picker = ImagePicker();
-  
+  String? _photoPath;
+
   String? _message;
+  _MessageTone _messageTone = _MessageTone.error;
   bool _loading = false;
 
   static const String _draftKey = 'guard_incident_draft';
@@ -85,16 +86,14 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
   }
 
   Future<void> _takePhoto() async {
-    try {
-      final picked = await _picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 70,
-      );
-      if (picked != null) {
-        setState(() => _photo = picked);
-      }
-    } catch (e) {
-      debugPrint('Error picking image: $e');
+    final path = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const CameraCaptureScreen(),
+      ),
+    );
+    if (path != null && mounted) {
+      setState(() => _photoPath = path);
     }
   }
 
@@ -107,15 +106,17 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
     setState(() {
       _loading = true;
       _message = null;
+      _messageTone = _MessageTone.error;
     });
 
     try {
       String? photoDataUrl;
-      if (_photo != null) {
-        final bytes = await _photo!.readAsBytes();
+      if (_photoPath != null) {
+        final file = File(_photoPath!);
+        final bytes = await file.readAsBytes();
         photoDataUrl = await ref
             .read(mobileRepositoryProvider)
-            .encodeFileToDataUrl(bytes, _photo!.mimeType ?? 'image/jpeg');
+            .encodeFileToDataUrl(bytes, 'image/jpeg');
       }
 
       final payload = <String, dynamic>{
@@ -132,7 +133,7 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
       try {
         List<String> photoUrls = [];
         if (photoDataUrl != null) {
-          final uploadPath = 'incidents/${profile.id}/ ${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final uploadPath = 'incidents/${profile.id}/${DateTime.now().millisecondsSinceEpoch}.jpg';
           final uploadResult = await ref
               .read(mobileRepositoryProvider)
               .uploadAttendancePhoto(path: uploadPath, dataUrl: photoDataUrl);
@@ -149,18 +150,16 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
         ref.invalidate(guardIncidentsProvider);
         if (mounted) {
           setState(() {
-            _photo = null;
+            _photoPath = null;
             _descriptionController.clear();
             _locationController.clear();
             _message = 'Incident submitted successfully.';
+            _messageTone = _MessageTone.success;
           });
         }
       } catch (uploadOrSubmitError) {
-        if (uploadOrSubmitError is DioException &&
-            (uploadOrSubmitError.type == DioExceptionType.connectionTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.sendTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.receiveTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.connectionError)) {
+        final isOffline = ref.read(mobileRepositoryProvider).shouldQueueOffline(uploadOrSubmitError);
+        if (isOffline) {
           
           await ref.read(offlineQueueProvider).enqueue(
             path: '/api/guard/incidents',
@@ -175,10 +174,11 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
           
           if (mounted) {
             setState(() {
-              _photo = null;
+              _photoPath = null;
               _descriptionController.clear();
               _locationController.clear();
               _message = 'Offline: Incident queued for sync.';
+              _messageTone = _MessageTone.success;
             });
           }
         } else {
@@ -297,13 +297,13 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                           borderRadius: BorderRadius.circular(AppRadius.md),
                           border: Border.all(color: tokens.border),
                         ),
-                        child: _photo != null
+                        child: _photoPath != null
                             ? Stack(
                                 children: [
                                   Positioned.fill(
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(AppRadius.md),
-                                      child: Image.file(File(_photo!.path), fit: BoxFit.cover),
+                                      child: Image.file(File(_photoPath!), fit: BoxFit.cover),
                                     ),
                                   ),
                                   Positioned(
@@ -315,7 +315,7 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                                       child: IconButton(
                                         padding: EdgeInsets.zero,
                                         icon: const Icon(Icons.close, size: 16, color: Colors.white),
-                                        onPressed: () => setState(() => _photo = null),
+                                        onPressed: () => setState(() => _photoPath = null),
                                       ),
                                     ),
                                   ),
@@ -336,9 +336,7 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                       Container(
                         padding: const EdgeInsets.all(AppSpacing.sm),
                         decoration: BoxDecoration(
-                          color:
-                              _message!.toLowerCase().contains('submitted') ||
-                                  _message!.toLowerCase().contains('queued')
+                          color: _messageTone == _MessageTone.success
                               ? tokens.successSoft
                               : tokens.dangerSoft,
                           borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -346,16 +344,14 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                         child: Text(
                           _message!,
                           style: TextStyle(
-                            color:
-                                _message!.toLowerCase().contains('submitted') ||
-                                    _message!.toLowerCase().contains('queued')
+                            color: _messageTone == _MessageTone.success
                                 ? tokens.success
                                 : tokens.danger,
                           ),
                         ),
                       ),
                     const SizedBox(height: 12),
-                    ElevatedButton(
+                    FilledButton(
                       onPressed: _loading
                           ? null
                           : () => _submitIncident(profile),

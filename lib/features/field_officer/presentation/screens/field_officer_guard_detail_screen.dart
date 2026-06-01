@@ -1,25 +1,25 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/location/live_location_service.dart';
+import '../../../../../core/models/mobile_dashboard_models.dart';
+import '../../../../../core/utils/date_format.dart';
+import '../../../../../shared/widgets/info_row.dart';
+import '../../../../../shared/widgets/meta_chip.dart';
 
 class FieldOfficerGuardDetailScreen extends StatefulWidget {
   const FieldOfficerGuardDetailScreen({
     super.key,
-    required this.employeeId,
-    required this.guardName,
-    required this.siteName,
+    required this.entry,
   });
 
-  final String employeeId;
-  final String guardName;
-  final String siteName;
+  final FieldOfficerAttendanceEntry entry;
 
   @override
   State<FieldOfficerGuardDetailScreen> createState() =>
@@ -39,7 +39,7 @@ class _FieldOfficerGuardDetailScreenState
   void initState() {
     super.initState();
     _sub = LiveLocationService()
-        .streamGuardLocation(widget.employeeId)
+        .streamGuardLocation(widget.entry.employeeId)
         .listen((data) {
       if (!mounted) return;
       setState(() {
@@ -88,13 +88,18 @@ class _FieldOfficerGuardDetailScreenState
     final siteLat = loc?.siteLat;
     final siteLng = loc?.siteLng;
     final radius = loc?.geofenceRadius ?? 0;
+    final profileImageUrl =
+        (widget.entry.profilePhotoUrl != null &&
+                widget.entry.profilePhotoUrl!.isNotEmpty)
+            ? widget.entry.profilePhotoUrl
+            : widget.entry.photoUrl;
 
     return Scaffold(
       backgroundColor: tokens.canvas,
       appBar: AppBar(
         title: Text(
-          widget.guardName,
-          style: GoogleFonts.rajdhani(fontWeight: FontWeight.w800, fontSize: 20),
+          widget.entry.guardName,
+          style: GoogleFonts.roboto(fontWeight: FontWeight.w800, fontSize: 20),
         ),
         backgroundColor: tokens.canvas,
       ),
@@ -179,15 +184,15 @@ class _FieldOfficerGuardDetailScreenState
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: Colors.orange.shade100,
+              color: tokens.warningSoft,
               child: Row(
                 children: [
-                  const Icon(Icons.warning_amber_rounded, size: 18, color: Colors.orange),
+                  Icon(Icons.warning_amber_rounded, size: 18, color: tokens.warning),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Map tiles unavailable. Guard location still visible.',
-                      style: TextStyle(fontSize: 12, color: Colors.orange.shade900),
+                      style: TextStyle(fontSize: 12, color: tokens.warning),
                     ),
                   ),
                 ],
@@ -218,8 +223,8 @@ class _FieldOfficerGuardDetailScreenState
                   children: [
                     Expanded(
                       child: Text(
-                        widget.guardName,
-                        style: GoogleFonts.rajdhani(
+                        widget.entry.guardName,
+                        style: GoogleFonts.roboto(
                           fontSize: 22,
                           fontWeight: FontWeight.w800,
                           color: tokens.ink,
@@ -250,7 +255,7 @@ class _FieldOfficerGuardDetailScreenState
                           const SizedBox(width: 6),
                           Text(
                             isActive ? 'ON DUTY' : 'OFF DUTY',
-                            style: GoogleFonts.rajdhani(
+                            style: GoogleFonts.roboto(
                               fontWeight: FontWeight.w800,
                               fontSize: 12,
                               color: isActive ? tokens.success : tokens.danger,
@@ -263,20 +268,98 @@ class _FieldOfficerGuardDetailScreenState
                   ],
                 ),
                 const SizedBox(height: 12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 28,
+                      backgroundColor: tokens.primarySoft,
+                      backgroundImage:
+                          profileImageUrl != null && profileImageUrl.isNotEmpty
+                              ? NetworkImage(profileImageUrl)
+                              : null,
+                      child: profileImageUrl == null || profileImageUrl.isEmpty
+                          ? Text(
+                              widget.entry.guardName.isNotEmpty
+                                  ? widget.entry.guardName
+                                      .substring(0, 1)
+                                      .toUpperCase()
+                                  : 'G',
+                              style: GoogleFonts.roboto(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w800,
+                                color: tokens.primaryStrong,
+                              ),
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          if (widget.entry.employeeId.isNotEmpty)
+                            MetaChip(
+                              icon: Icons.badge_outlined,
+                              label: widget.entry.employeeId,
+                            ),
+                          if (widget.entry.clientName.isNotEmpty)
+                            MetaChip(
+                              icon: Icons.business_outlined,
+                              label: widget.entry.clientName,
+                            ),
+                          if (widget.entry.district.isNotEmpty)
+                            MetaChip(
+                              icon: Icons.place_outlined,
+                              label: widget.entry.district,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
 
-                _infoRow(tokens, 'Site', widget.siteName),
+                InfoRow(labelWidth: 110, label: 'Site', value: widget.entry.siteName),
+                if (widget.entry.dutyPointName.isNotEmpty)
+                  InfoRow(labelWidth: 110, label: 'Duty point', value: widget.entry.dutyPointName),
+                if (widget.entry.shiftLabel.isNotEmpty)
+                  InfoRow(labelWidth: 110, label: 'Shift', value: widget.entry.shiftLabel),
+                if (widget.entry.checkIn != null)
+                  InfoRow(labelWidth: 110, label: 'Check in', value: widget.entry.checkIn!),
+                if (widget.entry.checkOut != null)
+                  InfoRow(labelWidth: 110, label: 'Check out', value: widget.entry.checkOut!),
+                if ((widget.entry.phoneNumber ?? '').trim().isNotEmpty)
+                  InfoRow(labelWidth: 110, label: 'Phone', value: widget.entry.phoneNumber!.trim()),
+                if ((widget.entry.gender ?? '').trim().isNotEmpty)
+                  InfoRow(labelWidth: 110, label: 'Gender', value: widget.entry.gender!.trim()),
+                if ((widget.entry.resourceIdNumber ?? '').trim().isNotEmpty)
+                  InfoRow(
+                    labelWidth: 110,
+                    label: 'Resource ID',
+                    value: widget.entry.resourceIdNumber!.trim(),
+                  ),
+                if ((widget.entry.joiningDate ?? '').trim().isNotEmpty)
+                  InfoRow(
+                    labelWidth: 110,
+                    label: 'Joining date',
+                    value: _formatDate(widget.entry.joiningDate!),
+                  ),
+                if ((widget.entry.address ?? '').trim().isNotEmpty)
+                  InfoRow(labelWidth: 110, label: 'Address', value: widget.entry.address!.trim()),
                 if (loc != null) ...[
-                  _infoRow(tokens, 'Status', loc.status),
-                  _infoRow(
-                    tokens,
-                    'Last update',
-                    _formatSince(loc.updatedAt),
+                  InfoRow(labelWidth: 110, label: 'Status', value: loc.status),
+                  InfoRow(
+                    labelWidth: 110,
+                    label: 'Last update',
+                    value: formatTimeSince(loc.updatedAt),
                   ),
                   if (hasCoords && siteLat != null && siteLng != null) ...[
-                    _infoRow(
-                      tokens,
-                      'Distance from site',
-                      '${_calculateDistance(
+                    InfoRow(
+                      labelWidth: 110,
+                      label: 'Distance from site',
+                      value: '${calculateDistanceMeters(
                             guardLat,
                             guardLng,
                             siteLat,
@@ -284,13 +367,13 @@ class _FieldOfficerGuardDetailScreenState
                           ).toStringAsFixed(0)} m',
                     ),
                   ],
-                  _infoRow(
-                    tokens,
-                    'In zone',
-                    loc.isOutOfZone ? '✗ OUTSIDE' : '✓ Inside',
+                  InfoRow(
+                    labelWidth: 110,
+                    label: 'In zone',
+                    value: loc.isOutOfZone ? '✗ OUTSIDE' : '✓ Inside',
                   ),
                 ] else
-                  _infoRow(tokens, 'Status', 'No location data'),
+                  InfoRow(labelWidth: 110, label: 'Status', value: 'No location data'),
               ],
             ),
           ),
@@ -309,7 +392,7 @@ class _FieldOfficerGuardDetailScreenState
                   icon: const Icon(Icons.my_location_rounded, size: 18),
                   label: Text(
                     'RECENTER ON GUARD',
-                    style: GoogleFonts.rajdhani(
+                    style: GoogleFonts.roboto(
                         fontWeight: FontWeight.w700, letterSpacing: 1),
                   ),
                 ),
@@ -320,56 +403,10 @@ class _FieldOfficerGuardDetailScreenState
     );
   }
 
-  Widget _infoRow(CissThemeTokens tokens, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              label,
-              style: TextStyle(
-                color: tokens.inkMuted,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: GoogleFonts.rajdhani(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: tokens.ink,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatSince(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${diff.inDays}d ago';
-  }
-
-  double _calculateDistance(
-      double lat1, double lng1, double lat2, double lng2) {
-    const r = 6371000; // Earth radius in meters
-    final dLat = (lat2 - lat1) * math.pi / 180;
-    final dLng = (lng2 - lng1) * math.pi / 180;
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(lat1 * math.pi / 180) *
-            math.cos(lat2 * math.pi / 180) *
-            math.sin(dLng / 2) *
-            math.sin(dLng / 2);
-    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  String _formatDate(String raw) {
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return raw;
+    return DateFormat('dd MMM yyyy').format(parsed.toLocal());
   }
 }
 
@@ -379,7 +416,8 @@ class _GuardMarker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isOutOfZone ? Colors.red : const Color(0xFF4CAF50);
+    final tokens = CissThemeTokens.of(context);
+    final color = isOutOfZone ? tokens.danger : tokens.success;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [

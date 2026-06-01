@@ -8,11 +8,12 @@ import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/section_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/status_chip.dart';
+import '../../../../../core/cache/skeleton_widgets.dart';
 import '../widgets/guard_portal_widgets.dart';
 
 final FutureProvider<List<TrainingAssignmentModel>> guardTrainingProvider =
     FutureProvider<List<TrainingAssignmentModel>>((Ref ref) {
-      return ref.read(mobileRepositoryProvider).fetchTrainingAssignments();
+      return ref.watch(mobileRepositoryProvider).fetchTrainingAssignments();
     });
 
 class GuardTrainingScreen extends ConsumerWidget {
@@ -22,8 +23,7 @@ class GuardTrainingScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final assignmentsAsync = ref.watch(guardTrainingProvider);
     return assignmentsAsync.when(
-      loading: () =>
-          const GuardLoadingScaffold(label: 'Loading training modules...'),
+      loading: () => const SkeletonPage(cardCount: 3),
       error: (Object error, StackTrace stackTrace) => GuardErrorScaffold(
         title: 'Could not load training',
         error: error,

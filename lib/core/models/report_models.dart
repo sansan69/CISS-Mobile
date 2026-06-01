@@ -44,9 +44,8 @@ class VisitReportModel {
       guardsPresentCount: (json['guardsPresentCount'] as num?)?.toInt() ?? 0,
       guardsAbsentCount: (json['guardsAbsentCount'] as num?)?.toInt() ?? 0,
       status: (json['status'] as String?) ?? 'submitted',
-      photoUrls: (json['photoUrls'] as List<dynamic>?)
-              ?.whereType<String>()
-              .toList() ??
+      photoUrls:
+          (json['photoUrls'] as List<dynamic>?)?.whereType<String>().toList() ??
           const <String>[],
     );
   }
@@ -65,6 +64,7 @@ class TrainingReportModel {
     required this.durationMinutes,
     required this.status,
     this.photoUrls = const <String>[],
+    this.attachmentUrls = const <String>[],
   });
 
   final String id;
@@ -83,6 +83,9 @@ class TrainingReportModel {
   /// Firebase Storage URLs for training photos
   final List<String> photoUrls;
 
+  /// Firebase Storage URLs for training report uploads
+  final List<String> attachmentUrls;
+
   factory TrainingReportModel.fromJson(Map<String, dynamic> json) {
     return TrainingReportModel(
       id: (json['id'] as String?) ?? '',
@@ -98,7 +101,11 @@ class TrainingReportModel {
       attendeeCount: (json['attendeeCount'] as num?)?.toInt() ?? 0,
       durationMinutes: (json['durationMinutes'] as num?)?.toInt() ?? 0,
       status: (json['status'] as String?) ?? 'submitted',
-      photoUrls: (json['photoUrls'] as List<dynamic>?)
+      photoUrls:
+          (json['photoUrls'] as List<dynamic>?)?.whereType<String>().toList() ??
+          const <String>[],
+      attachmentUrls:
+          (json['attachmentUrls'] as List<dynamic>?)
               ?.whereType<String>()
               .toList() ??
           const <String>[],
@@ -120,6 +127,8 @@ class WorkOrderModel {
     required this.totalManpowerLabel,
     required this.totalManpower,
     required this.assignedCount,
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
@@ -134,6 +143,8 @@ class WorkOrderModel {
   final String totalManpowerLabel;
   final int totalManpower;
   final int assignedCount;
+  final double? latitude;
+  final double? longitude;
 
   factory WorkOrderModel.fromJson(Map<String, dynamic> json) {
     final male = json['maleGuardsRequired'];
@@ -160,6 +171,40 @@ class WorkOrderModel {
           : ((male is num ? male.toInt() : 0) +
                 (female is num ? female.toInt() : 0)),
       assignedCount: (json['assignedCount'] as num?)?.toInt() ?? 0,
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
+    );
+  }
+}
+
+class FieldOfficerSiteOption {
+  const FieldOfficerSiteOption({
+    required this.siteId,
+    required this.siteName,
+    required this.clientId,
+    required this.clientName,
+    required this.district,
+    this.latitude,
+    this.longitude,
+  });
+
+  final String siteId;
+  final String siteName;
+  final String clientId;
+  final String clientName;
+  final String district;
+  final double? latitude;
+  final double? longitude;
+
+  factory FieldOfficerSiteOption.fromJson(Map<String, dynamic> json) {
+    return FieldOfficerSiteOption(
+      siteId: (json['siteId'] as String?) ?? '',
+      siteName: (json['siteName'] as String?) ?? '',
+      clientId: (json['clientId'] as String?) ?? '',
+      clientName: (json['clientName'] as String?) ?? '',
+      district: (json['district'] as String?) ?? '',
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
     );
   }
 }

@@ -6,8 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/auth/saved_accounts_service.dart';
-import '../../../core/models/app_role.dart';
-import '../../../core/models/auth_session.dart';
+import '../../../core/haptics.dart';
 import '../../../core/network/ciss_error.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../../shared/widgets/brand_banner.dart';
@@ -162,22 +161,21 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen> {
     });
 
     try {
-      late final AuthSession session;
       if (widget.role == LoginRole.guard) {
-        session = await ref
+        await ref
             .read(authControllerProvider)
             .signInAsGuard(loginIdOrPhone: loginId, pin: pin);
       } else {
-        session = await ref
+        await ref
             .read(authControllerProvider)
             .signInAsFieldOfficer(email: loginId, password: pin);
       }
+      Haptics.medium();
       if (mounted) {
-        context.go(
-          session.role == AppRole.fieldOfficer ? '/field-officer' : '/',
-        );
+        context.go('/');
       }
     } catch (error) {
+      Haptics.heavy();
       setState(() {
         _error = CissError.parse(error);
       });
@@ -407,7 +405,7 @@ class _SavedAccountsSection extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 'RECENT ACCOUNTS',
-                style: GoogleFonts.rajdhani(
+                style: GoogleFonts.roboto(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.2,
@@ -470,7 +468,7 @@ class _SavedAccountTile extends StatelessWidget {
                   alignment: Alignment.center,
                   child: Text(
                     account.initials,
-                    style: GoogleFonts.rajdhani(
+                    style: GoogleFonts.roboto(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
                       color: tokens.primaryStrong,
@@ -484,7 +482,7 @@ class _SavedAccountTile extends StatelessWidget {
                     children: <Widget>[
                       Text(
                         account.displayName,
-                        style: GoogleFonts.rajdhani(
+                        style: GoogleFonts.roboto(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                           color: tokens.ink,

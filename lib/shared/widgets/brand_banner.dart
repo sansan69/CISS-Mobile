@@ -25,23 +25,24 @@ class BrandBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final statusBarHeight = MediaQuery.of(context).padding.top;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light.copyWith(
         statusBarColor: Colors.transparent,
       ),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(
+        padding: EdgeInsets.fromLTRB(
           AppSpacing.xl,
-          AppSpacing.xl + 12, // Extra top padding for status bar area
+          AppSpacing.xl + statusBarHeight,
           AppSpacing.xl,
           AppSpacing.xl,
         ),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: <Color>[
-              isDark ? const Color(0xFF0A1F3A) : tokens.primaryStrong,
-              isDark ? const Color(0xFF061428) : const Color(0xFF062D52),
+              isDark ? tokens.surfaceStrong : tokens.primaryStrong,
+              isDark ? tokens.canvas : Color.lerp(tokens.primaryStrong, tokens.ink, 0.3)!,
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
@@ -49,7 +50,13 @@ class BrandBanner extends StatelessWidget {
           borderRadius: const BorderRadius.vertical(
             bottom: Radius.circular(AppRadius.lg),
           ),
-          boxShadow: AppShadows.card,
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: tokens.primaryStrong.withValues(alpha: isDark ? 0.24 : 0.18),
+              blurRadius: 30,
+              offset: const Offset(0, 16),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -111,12 +118,12 @@ class BrandBanner extends StatelessWidget {
 
             // Hairline divider — separates brand from screen context
             Container(
-              height: 1,
+              height: 1.5,
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: <Color>[
-                    Colors.white.withValues(alpha: 0.18),
-                    Colors.white.withValues(alpha: 0.04),
+                    tokens.accent.withValues(alpha: 0.36),
+                    Colors.white.withValues(alpha: 0.06),
                   ],
                 ),
               ),
@@ -129,8 +136,8 @@ class BrandBanner extends StatelessWidget {
               title,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
                     height: 1.1,
                   ),
             ),

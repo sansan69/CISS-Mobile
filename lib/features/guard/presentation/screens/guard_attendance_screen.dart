@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/haptics.dart';
@@ -13,7 +13,6 @@ import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/location/background_tracking_service.dart';
-import '../../../../../core/location/live_location_service.dart';
 import '../../../../../core/fcm/providers.dart';
 import '../../../../../shared/widgets/camera_capture_screen.dart';
 import '../../../../../shared/widgets/section_card.dart';
@@ -31,15 +30,21 @@ class GuardAttendanceScreen extends ConsumerStatefulWidget {
       _GuardAttendanceScreenState();
 }
 
+enum _MessageTone { success, error }
+
 class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   SiteOptionModel? _site;
   DutyPointModel? _dutyPoint;
   ShiftTemplateModel? _shift;
+  AttendanceHintModel? _attendanceHint;
   String _status = 'In';
   String? _error;
+  _MessageTone _messageTone = _MessageTone.error;
   bool _busy = false;
   String? _photoPath;
   Position? _position;
+  String? _overrideReason;
+  bool _showOverrideField = false;
 
   @override
   void initState() {
@@ -51,30 +56,50 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
 
   Future<void> _initLocationCheck() async {
     await _captureLocation();
+    if (!mounted) return;
     if (_position != null) {
       final sites = await ref.read(attendanceSitesProvider.future);
       final profile = await ref.read(guardProfileProvider.future);
-      
+      AttendanceHintModel? hint;
+      try {
+        final employee = await ref
+            .read(mobileRepositoryProvider)
+            .fetchAttendanceEmployee(profile.employeeId);
+        hint = employee.attendanceHint;
+      } catch (_) {
+        hint = null;
+      }
+
       final guardDist = profile.district.trim().toLowerCase();
       var filtered = sites
           .where((s) => s.district.trim().toLowerCase() == guardDist)
           .toList();
-      
+
       // Fallback: If no sites match the district, use all sites so guard isn't blocked
       if (filtered.isEmpty) {
         filtered = sites;
       }
 
-      final nearest = _findNearestSite(_position!, filtered);
+      final status =
+          hint?.recommendedStatus == 'Out' || hint?.hasOpenSession == true
+          ? 'Out'
+          : 'In';
+      final sessionSite = _findSessionSite(filtered, hint);
+      final nearest = sessionSite ?? _findNearestSite(_position!, filtered);
       if (nearest != null && mounted) {
+        final dutyPoint = _resolveDutyPointForSubmission(nearest, hint, status);
         setState(() {
+          _attendanceHint = hint;
+          _status = status;
           _site = nearest;
-          _dutyPoint =
-              nearest.dutyPoints.isNotEmpty ? nearest.dutyPoints.first : null;
-          _shift =
-              _dutyPoint?.shiftTemplates.isNotEmpty == true
-                  ? _dutyPoint!.shiftTemplates.first
-                  : null;
+          _dutyPoint = dutyPoint;
+          _shift = resolveAttendanceSubmissionShiftTemplate(
+            dutyPoint?.shiftTemplates.isNotEmpty == true
+                ? dutyPoint!.shiftTemplates
+                : nearest.shiftTemplates,
+            status: status,
+            attendanceHint: hint,
+          );
         });
       }
     }
@@ -83,9 +108,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   Future<void> _captureLocation() async {
     final enabled = await Geolocator.isLocationServiceEnabled();
     if (!enabled) {
-      setState(
-        () => _error = 'Location services are off. Please turn them on.',
-      );
+      if (!mounted) return;
+      setState(() {
+        _error = 'Location services are off. Please turn them on.';
+        _messageTone = _MessageTone.error;
+      });
       return;
     }
 
@@ -96,18 +123,25 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
 
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
-      setState(
-        () => _error = 'Location permission is required for attendance.',
-      );
+      if (!mounted) return;
+      setState(() {
+        _error = 'Location permission is required for attendance.';
+        _messageTone = _MessageTone.error;
+      });
       return;
     }
 
     final position = await Geolocator.getCurrentPosition(
-      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 10),
+      ),
     );
+    if (!mounted) return;
     setState(() {
       _position = position;
       _error = null;
+      _messageTone = _MessageTone.error;
     });
   }
 
@@ -147,7 +181,9 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                     s.siteName.toLowerCase().contains(
                       searchQuery.toLowerCase(),
                     ) ||
-                    s.district.toLowerCase().contains(searchQuery.toLowerCase()),
+                    s.district.toLowerCase().contains(
+                      searchQuery.toLowerCase(),
+                    ),
               )
               .toList();
 
@@ -206,34 +242,40 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                           title: Text(
                             site.siteName,
                             style: TextStyle(
-                              color:
-                                  isSelected ? tokens.primary : tokens.ink,
-                              fontWeight:
-                                  isSelected ? FontWeight.bold : FontWeight.normal,
+                              color: isSelected ? tokens.primary : tokens.ink,
+                              fontWeight: isSelected
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
                             ),
                           ),
                           subtitle: Text(
                             site.district,
                             style: TextStyle(color: tokens.inkMuted),
                           ),
-                          trailing:
-                              isSelected
-                                  ? Icon(
-                                    Icons.check_circle_rounded,
-                                    color: tokens.primary,
-                                  )
-                                  : null,
+                          trailing: isSelected
+                              ? Icon(
+                                  Icons.check_circle_rounded,
+                                  color: tokens.primary,
+                                )
+                              : null,
                           onTap: () {
+                            final dutyPoint = site.dutyPoints.isNotEmpty
+                                ? _resolveDutyPointForSubmission(
+                                    site,
+                                    _attendanceHint,
+                                    _status,
+                                  )
+                                : null;
                             setState(() {
                               _site = site;
-                              _dutyPoint =
-                                  site.dutyPoints.isNotEmpty == true
-                                      ? site.dutyPoints.first
-                                      : null;
-                              _shift =
-                                  _dutyPoint?.shiftTemplates.isNotEmpty == true
-                                      ? _dutyPoint!.shiftTemplates.first
-                                      : null;
+                              _dutyPoint = dutyPoint;
+                              _shift = resolveAttendanceSubmissionShiftTemplate(
+                                dutyPoint?.shiftTemplates.isNotEmpty == true
+                                    ? dutyPoint!.shiftTemplates
+                                    : site.shiftTemplates,
+                                status: _status,
+                                attendanceHint: _attendanceHint,
+                              );
                             });
                             Navigator.pop(context);
                           },
@@ -274,6 +316,31 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     return nearest;
   }
 
+  SiteOptionModel? _findSessionSite(
+    List<SiteOptionModel> sites,
+    AttendanceHintModel? hint,
+  ) {
+    final lastSiteId = hint?.lastSiteId?.trim();
+    if (lastSiteId == null || lastSiteId.isEmpty) return null;
+    for (final site in sites) {
+      if (site.id == lastSiteId) return site;
+    }
+    return null;
+  }
+
+  DutyPointModel? _resolveDutyPointForSubmission(
+    SiteOptionModel site,
+    AttendanceHintModel? hint,
+    String status,
+  ) {
+    if (status == 'Out' && hint?.lastDutyPointId?.trim().isNotEmpty == true) {
+      for (final dutyPoint in site.dutyPoints) {
+        if (dutyPoint.id == hint!.lastDutyPointId) return dutyPoint;
+      }
+    }
+    return site.dutyPoints.isNotEmpty ? site.dutyPoints.first : null;
+  }
+
   Future<void> _submitAttendance(GuardProfileModel profile) async {
     if (_site == null) {
       setState(() => _error = 'Please select a site.');
@@ -300,6 +367,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       _error = null;
     });
 
+    // Guard: ensure _busy is reset if we return early from geofence check.
+    void resetBusy() {
+      if (mounted) setState(() => _busy = false);
+    }
+
     try {
       final file = File(_photoPath!);
       final bytes = await file.readAsBytes();
@@ -312,11 +384,41 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           (_site!.dutyPoints.length == 1 ? _site!.dutyPoints.first : null);
       final shift =
           _shift ??
-          resolveActiveShiftTemplate(
+          resolveAttendanceSubmissionShiftTemplate(
             dutyPoint?.shiftTemplates.isNotEmpty == true
                 ? dutyPoint!.shiftTemplates
                 : _site!.shiftTemplates,
+            status: _status,
+            attendanceHint: _attendanceHint,
           );
+
+      // Compute distance from site if we have both coordinates
+      double distanceMeters = 0;
+      bool isOutOfZone = false;
+      if (_position != null && _site!.lat != null && _site!.lng != null) {
+        distanceMeters = Geolocator.distanceBetween(
+          _position!.latitude,
+          _position!.longitude,
+          _site!.lat!,
+          _site!.lng!,
+        );
+        isOutOfZone = distanceMeters > _site!.geofenceRadiusMeters;
+      }
+
+      // Geofence enforcement
+      if (_status == 'In' && isOutOfZone && _site!.strictGeofence) {
+        resetBusy();
+        if (!mounted) return;
+        setState(() {
+          _error =
+              'You are ${distanceMeters.toStringAsFixed(0)}m from ${_site!.siteName}. '
+              'You must be within ${_site!.geofenceRadiusMeters.toStringAsFixed(0)}m to check in.';
+          _messageTone = _MessageTone.error;
+        });
+        return;
+      }
+
+      final clientRequestId = const Uuid().v4();
 
       final payload = <String, dynamic>{
         'employeeId': profile.employeeId,
@@ -343,13 +445,17 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           'lon': _position!.longitude,
           'accuracyMeters': _position!.accuracy,
         },
-        'distanceMeters': 0,
+        'distanceMeters': distanceMeters,
+        'isOutOfZone': isOutOfZone,
         'gpsAccuracyMeters': _position!.accuracy,
         'locationAccuracyMeters': _position!.accuracy,
         'geofenceRadiusAtTime': _site!.geofenceRadiusMeters,
         'sourceCollection': _site!.sourceCollection,
         'photoCapturedAt': DateTime.now().toUtc().toIso8601String(),
         'deviceInfo': <String, dynamic>{'userAgent': 'flutter-mobile'},
+        'clientRequestId': clientRequestId,
+        if (_overrideReason != null && _overrideReason!.trim().isNotEmpty)
+          'overrideReason': _overrideReason!.trim(),
       };
 
       try {
@@ -380,65 +486,67 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           } else {
             debugPrint('Tracking skipped: site coordinates missing.');
           }
-          // Write initial location to Firestore for live tracking
-          _writeLiveLocation(profile, _status);
+          // Attendance submit writes the authoritative live-location record server-side.
           // Notify field officers
-          await ref.read(notificationServiceProvider).triggerSystemNotification(
-            type: 'attendance_marked',
-            title: 'Guard ${_status == 'In' ? 'Checked In' : 'Checked Out'}',
-            body: '${profile.fullName} marked ${_status.toLowerCase()} at ${_site!.siteName}',
-            role: 'fieldOfficer',
-            district: profile.district,
-            data: {'employeeId': profile.employeeId, 'siteId': _site!.id},
-          );
+          await ref
+              .read(notificationServiceProvider)
+              .triggerSystemNotification(
+                type: 'attendance_marked',
+                title:
+                    'Guard ${_status == 'In' ? 'Checked In' : 'Checked Out'}',
+                body:
+                    '${profile.fullName} marked ${_status.toLowerCase()} at ${_site!.siteName}',
+                role: 'fieldOfficer',
+                district: profile.district,
+                data: {'employeeId': profile.employeeId, 'siteId': _site!.id},
+              );
         } else {
           BackgroundTrackingService.stop();
-          // Mark OUT in Firestore
-          LiveLocationService().markOut(profile.employeeId);
         }
 
         if (mounted) {
           Haptics.heavy();
-        setState(() {
+          setState(() {
             _photoPath = null;
             _error = 'Attendance submitted successfully.';
+            _messageTone = _MessageTone.success;
           });
         }
       } catch (uploadOrSubmitError) {
-        if (uploadOrSubmitError is DioException &&
-            (uploadOrSubmitError.type == DioExceptionType.connectionTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.sendTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.receiveTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.connectionError)) {
+        final isOffline = ref
+            .read(mobileRepositoryProvider)
+            .shouldQueueOffline(uploadOrSubmitError);
+        if (isOffline) {
           // If network failed, queue the request WITH the base64 photo data.
-          // The backend /api/attendance/submit must be updated to handle 
-          // 'photoDataUrl' directly if 'photoUrl' is missing.
-          await ref.read(offlineQueueProvider).enqueue(
-            path: '/api/attendance/submit',
-            method: 'POST',
-            body: {
-              ...payload,
-              'photoDataUrl': dataUrl,
-            },
-          );
+          await ref
+              .read(offlineQueueProvider)
+              .enqueue(
+                path: '/api/attendance/submit',
+                method: 'POST',
+                body: {
+                  ...payload,
+                  'photoDataUrl': dataUrl,
+                  if (_overrideReason != null && _overrideReason!.trim().isNotEmpty)
+                    'overrideReason': _overrideReason!.trim(),
+                },
+              );
           if (mounted) {
             Haptics.medium();
-            // Still write to Firestore so FO can see live location
-            _writeLiveLocation(profile, _status);
-            if (mounted) {
-              setState(() {
-                _photoPath = null;
-                _error = 'Offline: Attendance queued for sync.';
-              });
-            }
+            setState(() {
+              _photoPath = null;
+              _error = 'Offline: Attendance queued for sync.';
+              _messageTone = _MessageTone.success;
+            });
           }
         } else {
           rethrow;
         }
       }
     } catch (error) {
+      if (!mounted) return;
       setState(() {
         _error = CissError.parse(error);
+        _messageTone = _MessageTone.error;
       });
     } finally {
       if (mounted) {
@@ -446,32 +554,6 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           _busy = false;
         });
       }
-    }
-  }
-
-  Future<void> _writeLiveLocation(GuardProfileModel profile, String status) async {
-    final site = _site;
-    if (site == null || _position == null) return;
-    try {
-      await LiveLocationService().setLocation(GuardLocationData(
-        employeeId: profile.employeeId,
-        guardName: profile.fullName,
-        siteId: site.id,
-        siteName: site.siteName,
-        clientName: profile.clientName,
-        district: profile.district,
-        lat: _position!.latitude,
-        lng: _position!.longitude,
-        accuracy: _position!.accuracy,
-        isOutOfZone: false,
-        status: status,
-        updatedAt: DateTime.now(),
-        siteLat: site.lat,
-        siteLng: site.lng,
-        geofenceRadius: site.geofenceRadiusMeters.toDouble(),
-      ));
-    } catch (e) {
-      debugPrint('LiveLocation write error: $e');
     }
   }
 
@@ -518,7 +600,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                 var filteredSites = sites
                     .where((s) => s.district.trim().toLowerCase() == guardDist)
                     .toList();
-                
+
                 bool isFiltered = true;
                 if (filteredSites.isEmpty) {
                   filteredSites = sites;
@@ -548,12 +630,19 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                           ),
                           child: Row(
                             children: [
-                              Icon(Icons.info_outline_rounded, color: tokens.warning, size: 20),
+                              Icon(
+                                Icons.info_outline_rounded,
+                                color: tokens.warning,
+                                size: 20,
+                              ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
                                   'No sites found for your district (${profile.district}). Showing all available sites.',
-                                  style: TextStyle(color: tokens.warning, fontSize: 13),
+                                  style: TextStyle(
+                                    color: tokens.warning,
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ),
                             ],
@@ -580,10 +669,9 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                           child: IgnorePointer(
                             child: TextFormField(
                               key: ValueKey(_site?.id),
-                              initialValue:
-                                  _site != null
-                                      ? '${_site!.siteName} • ${_site!.district}'
-                                      : '',
+                              initialValue: _site != null
+                                  ? '${_site!.siteName} • ${_site!.district}'
+                                  : '',
                               decoration: const InputDecoration(
                                 labelText: 'Site',
                                 suffixIcon: Icon(Icons.search_rounded),
@@ -611,10 +699,19 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                                   setState(() {
                                     _dutyPoint = dutyPoint;
                                     _shift =
-                                        dutyPoint?.shiftTemplates.isNotEmpty ==
-                                            true
-                                        ? dutyPoint!.shiftTemplates.first
-                                        : null;
+                                        resolveAttendanceSubmissionShiftTemplate(
+                                          dutyPoint
+                                                      ?.shiftTemplates
+                                                      .isNotEmpty ==
+                                                  true
+                                              ? dutyPoint!.shiftTemplates
+                                              : _site?.shiftTemplates ??
+                                                    const <
+                                                      ShiftTemplateModel
+                                                    >[],
+                                          status: _status,
+                                          attendanceHint: _attendanceHint,
+                                        );
                                   });
                                 },
                           decoration: const InputDecoration(
@@ -659,7 +756,26 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                           ],
                           selected: <String>{_status},
                           onSelectionChanged: (Set<String> selected) {
-                            setState(() => _status = selected.first);
+                            final nextStatus = selected.first;
+                            final nextDutyPoint = _site == null
+                                ? _dutyPoint
+                                : _resolveDutyPointForSubmission(
+                                    _site!,
+                                    _attendanceHint,
+                                    nextStatus,
+                                  );
+                            setState(() {
+                              _status = nextStatus;
+                              _dutyPoint = nextDutyPoint;
+                              _shift = resolveAttendanceSubmissionShiftTemplate(
+                                nextDutyPoint?.shiftTemplates.isNotEmpty == true
+                                    ? nextDutyPoint!.shiftTemplates
+                                    : _site?.shiftTemplates ??
+                                          const <ShiftTemplateModel>[],
+                                status: nextStatus,
+                                attendanceHint: _attendanceHint,
+                              );
+                            });
                           },
                         ),
                         const SizedBox(height: 12),
@@ -692,9 +808,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                           Container(
                             padding: const EdgeInsets.all(AppSpacing.sm),
                             decoration: BoxDecoration(
-                              color:
-                                  _error!.toLowerCase().contains('success') ||
-                                      _error!.toLowerCase().contains('queued')
+                              color: _messageTone == _MessageTone.success
                                   ? tokens.successSoft
                                   : tokens.dangerSoft,
                               borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -702,14 +816,65 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                             child: Text(
                               _error!,
                               style: TextStyle(
-                                color:
-                                    _error!.toLowerCase().contains('success') ||
-                                        _error!.toLowerCase().contains('queued')
+                                color: _messageTone == _MessageTone.success
                                     ? tokens.success
                                     : tokens.danger,
                               ),
                             ),
                           ),
+                        // Override reason for out-of-zone attendance
+                        if (_showOverrideField) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: tokens.warningSoft,
+                              borderRadius: BorderRadius.circular(AppRadius.sm),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(Icons.warning_amber_rounded, color: tokens.warning, size: 18),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        'Out-of-zone override',
+                                        style: TextStyle(color: tokens.warning, fontSize: 13, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  onChanged: (value) => setState(() => _overrideReason = value),
+                                  decoration: InputDecoration(
+                                    hintText: 'e.g., Site gate is 200m from checkpoint',
+                                    filled: true,
+                                    fillColor: tokens.surface,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                  ),
+                                  maxLength: 500,
+                                  maxLines: 2,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else ...[
+                          const SizedBox(height: 4),
+                          TextButton.icon(
+                            onPressed: () => setState(() => _showOverrideField = true),
+                            icon: Icon(Icons.warning_amber_rounded, size: 16, color: tokens.warning),
+                            label: Text(
+                              'Outside geofence? Request override',
+                              style: TextStyle(color: tokens.warning, fontSize: 12),
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 12),
                         SizedBox(
                           width: double.infinity,
@@ -717,17 +882,17 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                             onPressed: _busy
                                 ? null
                                 : () => _submitAttendance(profile),
-                          child: _busy
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator.adaptive(
-                                    strokeWidth: 2,
+                            child: _busy
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator.adaptive(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    'Submit ${_status == 'In' ? 'Check-In' : 'Check-Out'}',
                                   ),
-                                )
-                              : Text(
-                                  'Submit ${_status == 'In' ? 'Check-In' : 'Check-Out'}',
-                                ),
                           ),
                         ),
                         const SizedBox(height: 16),
@@ -759,5 +924,5 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
 
 final FutureProvider<List<SiteOptionModel>> attendanceSitesProvider =
     FutureProvider<List<SiteOptionModel>>((Ref ref) {
-      return ref.read(mobileRepositoryProvider).fetchAttendanceSites();
+      return ref.watch(mobileRepositoryProvider).fetchAttendanceSites();
     });

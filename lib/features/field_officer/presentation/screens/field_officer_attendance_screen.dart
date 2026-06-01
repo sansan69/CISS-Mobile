@@ -14,7 +14,7 @@ import '../../../../../shared/widgets/portal_primitives.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
 import '../../../../../core/location/live_location_service.dart';
-import 'field_officer_guard_detail_screen.dart';
+import 'attendance_record_detail_screen.dart';
 import 'field_officer_dashboard_screen.dart';
 
 final StateProvider<String?> attendanceSelectedDateProvider =
@@ -31,7 +31,7 @@ final FutureProvider<List<FieldOfficerAttendanceEntry>>
       : null;
 
   return ref
-      .read(mobileRepositoryProvider)
+      .watch(mobileRepositoryProvider)
       .fetchFieldOfficerGuardAttendance(date: date, district: district);
 });
 
@@ -115,7 +115,7 @@ class _FieldOfficerGuardAttendanceScreenState
                       _selectedDate != null
                           ? _displayFmt.format(_selectedDate!)
                           : 'Select Date',
-                      style: GoogleFonts.rajdhani(fontWeight: FontWeight.w700),
+                      style: GoogleFonts.roboto(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -202,12 +202,7 @@ class _FieldOfficerGuardAttendanceScreenState
                           ? entries
                           : entries
                               .where((e) =>
-                                  e.siteName.trim().toLowerCase() ==
-                                  sites
-                                      .firstWhere((s) => s.siteId == _selectedSiteId)
-                                      .siteName
-                                      .trim()
-                                      .toLowerCase())
+                                  e.siteId == _selectedSiteId)
                               .toList();
 
                       if (filtered.isEmpty) {
@@ -239,10 +234,8 @@ class _FieldOfficerGuardAttendanceScreenState
                                   onTap: () {
                                     Navigator.of(context).push(
                                       MaterialPageRoute(
-                                        builder: (_) => FieldOfficerGuardDetailScreen(
-                                          employeeId: e.employeeId,
-                                          guardName: e.guardName,
-                                          siteName: e.siteName,
+                                        builder: (_) => AttendanceRecordDetailScreen(
+                                          entry: e,
                                         ),
                                       ),
                                     );
@@ -300,7 +293,7 @@ class _SiteFilterChip extends StatelessWidget {
             children: [
               Text(
                 site.siteName,
-                style: GoogleFonts.rajdhani(
+                style: GoogleFonts.roboto(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: isSelected ? tokens.primaryStrong : tokens.ink,
@@ -315,7 +308,7 @@ class _SiteFilterChip extends StatelessWidget {
                   const SizedBox(width: 4),
                   Text(
                     '${site.onDutyNow}/${site.checkedInToday}',
-                    style: GoogleFonts.rajdhani(
+                    style: GoogleFonts.roboto(
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
                       color: isSelected ? tokens.primaryStrong : tokens.inkMuted,
@@ -342,6 +335,10 @@ class _LiveGuardRow extends StatelessWidget {
     final tokens = CissThemeTokens.of(context);
     final bool isPresent = entry.status == 'Present' || entry.status == 'In';
     final glow = isPresent ? tokens.success : tokens.warning;
+    final imageUrl = (entry.profilePhotoUrl != null &&
+            entry.profilePhotoUrl!.isNotEmpty)
+        ? entry.profilePhotoUrl
+        : entry.photoUrl;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -360,13 +357,13 @@ class _LiveGuardRow extends StatelessWidget {
                 CircleAvatar(
                   radius: 24,
                   backgroundColor: glow.withValues(alpha: 0.1),
-                  backgroundImage: (entry.photoUrl != null && entry.photoUrl!.isNotEmpty)
-                      ? NetworkImage(entry.photoUrl!)
+                  backgroundImage: (imageUrl != null && imageUrl.isNotEmpty)
+                      ? NetworkImage(imageUrl)
                       : null,
-                  child: (entry.photoUrl == null || entry.photoUrl!.isEmpty)
+                  child: (imageUrl == null || imageUrl.isEmpty)
                       ? Text(
                           entry.guardName.isNotEmpty ? entry.guardName.substring(0, 1).toUpperCase() : 'G',
-                          style: GoogleFonts.rajdhani(
+                          style: GoogleFonts.roboto(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
                             color: glow,
@@ -388,7 +385,7 @@ class _LiveGuardRow extends StatelessWidget {
                 children: [
                   Text(
                     entry.guardName,
-                    style: GoogleFonts.rajdhani(
+                    style: GoogleFonts.roboto(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: tokens.ink,
@@ -409,7 +406,7 @@ class _LiveGuardRow extends StatelessWidget {
               children: [
                 Text(
                   entry.checkIn ?? '--:--',
-                  style: GoogleFonts.rajdhani(
+                  style: GoogleFonts.roboto(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
                     color: tokens.primary,
@@ -417,7 +414,7 @@ class _LiveGuardRow extends StatelessWidget {
                 ),
                 Text(
                   entry.status.toUpperCase(),
-                  style: GoogleFonts.rajdhani(
+                  style: GoogleFonts.roboto(
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 0.5,
@@ -447,13 +444,14 @@ class _LiveDot extends StatelessWidget {
     final isStale = hasLive &&
         DateTime.now().difference(location!.updatedAt).inMinutes > 10;
 
+    final tokens = CissThemeTokens.of(context);
     final Color color;
     if (!hasLive) {
       color = fallbackColor;
     } else if (isStale) {
-      color = Colors.orange;
+      color = tokens.warning;
     } else {
-      color = location!.isOutOfZone ? Colors.red : const Color(0xFF4CAF50);
+      color = location!.isOutOfZone ? tokens.danger : tokens.success;
     }
 
     return Container(
