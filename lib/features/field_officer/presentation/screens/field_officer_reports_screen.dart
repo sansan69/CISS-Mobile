@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 
@@ -913,13 +914,66 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     }
   }
 
+  Future<void> _pickFiles() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp', 'heic', 'pdf'],
+        allowMultiple: true,
+      );
+      if (result != null && mounted) {
+        for (final file in result.files) {
+          if (file.bytes != null) {
+            final ext = file.extension?.toLowerCase() ?? 'jpg';
+            String mimeType;
+            switch (ext) {
+              case 'pdf':
+                mimeType = 'application/pdf';
+                break;
+              case 'png':
+                mimeType = 'image/png';
+                break;
+              case 'webp':
+                mimeType = 'image/webp';
+                break;
+              case 'heic':
+                mimeType = 'image/heic';
+                break;
+              default:
+                mimeType = 'image/jpeg';
+            }
+            setState(() => _photos.add(_PhotoEntry(bytes: file.bytes!, mimeType: mimeType)));
+          }
+        }
+        await _captureLocation();
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not pick files.');
+    }
+  }
+
   Future<void> _pickClientReport() async {
     try {
-      final picked = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 90);
-      if (picked != null && mounted) {
-        final bytes = await picked.readAsBytes();
-        final mimeType = picked.mimeType ?? 'application/pdf';
-        setState(() => _clientReportPhotos.add(_PhotoEntry(bytes: bytes, mimeType: mimeType)));
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+        allowMultiple: false,
+      );
+      if (result != null && result.files.single.bytes != null && mounted) {
+        final file = result.files.single;
+        final ext = file.extension?.toLowerCase() ?? 'jpg';
+        String mimeType;
+        switch (ext) {
+          case 'pdf':
+            mimeType = 'application/pdf';
+            break;
+          case 'png':
+            mimeType = 'image/png';
+            break;
+          default:
+            mimeType = 'image/jpeg';
+        }
+        setState(() => _clientReportPhotos.add(_PhotoEntry(bytes: file.bytes!, mimeType: mimeType)));
       }
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not pick report file.');
@@ -983,6 +1037,12 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     final date = _tab == _Tab.visit ? _visitDate : _trainingDate;
     if (date == null) {
       setState(() => _error = 'Select a date before submitting.');
+      return;
+    }
+
+    // Training reports require at least 3 photos when submitting
+    if (_tab == _Tab.training && _reportStatus == 'submitted' && _photos.length < 3) {
+      setState(() => _error = 'Training reports require at least 3 photos. You have ${_photos.length}. Please add more training session photos.');
       return;
     }
 
@@ -1294,23 +1354,81 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
   }
 
   Widget _buildPhotoSection(CissThemeTokens tokens) {
+    final isVisit = _tab == _Tab.visit;
+    final label = isVisit ? 'VISIT PHOTOS / FILES' : 'TRAINING PHOTOS';
+    final hint = isVisit
+        ? 'Attach at least one photo or file. Use camera, gallery, or attach a PDF. You can submit now and add more later.'
+        : 'Attach at least 3 photos of the training session. Use camera, gallery (including HEIC/WEBP), or attach PDFs.';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('ATTACHMENTS (${_photos.length})', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: tokens.inkMuted, letterSpacing: 1)),
+        Text('$label (${_photos.length})', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: tokens.inkMuted, letterSpacing: 1)),
+        const SizedBox(height: 6),
+        Text(hint, style: TextStyle(fontSize: 11, color: tokens.inkMuted)),
         const SizedBox(height: 12),
         Wrap(
           spacing: 12, runSpacing: 12,
           children: [
             ..._photos.asMap().entries.map((entry) => _PhotoPreview(index: entry.key, photo: entry.value, onRemove: _removePhoto)),
-            _AddPhotoButton(onGallery: _pickPhotos, onCamera: _takePhoto),
+            _AddPhotoButton(onGallery: _pickPhotos, onCamera: _takePhoto, onFiles: _pickFiles),
           ],
         ),
-        if (_tab == _Tab.training) ...[
+        // Show warning for visit reports with no photos when submitting
+        if (isVisit && _reportStatus == 'submitted' && _photos.isEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: tokens.warning.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: tokens.warning.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.warning_amber_rounded, size: 14, color: tokens.warning),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'No photos attached. Visit reports require at least one photo or file. You can still submit and add them later by editing this report.',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.ink),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        // Show requirement for training reports
+        if (!isVisit && _reportStatus == 'submitted' && _photos.length < 3) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: tokens.danger.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: tokens.danger.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.error_outline_rounded, size: 14, color: tokens.danger),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Training reports require at least 3 photos. You currently have ${_photos.length}. Please add more before submitting.',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.ink),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        if (!isVisit) ...[
           const SizedBox(height: 24),
           Text('CLIENT REPORT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: tokens.inkMuted, letterSpacing: 1)),
           const SizedBox(height: 6),
-          Text('Upload client-signed training report or certificate (PDF/JPG)', style: TextStyle(fontSize: 11, color: tokens.inkMuted)),
+          Text('Upload client-signed training report or certificate (PDF/JPG/PNG)', style: TextStyle(fontSize: 11, color: tokens.inkMuted)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 12, runSpacing: 12,
@@ -1375,9 +1493,10 @@ class _PhotoPreview extends StatelessWidget {
 }
 
 class _AddPhotoButton extends StatelessWidget {
-  const _AddPhotoButton({required this.onGallery, required this.onCamera});
+  const _AddPhotoButton({required this.onGallery, required this.onCamera, this.onFiles});
   final VoidCallback onGallery;
   final VoidCallback onCamera;
+  final VoidCallback? onFiles;
 
   @override
   Widget build(BuildContext context) {
@@ -1401,6 +1520,8 @@ class _AddPhotoButton extends StatelessWidget {
           children: [
             ListTile(leading: const Icon(Icons.camera_alt_rounded), title: const Text('Take Photo'), onTap: () { Navigator.pop(context); onCamera(); }),
             ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('Gallery'), onTap: () { Navigator.pop(context); onGallery(); }),
+            if (onFiles != null)
+              ListTile(leading: const Icon(Icons.folder_open_rounded), title: const Text('Files (PDF + Images)'), onTap: () { Navigator.pop(context); onFiles!(); }),
           ],
         ),
       ),
