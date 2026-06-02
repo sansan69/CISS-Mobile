@@ -7,7 +7,6 @@ import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/network/ciss_error.dart';
 import '../../../auth/application/auth_controller.dart';
-import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/glass_card.dart';
 import '../../../../../shared/widgets/portal_primitives.dart';
 import '../../../../../shared/widgets/state_block.dart';

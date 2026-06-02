@@ -16,8 +16,8 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
 
     expect(find.text('SELECT YOUR PORTAL'), findsOneWidget);
-    expect(find.text('GUARD\nOPERATIONS'), findsOneWidget);
-    expect(find.text('FIELD\nCOMMAND'), findsOneWidget);
+    expect(find.text('GUARD OPERATIONS'), findsOneWidget);
+    expect(find.text('FIELD COMMAND'), findsOneWidget);
   });
 
   testWidgets('renders guard login entry point', (WidgetTester tester) async {

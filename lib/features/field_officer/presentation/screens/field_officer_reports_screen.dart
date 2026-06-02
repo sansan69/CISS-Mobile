@@ -1546,7 +1546,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
 
   void _showGuardPicker(BuildContext context) async {
     await _loadGuardsForPicker();
-    if (!mounted) return;
+    if (!mounted || !context.mounted) return;
 
     final selected = List<Map<String, String>>.from(_selectedAttendees);
     showModalBottomSheet<void>(

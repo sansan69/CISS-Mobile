@@ -96,6 +96,7 @@ class SyncService {
         final result = await _repository.uploadAttendancePhoto(
           path: uploadPath,
           dataUrl: dataUrl,
+          siteId: body['siteId'] as String? ?? '',
         );
         final uploadedUrl = result['url'];
         if (uploadedUrl == null || uploadedUrl is! String) {

@@ -121,6 +121,28 @@ Field officer flow:
   - `flutter analyze` passed with no issues.
   - Verified start/stop triggers in `GuardAttendanceScreen`.
 
+### Audit fixes (2026-06-02)
+
+- Removed a tracked empty control-character artifact from `android/app`.
+- Fixed analyzer fallout from recent UI updates:
+  - removed stale imports in field officer and guard attendance screens
+  - removed an unused attendance status icon local
+  - guarded async bottom-sheet usage with `context.mounted`
+- Updated the role hub widget test to match the current compact labels.
+- Verification passed:
+  - `flutter analyze`
+  - `flutter test`
+  - `flutter build apk --debug --dart-define-from-file=mobile.env`
+
+### Attendance upload-token repair (2026-06-02)
+
+- Updated mobile attendance photo uploads to match the web backend's protected upload contract:
+  - request `/api/public/attendance/upload-token`
+  - upload under `employees/{employeeDocId}/attendance/...`
+  - send the generated `uploadToken` with the photo upload
+- QR attendance payloads now include `reportedAtClient` so offline replay preserves the actual attendance time.
+- Offline attendance sync now supplies `siteId` when replaying queued photo uploads.
+
 
 ```bash
 cd /Users/mymac/Documents/CISS-Mobile

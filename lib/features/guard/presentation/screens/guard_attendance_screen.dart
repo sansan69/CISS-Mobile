@@ -22,7 +22,6 @@ import '../../../../../shared/widgets/section_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
-import '../../../../../shared/widgets/portal_primitives.dart';
 import '../widgets/guard_portal_widgets.dart';
 import 'guard_profile_screen.dart';
 
@@ -422,7 +421,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
             'employees/${profile.id.isNotEmpty ? profile.id : profile.employeeId}/attendance/${DateTime.now().millisecondsSinceEpoch}.jpg';
         final uploadResult = await ref
             .read(mobileRepositoryProvider)
-            .uploadAttendancePhoto(path: uploadPath, dataUrl: dataUrl);
+            .uploadAttendancePhoto(
+              path: uploadPath,
+              dataUrl: dataUrl,
+              siteId: _site!.id,
+            );
 
         await ref.read(mobileRepositoryProvider).submitAttendance({
           ...payload,
@@ -1187,33 +1190,27 @@ class _AttendanceHistorySection extends ConsumerWidget {
 
     final Color accentColor;
     final String statusLabel;
-    final IconData statusIcon;
     final StatusChipTone chipTone;
 
     if (isIn) {
       accentColor = tokens.success;
       statusLabel = 'Check-in';
-      statusIcon = Icons.login_rounded;
       chipTone = StatusChipTone.success;
     } else if (isLate) {
       accentColor = tokens.warning;
       statusLabel = 'Late In';
-      statusIcon = Icons.warning_amber_rounded;
       chipTone = StatusChipTone.warning;
     } else if (isOut) {
       accentColor = tokens.warning;
       statusLabel = 'Check-out';
-      statusIcon = Icons.logout_rounded;
       chipTone = StatusChipTone.warning;
     } else if (isAbsent) {
       accentColor = tokens.danger;
       statusLabel = 'Absent';
-      statusIcon = Icons.cancel_rounded;
       chipTone = StatusChipTone.danger;
     } else {
       accentColor = tokens.inkMuted;
       statusLabel = record.status;
-      statusIcon = Icons.info_outline_rounded;
       chipTone = StatusChipTone.neutral;
     }
 

@@ -731,10 +731,32 @@ class MobileRepository {
   Future<Map<String, dynamic>> uploadAttendancePhoto({
     required String path,
     required String dataUrl,
+    String? siteId,
   }) async {
+    final ownerMatch = RegExp(r'^employees/([^/]+)/attendance/').firstMatch(path);
+    final ownerKey = ownerMatch?.group(1);
+    if (ownerKey == null || ownerKey.isEmpty) {
+      throw Exception('Attendance photo path must use employees/{id}/attendance.');
+    }
+    if (siteId == null || siteId.isEmpty) {
+      throw Exception('Attendance site id is required for photo upload.');
+    }
+    final tokenResponse = await _apiClient.dio.post<dynamic>(
+      '/api/public/attendance/upload-token',
+      data: <String, dynamic>{'employeeId': ownerKey, 'siteId': siteId},
+    );
+    final tokenData = Map<String, dynamic>.from(tokenResponse.data as Map);
+    final uploadToken = tokenData['uploadToken'] as String?;
+    if (uploadToken == null || uploadToken.isEmpty) {
+      throw Exception('Attendance photo upload token missing.');
+    }
     final response = await _apiClient.dio.post<dynamic>(
       '/api/public/attendance/upload',
-      data: <String, dynamic>{'path': path, 'photoDataUrl': dataUrl},
+      data: <String, dynamic>{
+        'path': path,
+        'photoDataUrl': dataUrl,
+        'uploadToken': uploadToken,
+      },
     );
     return Map<String, dynamic>.from(response.data as Map);
   }

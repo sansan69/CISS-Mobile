@@ -578,6 +578,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
         'employeeDocId': employee.id,
         'employeePhoneNumber': employee.phoneNumber ?? '',
         'employeeClientName': employee.clientName ?? '',
+        'reportedAtClient': now.toUtc().toIso8601String(),
         'status': _attendanceStatus,
         'district': site.district,
         'clientName': site.clientName,
@@ -610,8 +611,9 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
 
       final uploadResult = await repo.uploadAttendancePhoto(
         path:
-            'attendance-qr/${employee.id}/${DateTime.now().millisecondsSinceEpoch}.jpg',
+            'employees/${employee.id}/attendance/${DateTime.now().millisecondsSinceEpoch}.jpg',
         dataUrl: _photoDataUrl!,
+        siteId: site.id,
       );
       final photoUrl = uploadResult['url'] as String?;
       if (photoUrl == null || photoUrl.isEmpty) {
