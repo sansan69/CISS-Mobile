@@ -20,6 +20,8 @@ class RefreshController {
   final Ref _ref;
   Timer? _timer;
 
+  bool get isActive => _timer?.isActive ?? false;
+
   void start() {
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(minutes: 15), (timer) {
