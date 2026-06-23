@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/network/providers.dart';
+import '../../../core/models/app_role.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/state_block.dart';

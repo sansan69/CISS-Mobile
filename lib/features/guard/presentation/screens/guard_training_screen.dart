@@ -282,7 +282,7 @@ class GuardTrainingScreen extends ConsumerWidget {
                               ),
                             ),
                           ],
-                          if (hasContent) ...[
+                          if (assignment.contentUrl != null && assignment.contentUrl!.isNotEmpty) ...[
                             const SizedBox(width: 8),
                             Icon(Icons.open_in_new_rounded,
                                 size: 11, color: tokens.accent),

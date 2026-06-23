@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../app/theme/app_tokens.dart';
-import '../../../core/models/training_models.dart';
-import '../../../shared/widgets/screen_scaffold.dart';
-import '../../../shared/widgets/glass_card.dart';
-import '../../../shared/widgets/status_chip.dart';
+import '../../../../../app/theme/app_tokens.dart';
+import '../../../../../core/models/training_models.dart';
+import '../../../../../shared/widgets/screen_scaffold.dart';
+import '../../../../../shared/widgets/glass_card.dart';
+import '../../../../../shared/widgets/status_chip.dart';
 
 /// Training assignment detail screen.
 /// Shows full assignment info and provides content viewing + acknowledgment.
