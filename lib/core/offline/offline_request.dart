@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class OfflineRequest {
   const OfflineRequest({
     required this.id,

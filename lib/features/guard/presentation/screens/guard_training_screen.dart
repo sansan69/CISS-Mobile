@@ -220,7 +220,7 @@ class GuardTrainingScreen extends ConsumerWidget {
                   final uri = Uri.tryParse(assignment.contentUrl!);
                   if (uri != null && await canLaunchUrl(uri)) {
                     await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  } else if (mounted) {
+                  } else if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Could not open training content.')),
                     );

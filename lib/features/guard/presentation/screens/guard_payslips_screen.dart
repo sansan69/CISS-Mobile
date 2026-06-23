@@ -69,7 +69,7 @@ class GuardPayslipsScreen extends ConsumerWidget {
                       launchUri,
                       mode: LaunchMode.externalApplication,
                     );
-                  } else if (mounted) {
+                  } else if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Could not open payslip. Please install a PDF viewer.')),
                     );
