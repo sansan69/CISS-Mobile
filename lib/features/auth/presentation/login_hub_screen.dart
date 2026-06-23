@@ -161,7 +161,7 @@ class _LoginHubScreenState extends State<LoginHubScreen>
                     children: <Widget>[
                       const Spacer(flex: 1),
                       Expanded(
-                        flex: isCompact ? 9 : 10,
+                        flex: isCompact ? 7 : 8,
                         child: Padding(
                           padding: EdgeInsets.only(top: cardGap + 4),
                           child: FadeTransition(
@@ -191,7 +191,7 @@ class _LoginHubScreenState extends State<LoginHubScreen>
                       ),
                       SizedBox(height: cardGap),
                       Expanded(
-                        flex: isCompact ? 9 : 10,
+                        flex: isCompact ? 7 : 8,
                         child: FadeTransition(
                           opacity: _fade(0.25, 0.7),
                           child: SlideTransition(
@@ -217,6 +217,34 @@ class _LoginHubScreenState extends State<LoginHubScreen>
                           ),
                         ),
                       ),
+                      SizedBox(height: cardGap),
+                      Expanded(
+                        flex: isCompact ? 7 : 8,
+                        child: FadeTransition(
+                          opacity: _fade(0.35, 0.8),
+                          child: SlideTransition(
+                            position: _slide(0.35, 0.85),
+                            child: _RoleCard(
+                              title: isCompact
+                                  ? 'ADMIN / CLIENT'
+                                  : 'ADMIN /\nCLIENT',
+                              tagline: isCompact
+                                  ? 'Dashboard · Reports · Settings'
+                                  : 'Dashboard  ·  Reports  ·  Settings',
+                              icon: Icons.shield_rounded,
+                              accentColor: tokens.danger,
+                              softColor: tokens.danger.withValues(alpha: 0.1),
+                              darkSoftColor:
+                                  tokens.danger.withValues(alpha: 0.12),
+                              infographic: _InfographicType.field,
+                              introDelay: const Duration(milliseconds: 620),
+                              compact: isCompact,
+                              showPortalButton: false,
+                              onTap: () => context.go('/login/admin'),
+                            ),
+                          ),
+                        ),
+                      ),
                       const Spacer(flex: 1),
                     ],
                   ),
@@ -229,12 +257,28 @@ class _LoginHubScreenState extends State<LoginHubScreen>
                     horizontalPadding, 0, horizontalPadding, isCompact ? 8 : 20),
                 child: FadeTransition(
                   opacity: _fade(0.5, 1.0),
-                  child: Text(
-                    '© 2026 $kCompanyName · Secured by CISS Core',
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: tokens.inkMuted.withValues(alpha: 0.6),
-                    ),
+                  child: Column(
+                    children: [
+                      Text(
+                        '© 2026 $kCompanyName · Secured by CISS Core',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: tokens.inkMuted.withValues(alpha: 0.6),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () => context.go('/enroll'),
+                        child: Text(
+                          'Don\'t have an account? Enroll as Guard',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: tokens.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),

@@ -14,6 +14,8 @@ import '../../../core/brand.dart';
 import '../../../shared/widgets/auth/login_background.dart';
 import '../../field_officer/presentation/field_officer_shell.dart';
 import '../../guard/presentation/guard_shell.dart';
+import '../../admin/presentation/admin_dashboard_screen.dart';
+import '../../client/presentation/client_dashboard_screen.dart';
 import 'login_hub_screen.dart';
 
 class AuthGateScreen extends ConsumerStatefulWidget {
@@ -157,6 +159,12 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
 
           if (session.role == AppRole.fieldOfficer) {
             return const FieldOfficerShell();
+          }
+          if (session.role == AppRole.admin) {
+            return const AdminDashboardScreen();
+          }
+          if (session.role == AppRole.client) {
+            return const ClientDashboardScreen();
           }
 
           return const GuardShell();

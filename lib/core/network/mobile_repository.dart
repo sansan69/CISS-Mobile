@@ -271,6 +271,20 @@ class MobileRepository {
       );
     }
 
+    if (role == AppRole.client) {
+      return AuthSession(
+        role: role,
+        displayName: (claims['name'] as String?)?.trim().isNotEmpty == true
+            ? claims['name'] as String
+            : (claims['clientName'] as String?) ?? (user.displayName ?? user.email ?? 'Client'),
+        primaryId: user.uid,
+        uid: user.uid,
+        email: user.email,
+        clientId: claims['clientId'] as String?,
+        clientName: claims['clientName'] as String?,
+      );
+    }
+
     return AuthSession(
       role: role,
       displayName: (claims['name'] as String?)?.trim().isNotEmpty == true
