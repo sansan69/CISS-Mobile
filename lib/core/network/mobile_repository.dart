@@ -45,9 +45,26 @@ class MobileRepository {
         );
         return;
       }
-
-      // Non-critical: failure here shouldn't block the app, but log it.
       debugPrint('Error updating FCM token: $error');
+    }
+  }
+
+  /// Request a PIN reset for a guard who cannot log in.
+  /// This is an unauthenticated call — the backend validates employee ID + phone.
+  Future<void> resetGuardPin({
+    required String employeeId,
+    required String phoneNumber,
+  }) async {
+    try {
+      await _client.post(
+        '/api/public/guard/reset-pin',
+        data: <String, String>{
+          'employeeId': employeeId,
+          'phoneNumber': phoneNumber,
+        },
+      );
+    } catch (error) {
+      throw Exception('PIN reset failed: ${_extractApiError(error)}');
     }
   }
 

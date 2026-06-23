@@ -8,6 +8,7 @@ import '../../../../../shared/widgets/metric_tile.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
+import 'field_officer_guard_detail_screen.dart';
 
 final FutureProvider<List<GuardProfileModel>> fieldOfficerGuardsProvider =
     FutureProvider<List<GuardProfileModel>>((Ref ref) {
@@ -168,7 +169,17 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() => _expanded = !_expanded),
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => FieldOfficerGuardDetailScreen(
+              employeeId: guard.employeeId,
+              guardName: guard.fullName,
+              siteName: guard.clientName,
+            ),
+          ),
+        );
+      },
       child: Container(
         decoration: BoxDecoration(
           color: tokens.surface,
@@ -241,10 +252,13 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
                       ],
                     ),
                   ),
-                  AnimatedRotation(
+                  GestureDetector(
+                    onTap: () => setState(() => _expanded = !_expanded),
+                    child: AnimatedRotation(
                     turns: _expanded ? 0.5 : 0.0,
                     duration: const Duration(milliseconds: 200),
                     child: Icon(Icons.expand_more_rounded, size: 18, color: tokens.inkMuted),
+                  ),
                   ),
                 ],
               ),

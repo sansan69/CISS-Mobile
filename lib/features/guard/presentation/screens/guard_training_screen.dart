@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../../core/models/training_models.dart';
 import '../../../../../core/network/providers.dart';
@@ -11,6 +10,7 @@ import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/glass_card.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../widgets/guard_portal_widgets.dart';
+import 'guard_training_detail_screen.dart';
 
 String _formatDueLabel(String value) {
   final parsed = DateTime.tryParse(value);
@@ -207,26 +207,18 @@ class GuardTrainingScreen extends ConsumerWidget {
     CissThemeTokens tokens, {
     required bool isCompleted,
   }) {
-    final bool hasContent = assignment.contentUrl != null &&
-        assignment.contentUrl!.isNotEmpty;
-
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: hasContent
-              ? () async {
-                  final uri = Uri.tryParse(assignment.contentUrl!);
-                  if (uri != null && await canLaunchUrl(uri)) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  } else if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Could not open training content.')),
-                    );
-                  }
-                }
-              : null,
+          onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => GuardTrainingDetailScreen(assignment: assignment),
+                    ),
+                  );
+                },
           borderRadius: BorderRadius.circular(AppRadius.md),
           child: GlassCard(
             padding: const EdgeInsets.all(14),

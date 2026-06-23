@@ -21,6 +21,7 @@ import 'screens/field_officer_dashboard_screen.dart';
 import 'screens/field_officer_guards_screen.dart';
 import 'screens/field_officer_reports_screen.dart';
 import 'screens/field_officer_work_orders_screen.dart';
+import 'screens/field_officer_tools_screens.dart';
 
 class FieldOfficerShell extends ConsumerStatefulWidget {
   const FieldOfficerShell({super.key});
@@ -224,25 +225,41 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                       icon: Icons.assignment_late_outlined,
                       label: 'Incidents',
                       color: tokens.warning,
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const FieldOfficerIncidentsScreen()),
+                        );
+                      },
                     ),
                     _ToolTile(
                       icon: Icons.place_outlined,
                       label: 'Sites',
                       color: tokens.primary,
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const FieldOfficerSitesScreen()),
+                        );
+                      },
                     ),
                     _ToolTile(
                       icon: Icons.sync_rounded,
                       label: 'Sync Logs',
                       color: tokens.success,
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const FieldOfficerSyncLogsScreen()),
+                        );
+                      },
                     ),
                     _ToolTile(
                       icon: Icons.help_outline_rounded,
                       label: 'Support',
                       color: tokens.accent,
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const FieldOfficerSupportScreen()),
+                        );
+                      },
                     ),
                   ],
                 ),

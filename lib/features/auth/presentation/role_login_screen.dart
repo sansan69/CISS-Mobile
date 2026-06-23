@@ -10,6 +10,7 @@ import '../../../core/models/auth_session.dart';
 import '../../../core/network/ciss_error.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../../shared/widgets/auth/login_background.dart';
+import 'guard_forgot_pin_screen.dart';
 
 enum LoginRole { guard, fieldOfficer }
 
@@ -627,6 +628,34 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                               ),
                               child: Text(
                                 'Set up PIN for first-time login',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton(
+                              onPressed: _loading
+                                  ? null
+                                  : () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const GuardForgotPinScreen(),
+                                        ),
+                                      );
+                                    },
+                              style: TextButton.styleFrom(
+                                foregroundColor: tokens.danger.withValues(alpha: 0.8),
+                                padding: EdgeInsets.zero,
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              child: Text(
+                                'Forgot PIN?',
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   fontWeight: FontWeight.w600,
                                 ),
