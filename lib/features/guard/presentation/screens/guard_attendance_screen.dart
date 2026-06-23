@@ -507,9 +507,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         }
       }
     } catch (error) {
-      setState(() {
-        _error = CissError.parse(error);
-      });
+      if (mounted) {
+        setState(() {
+          _error = CissError.parse(error);
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {

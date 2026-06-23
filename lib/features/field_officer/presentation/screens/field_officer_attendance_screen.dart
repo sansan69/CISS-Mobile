@@ -468,7 +468,7 @@ class _FieldOfficerGuardAttendanceScreenState
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
       setState(() {
         _historyQuickFilter = null;
         if (isStart) {

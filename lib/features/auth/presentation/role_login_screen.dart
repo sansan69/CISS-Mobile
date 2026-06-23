@@ -979,9 +979,9 @@ class _SavedAccountChip extends StatelessWidget {
                 ? heroColor.withValues(alpha: 0.3)
                 : tokens.border,
           ),
-          boxShadow: const <BoxShadow>[
+          boxShadow: <BoxShadow>[
             BoxShadow(
-              color: Color(0x0A0C2A43),
+              color: tokens.ink.withValues(alpha: 0.06),
               blurRadius: 8,
               offset: Offset(0, 3),
             ),

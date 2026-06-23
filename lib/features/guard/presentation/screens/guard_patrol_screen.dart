@@ -1,11 +1,13 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/patrol_models.dart';
 import '../../../../../core/network/providers.dart';
+import '../../../../../core/sync/providers.dart';
 import '../../../../../shared/widgets/camera_capture_screen.dart';
 import '../../../../../shared/widgets/portal_primitives.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
@@ -134,7 +136,19 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = error.toString().replaceFirst('Exception: ', ''));
+      if (error is DioException) {
+        ref.read(offlineQueueProvider).enqueue(
+          path: '/api/guard/patrol',
+          method: 'POST',
+          body: <String, dynamic>{'type': type},
+        );
+        setState(() => _error = 'Offline: Patrol activity queued for sync.');
+        ref.invalidate(guardPatrolStatusProvider);
+      } else {
+        setState(
+          () => _error = error.toString().replaceFirst('Exception: ', ''),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _submitting = false);
@@ -166,6 +180,14 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
             icon: Icons.error_outline_rounded,
             title: 'Patrol setup unavailable',
             message: error.toString(),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          Center(
+            child: FilledButton.tonalIcon(
+              onPressed: () => ref.invalidate(guardPatrolStatusProvider),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Retry'),
+            ),
           ),
         ],
       ),

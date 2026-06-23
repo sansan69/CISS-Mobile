@@ -80,9 +80,11 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
             );
         setState(() => _message = 'Offline: Leave request queued.');
       } else {
-        setState(
-          () => _message = error.toString().replaceFirst('Exception: ', ''),
-        );
+        if (mounted) {
+          setState(
+            () => _message = error.toString().replaceFirst('Exception: ', ''),
+          );
+        }
       }
     } finally {
       if (mounted) {

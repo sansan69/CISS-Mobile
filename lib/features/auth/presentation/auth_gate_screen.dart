@@ -102,7 +102,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                    Icon(Icons.error_outline, size: 48, color: CissThemeTokens.of(context).danger),
                     const SizedBox(height: 16),
                     Text('Auth error: $error', textAlign: TextAlign.center),
                     const SizedBox(height: 24),

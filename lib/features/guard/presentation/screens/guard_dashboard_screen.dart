@@ -190,9 +190,21 @@ class _DashboardBody extends ConsumerWidget {
               icon: Icons.check_circle_outline_rounded,
             ),
             StatPill(
+              label: 'Absent',
+              value: '${data.absentDays}',
+              accentColor: tokens.danger,
+              icon: Icons.cancel_outlined,
+            ),
+            StatPill(
+              label: 'Working',
+              value: '${data.workingDays}',
+              accentColor: tokens.primary,
+              icon: Icons.work_outline_rounded,
+            ),
+            StatPill(
               label: 'Client',
               value: data.clientName.isEmpty ? '—' : data.clientName,
-              accentColor: tokens.primary,
+              accentColor: tokens.accent,
               icon: Icons.apartment_rounded,
             ),
             StatPill(

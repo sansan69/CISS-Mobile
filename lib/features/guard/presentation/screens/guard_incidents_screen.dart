@@ -186,9 +186,11 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
         }
       }
     } catch (error) {
-      setState(() {
-        _message = CissError.parse(error);
-      });
+      if (mounted) {
+        setState(() {
+          _message = CissError.parse(error);
+        });
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -312,10 +314,10 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                                     right: 4,
                                     child: CircleAvatar(
                                       radius: 14,
-                                      backgroundColor: Colors.black54,
+                                      backgroundColor: tokens.inkMuted.withValues(alpha: 0.54),
                                       child: IconButton(
                                         padding: EdgeInsets.zero,
-                                        icon: const Icon(Icons.close, size: 16, color: Colors.white),
+                                        icon: Icon(Icons.close, size: 16, color: tokens.surface),
                                         onPressed: () => setState(() => _photo = null),
                                       ),
                                     ),

@@ -348,9 +348,9 @@ class _RoleCardState extends State<_RoleCard>
                 ),
                 boxShadow: _pressed
                     ? const <BoxShadow>[]
-                    : const <BoxShadow>[
+                    : <BoxShadow>[
                         BoxShadow(
-                          color: Color(0x0A0C2A43),
+                          color: tokens.ink.withValues(alpha: 0.06),
                           blurRadius: 20,
                           offset: Offset(0, 8),
                           spreadRadius: -2,

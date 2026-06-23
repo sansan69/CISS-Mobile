@@ -32,7 +32,12 @@ class OfflineQueue extends ChangeNotifier {
     await Hive.openBox<Map>(boxName, encryptionCipher: cipher);
   }
 
-  Box<Map> get _box => Hive.box<Map>(boxName);
+  Box<Map> get _box {
+    if (!Hive.isBoxOpen(boxName)) {
+      throw StateError('OfflineQueue not initialized. Call init() first.');
+    }
+    return Hive.box<Map>(boxName);
+  }
 
   int get queueSize => _box.length;
 

@@ -1348,6 +1348,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
   }
 
   Widget _buildVisitForm() {
+    final tokens = CissThemeTokens.of(context);
     return Column(
       children: [
         TextField(
@@ -1366,13 +1367,13 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
               color: _visitLocation != null
-                  ? const Color(0xFF4CAF50).withValues(alpha: 0.08)
-                  : const Color(0xFF2196F3).withValues(alpha: 0.06),
+                  ? tokens.success.withValues(alpha: 0.08)
+                  : tokens.primary.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: _visitLocation != null
-                    ? const Color(0xFF4CAF50).withValues(alpha: 0.3)
-                    : const Color(0xFF2196F3).withValues(alpha: 0.2),
+                    ? tokens.success.withValues(alpha: 0.3)
+                    : tokens.primary.withValues(alpha: 0.2),
               ),
             ),
             child: _gpsLoading
@@ -1389,7 +1390,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                       Icon(
                         _visitLocation != null ? Icons.location_on_rounded : Icons.gps_fixed_rounded,
                         size: 20,
-                        color: _visitLocation != null ? const Color(0xFF4CAF50) : const Color(0xFF2196F3),
+                        color: _visitLocation != null ? tokens.success : tokens.primary,
                       ),
                       const SizedBox(width: 12),
                       Text(
@@ -1399,7 +1400,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: _visitLocation != null ? const Color(0xFF4CAF50) : const Color(0xFF2196F3),
+                          color: _visitLocation != null ? tokens.success : tokens.primary,
                         ),
                       ),
                       const Spacer(),

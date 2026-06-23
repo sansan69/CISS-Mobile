@@ -24,6 +24,20 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
   final Set<String> _subscribedTopics = <String>{};
   Timer? _sessionRetryTimer;
+  StreamSubscription<String>? _tokenRefreshSub;
+  StreamSubscription<RemoteMessage>? _foregroundMessageSub;
+  StreamSubscription<RemoteMessage>? _messageOpenedAppSub;
+
+  void dispose() {
+    _sessionRetryTimer?.cancel();
+    _sessionRetryTimer = null;
+    _tokenRefreshSub?.cancel();
+    _tokenRefreshSub = null;
+    _foregroundMessageSub?.cancel();
+    _foregroundMessageSub = null;
+    _messageOpenedAppSub?.cancel();
+    _messageOpenedAppSub = null;
+  }
 
   void _ensureSessionRetryLoop() {
     _sessionRetryTimer ??= Timer.periodic(
@@ -95,17 +109,17 @@ class NotificationService {
         await _ref.read(mobileRepositoryProvider).updateFcmToken(token);
       }
 
-      _fcm.onTokenRefresh.listen((String newToken) async {
+      _tokenRefreshSub = _fcm.onTokenRefresh.listen((String newToken) async {
         await _ref.read(mobileRepositoryProvider).updateFcmToken(newToken);
       });
 
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
       // Foreground messages — show local notification
-      FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+      _foregroundMessageSub = FirebaseMessaging.onMessage.listen(_onForegroundMessage);
 
       // Background/open messages
-      FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageClick);
+      _messageOpenedAppSub = FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageClick);
 
       final initialMessage = await _fcm.getInitialMessage();
       if (initialMessage != null) {
@@ -154,8 +168,8 @@ class NotificationService {
         ..addAll(desiredTopics);
       _sessionRetryTimer?.cancel();
       _sessionRetryTimer = null;
-    } catch (_) {
-      // Non-critical — topic subscription can be retried
+    } catch (e) {
+      debugPrint('FCM topic subscription error: $e');
     }
   }
 
@@ -203,7 +217,9 @@ class NotificationService {
     try {
       final data = jsonDecode(payload) as Map<String, dynamic>;
       _navigateFromData(data);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Local notification payload parse error: $e');
+    }
   }
 
   // ── FCM notification tap ─────────────────────────────────────────────
