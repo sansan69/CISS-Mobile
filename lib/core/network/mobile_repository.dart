@@ -56,7 +56,7 @@ class MobileRepository {
     required String phoneNumber,
   }) async {
     try {
-      await _apiClient.post(
+      await _apiClient.dio.post<dynamic>(
         '/api/public/guard/reset-pin',
         data: <String, String>{
           'employeeId': employeeId,
