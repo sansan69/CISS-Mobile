@@ -357,7 +357,15 @@ class MobileRepository {
   }
 
   AppRole? _roleFromClaims(Map<String, dynamic>? claims) {
-    return _roleFromWire(claims?['role']);
+    final roleStr = claims?['role']?.toString().toLowerCase();
+    if (roleStr != null && roleStr.isNotEmpty) {
+      return appRoleFromWire(roleStr);
+    }
+    // Admin users may have admin:true without an explicit role string
+    if (claims?['admin'] == true) {
+      return AppRole.admin;
+    }
+    return null;
   }
 
   AppRole? _roleFromWire(Object? value) {
