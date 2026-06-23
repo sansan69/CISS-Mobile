@@ -232,55 +232,92 @@ void onStart(ServiceInstance service) async {
       );
 
       final user = FirebaseAuth.instance.currentUser;
-      final token = await user?.getIdToken(false);
+      String? token = await user?.getIdToken(false);
 
-      await http.post(
-        Uri.parse('$baseUrl/api/guard/tracking/heartbeat'),
-        headers: {
-          'Content-Type': 'application/json',
-          if (token != null) 'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
-          'employeeId': siteContext!['employeeId'],
-          'siteId': siteContext!['siteId'],
-          'lat': position.latitude,
-          'lng': position.longitude,
-          'accuracy': accuracy,
-          'distanceFromSite': distance,
-          'isOutOfZone': isOut,
-          'locationSource': locationSource,
-          'heartbeatCount': heartbeatCount,
-          'timestamp': DateTime.now().toIso8601String(),
-        }),
-      );
-
-      // ── Firestore live location update ───────────────────────────────────
       try {
-        final employeeId = siteContext!['employeeId'] as String;
-        await FirebaseFirestore.instance
-            .collection('guardLocations')
-            .doc(employeeId)
-            .set({
-          'employeeId': employeeId,
-          'guardName': siteContext!['guardName'] ?? '',
-          'siteId': siteContext!['siteId'],
-          'siteName': siteContext!['siteName'],
-          'clientName': siteContext!['clientName'] ?? '',
-          'district': siteContext!['district'] ?? '',
-          'lat': position.latitude,
-          'lng': position.longitude,
-          'accuracy': accuracy,
-          'isOutOfZone': isOut,
-          'locationSource': locationSource,
-          'distanceFromSite': distance,
-          'status': isInside ? 'In' : 'Out',
-          'updatedAt': FieldValue.serverTimestamp(),
-          'siteLat': siteLat,
-          'siteLng': siteLng,
-          'geofenceRadius': radius,
-        }, SetOptions(merge: true));
-      } catch (fsErr) {
-        debugPrint('Firestore location update error: $fsErr');
+        final response = await http.post(
+          Uri.parse('$baseUrl/api/guard/tracking/heartbeat'),
+          headers: {
+            'Content-Type': 'application/json',
+            if (token != null) 'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'employeeId': siteContext!['employeeId'],
+            'siteId': siteContext!['siteId'],
+            'lat': position.latitude,
+            'lng': position.longitude,
+            'accuracy': accuracy,
+            'distanceFromSite': distance,
+            'isOutOfZone': isOut,
+            'locationSource': locationSource,
+            'heartbeatCount': heartbeatCount,
+            'timestamp': DateTime.now().toIso8601String(),
+          }),
+        ).timeout(const Duration(seconds: 15));
+
+        // Retry with fresh token on 401
+        if (response.statusCode == 401) {
+          token = await user?.getIdToken(true);
+          if (token != null) {
+            await http.post(
+              Uri.parse('$baseUrl/api/guard/tracking/heartbeat'),
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer $token',
+              },
+              body: jsonEncode({
+                'employeeId': siteContext!['employeeId'],
+                'siteId': siteContext!['siteId'],
+                'lat': position.latitude,
+                'lng': position.longitude,
+                'accuracy': accuracy,
+                'distanceFromSite': distance,
+                'isOutOfZone': isOut,
+                'locationSource': locationSource,
+                'heartbeatCount': heartbeatCount,
+                'timestamp': DateTime.now().toIso8601String(),
+              }),
+            ).timeout(const Duration(seconds: 15));
+          }
+        }
+      } catch (httpErr) {
+        debugPrint('Heartbeat upload error (will retry next cycle): $httpErr');
+      }
+
+      // ── Firestore live location update (with retry) ──────────────────────
+      for (int attempt = 0; attempt < 3; attempt++) {
+        try {
+          final employeeId = siteContext!['employeeId'] as String;
+          await FirebaseFirestore.instance
+              .collection('guardLocations')
+              .doc(employeeId)
+              .set({
+            'employeeId': employeeId,
+            'guardName': siteContext!['guardName'] ?? '',
+            'siteId': siteContext!['siteId'],
+            'siteName': siteContext!['siteName'],
+            'clientName': siteContext!['clientName'] ?? '',
+            'district': siteContext!['district'] ?? '',
+            'lat': position.latitude,
+            'lng': position.longitude,
+            'accuracy': accuracy,
+            'isOutOfZone': isOut,
+            'locationSource': locationSource,
+            'distanceFromSite': distance,
+            'status': isInside ? 'In' : 'Out',
+            'updatedAt': FieldValue.serverTimestamp(),
+            'siteLat': siteLat,
+            'siteLng': siteLng,
+            'geofenceRadius': radius,
+          }, SetOptions(merge: true));
+          break; // Success — exit retry loop
+        } catch (fsErr) {
+          if (attempt < 2) {
+            await Future<void>.delayed(const Duration(seconds: 1));
+          } else {
+            debugPrint('Firestore location update failed after retries: $fsErr');
+          }
+        }
       }
 
       // ── Notification update ────────────────────────────────────────────────
@@ -331,22 +368,29 @@ void onStart(ServiceInstance service) async {
         position.longitude,
       );
 
-      // Store movement trace in Firestore subcollection (lightweight)
-      try {
-        final traceRef = FirebaseFirestore.instance
-            .collection('guardLocations')
-            .doc(siteContext!['employeeId'] as String)
-            .collection('movementTrace')
-            .doc();
-        await traceRef.set({
-          'lat': position.latitude,
-          'lng': position.longitude,
-          'accuracy': position.accuracy,
-          'distanceFromSite': distance,
-          'timestamp': FieldValue.serverTimestamp(),
-        });
-      } catch (e) {
-        debugPrint('Movement trace write error: $e');
+      // Store movement trace in Firestore subcollection (with retry)
+      for (int attempt = 0; attempt < 3; attempt++) {
+        try {
+          final traceRef = FirebaseFirestore.instance
+              .collection('guardLocations')
+              .doc(siteContext!['employeeId'] as String)
+              .collection('movementTrace')
+              .doc();
+          await traceRef.set({
+            'lat': position.latitude,
+            'lng': position.longitude,
+            'accuracy': position.accuracy,
+            'distanceFromSite': distance,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+          break;
+        } catch (e) {
+          if (attempt < 2) {
+            await Future<void>.delayed(const Duration(seconds: 1));
+          } else {
+            debugPrint('Movement trace write error after retries: $e');
+          }
+        }
       }
     } catch (e) {
       // Silent fail for fast check — primary heartbeat handles errors
@@ -391,26 +435,54 @@ Future<void> _sendGeofenceEvent({
   );
 
   final user = FirebaseAuth.instance.currentUser;
-  final token = await user?.getIdToken(false);
+  String? token = await user?.getIdToken(false);
 
-  await http.post(
-    Uri.parse('$baseUrl/api/guard/tracking/geofence-event'),
-    headers: {
-      'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
-    },
-    body: jsonEncode({
-      'employeeId': siteContext['employeeId'],
-      'siteId': siteContext['siteId'],
-      'eventType': eventType, // 'enter' | 'exit'
-      'lat': position.latitude,
-      'lng': position.longitude,
-      'accuracy': accuracy,
-      'distanceFromSite': distance,
-      'locationSource': locationSource,
-      'timestamp': DateTime.now().toIso8601String(),
-    }),
-  );
+  try {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/guard/tracking/geofence-event'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'employeeId': siteContext['employeeId'],
+        'siteId': siteContext['siteId'],
+        'eventType': eventType, // 'enter' | 'exit'
+        'lat': position.latitude,
+        'lng': position.longitude,
+        'accuracy': accuracy,
+        'distanceFromSite': distance,
+        'locationSource': locationSource,
+        'timestamp': DateTime.now().toIso8601String(),
+      }),
+    ).timeout(const Duration(seconds: 15));
+
+    if (response.statusCode == 401) {
+      token = await user?.getIdToken(true);
+      if (token != null) {
+        await http.post(
+          Uri.parse('$baseUrl/api/guard/tracking/geofence-event'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode({
+            'employeeId': siteContext['employeeId'],
+            'siteId': siteContext['siteId'],
+            'eventType': eventType,
+            'lat': position.latitude,
+            'lng': position.longitude,
+            'accuracy': accuracy,
+            'distanceFromSite': distance,
+            'locationSource': locationSource,
+            'timestamp': DateTime.now().toIso8601String(),
+          }),
+        ).timeout(const Duration(seconds: 15));
+      }
+    }
+  } catch (httpErr) {
+    debugPrint('Geofence event HTTP error: $httpErr');
+  }
 }
 
 @pragma('vm:entry-point')

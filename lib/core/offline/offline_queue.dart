@@ -22,7 +22,7 @@ class OfflineQueue extends ChangeNotifier {
       }
       return HiveAesCipher(base64Url.decode(key));
     } catch (e) {
-      debugPrint('Encryption cipher error: $e');
+      debugPrint('Encryption cipher error — queue will operate unencrypted: $e');
       return null;
     }
   }

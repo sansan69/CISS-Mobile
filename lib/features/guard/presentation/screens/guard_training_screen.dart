@@ -12,6 +12,16 @@ import '../../../../../shared/widgets/glass_card.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../widgets/guard_portal_widgets.dart';
 
+String _formatDueLabel(String value) {
+  final parsed = DateTime.tryParse(value);
+  if (parsed == null) return value;
+  final local = parsed.toLocal();
+  final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+  final minute = local.minute.toString().padLeft(2, '0');
+  final suffix = local.hour >= 12 ? 'PM' : 'AM';
+  return '${local.day}/${local.month}/${local.year} $hour:$minute $suffix';
+}
+
 final FutureProvider<List<TrainingAssignmentModel>> guardTrainingProvider =
     FutureProvider<List<TrainingAssignmentModel>>((Ref ref) {
       return ref.read(mobileRepositoryProvider).fetchTrainingAssignments();
@@ -210,6 +220,10 @@ class GuardTrainingScreen extends ConsumerWidget {
                   final uri = Uri.tryParse(assignment.contentUrl!);
                   if (uri != null && await canLaunchUrl(uri)) {
                     await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  } else if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Could not open training content.')),
+                    );
                   }
                 }
               : null,
@@ -256,7 +270,7 @@ class GuardTrainingScreen extends ConsumerWidget {
                           const SizedBox(width: 4),
                           Text(
                             assignment.dueLabel.isNotEmpty
-                                ? assignment.dueLabel
+                                ? _formatDueLabel(assignment.dueLabel)
                                 : 'No date',
                             style: TextStyle(
                               fontSize: 11,

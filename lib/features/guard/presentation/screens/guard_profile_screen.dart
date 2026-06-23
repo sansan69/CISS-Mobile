@@ -57,7 +57,11 @@ class GuardProfileScreen extends ConsumerWidget {
               icon: Icons.person_outline_rounded,
               trailing: StatusChip(
                 label: profile.status.isEmpty ? 'Profile' : profile.status,
-                tone: StatusChipTone.success,
+                tone: profile.status.toLowerCase().contains('active') || profile.status.isEmpty
+                    ? StatusChipTone.success
+                    : profile.status.toLowerCase().contains('suspend')
+                        ? StatusChipTone.danger
+                        : StatusChipTone.warning,
               ),
             ),
             _InfoCard(

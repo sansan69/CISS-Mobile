@@ -691,7 +691,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<DutyPointModel>(
                           isExpanded: true,
-                          initialValue: _dutyPoint,
+                          value: _dutyPoint,
                           items:
                               dutyPoints
                                   .map(
@@ -724,7 +724,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                         const SizedBox(height: 12),
                         DropdownButtonFormField<ShiftTemplateModel>(
                           isExpanded: true,
-                          initialValue: _shift,
+                          value: _shift,
                           items:
                               (_dutyPoint?.shiftTemplates ??
                                       const <ShiftTemplateModel>[])
