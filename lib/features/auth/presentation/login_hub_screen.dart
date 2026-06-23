@@ -211,6 +211,7 @@ class _LoginHubScreenState extends State<LoginHubScreen>
                               infographic: _InfographicType.field,
                               introDelay: const Duration(milliseconds: 490),
                               compact: isCompact,
+                              showPortalButton: false,
                               onTap: () => context.go('/login/field-officer'),
                             ),
                           ),
@@ -263,6 +264,7 @@ class _RoleCard extends StatefulWidget {
     required this.introDelay,
     required this.onTap,
     this.compact = false,
+    this.showPortalButton = true,
   });
 
   final String title;
@@ -275,6 +277,7 @@ class _RoleCard extends StatefulWidget {
   final Duration introDelay;
   final VoidCallback onTap;
   final bool compact;
+  final bool showPortalButton;
 
   @override
   State<_RoleCard> createState() => _RoleCardState();
@@ -476,6 +479,7 @@ class _RoleCardState extends State<_RoleCard>
                           ),
                         SizedBox(height: tight ? 8 : 16),
                         // CTA button
+                        if (widget.showPortalButton)
                         Row(
                           children: <Widget>[
                             Container(
