@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// Background location tracking service optimized for CISS guard duty.
 ///
@@ -42,7 +43,7 @@ class BackgroundTrackingService {
     );
   }
 
-  static void start({
+  static Future<void> start({
     required String siteId,
     required String siteName,
     required double lat,
@@ -51,7 +52,25 @@ class BackgroundTrackingService {
     required String employeeId,
     String? clientName,
     String? district,
-  }) {
+  }) async {
+    // Verify location permission before starting
+    final locStatus = await Permission.location.status;
+    if (locStatus != PermissionStatus.granted &&
+        locStatus != PermissionStatus.limited) {
+      debugPrint('BackgroundTracking: location permission not granted ($locStatus)');
+      return;
+    }
+
+    // Request battery optimization exemption (best-effort, Android only)
+    try {
+      final batteryStatus = await Permission.ignoreBatteryOptimizations.status;
+      if (batteryStatus != PermissionStatus.granted) {
+        await Permission.ignoreBatteryOptimizations.request();
+      }
+    } catch (_) {
+      debugPrint('BackgroundTracking: battery optimization request not supported on this platform');
+    }
+
     final service = FlutterBackgroundService();
     service.startService();
     service.invoke('set_site_context', {

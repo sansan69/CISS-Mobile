@@ -55,6 +55,15 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
     final fromDateStr = _fromDate != null ? _apiFmt.format(_fromDate!) : _fromController.text.trim();
     final toDateStr = _toDate != null ? _apiFmt.format(_toDate!) : _toController.text.trim();
 
+    if (fromDateStr.isEmpty) {
+      setState(() => _message = 'Please select a start date.');
+      return;
+    }
+    if (toDateStr.isEmpty) {
+      setState(() => _message = 'Please select an end date.');
+      return;
+    }
+
     final payload = <String, dynamic>{
       'type': _type,
       'fromDate': fromDateStr,
@@ -240,7 +249,7 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
                     ),
                   ),
                 const SizedBox(height: 12),
-                ElevatedButton(
+                FilledButton(
                   onPressed: _loading ? null : _submitLeave,
                   child: _loading
                       ? const SizedBox(

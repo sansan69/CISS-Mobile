@@ -57,7 +57,7 @@ class BrandedNavigationBar extends StatelessWidget {
         ),
         indicatorColor: tokens.primarySoft,
         backgroundColor: tokens.surface,
-        surfaceTintColor: Colors.transparent,
+        surfaceTintColor: tokens.primary,
         shadowColor: Colors.transparent,
       ),
       child: NavigationBar(

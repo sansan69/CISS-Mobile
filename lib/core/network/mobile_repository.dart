@@ -336,7 +336,8 @@ class MobileRepository {
         clientName: profile.clientName.isNotEmpty ? profile.clientName : null,
         district: profile.district.isNotEmpty ? profile.district : null,
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Session fallback failed: $e');
       return null;
     }
   }
@@ -385,7 +386,8 @@ class MobileRepository {
             'updatedAt': FieldValue.serverTimestamp(),
           }, SetOptions(merge: true));
       return true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Repository fallback failed: $e');
       return false;
     }
   }
@@ -429,7 +431,8 @@ class MobileRepository {
         'readAt': FieldValue.serverTimestamp(),
       });
       return true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Repository fallback failed: $e');
       return false;
     }
   }
@@ -461,7 +464,8 @@ class MobileRepository {
       }
       await batch.commit();
       return true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Repository fallback failed: $e');
       return false;
     }
   }

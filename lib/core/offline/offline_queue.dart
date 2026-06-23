@@ -41,11 +41,19 @@ class OfflineQueue extends ChangeNotifier {
 
   int get queueSize => _box.length;
 
+  static const int maxQueueSize = 100;
+
   Future<void> enqueue({
     required String path,
     required String method,
     required Map<String, dynamic> body,
   }) async {
+    // Drop oldest request if at capacity
+    if (_box.length >= maxQueueSize) {
+      final oldest = _box.keys.first;
+      await _box.delete(oldest);
+      debugPrint('OfflineQueue: evicted oldest request $oldest (max $maxQueueSize reached)');
+    }
     final id = _uuid.v4();
     final request = OfflineRequest(
       id: id,

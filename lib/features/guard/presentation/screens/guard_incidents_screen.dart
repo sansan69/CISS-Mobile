@@ -358,7 +358,7 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                         ),
                       ),
                     const SizedBox(height: 12),
-                    ElevatedButton(
+                    FilledButton(
                       onPressed: _loading
                           ? null
                           : () => _submitIncident(profile),

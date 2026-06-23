@@ -16,7 +16,10 @@ class OfflineRequest {
         : <String, dynamic>{};
     final createdAtRaw = json['createdAt'];
     final createdAt = createdAtRaw is String
-        ? DateTime.tryParse(createdAtRaw) ?? DateTime.now()
+        ? (DateTime.tryParse(createdAtRaw) ?? (() {
+            debugPrint('OfflineRequest: corrupted timestamp "$createdAtRaw" — using now');
+            return DateTime.now();
+          })())
         : DateTime.now();
     return OfflineRequest(
       id: json['id']?.toString() ?? '',

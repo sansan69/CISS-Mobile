@@ -1407,7 +1407,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                       if (_visitLocation != null)
                         GestureDetector(
                           onTap: () { setState(() => _visitLocation = null); },
-                          child: const Icon(Icons.close_rounded, size: 18, color: Colors.grey),
+                          child: Icon(Icons.close_rounded, size: 18, color: tokens.inkMuted),
                         ),
                     ],
                   ),

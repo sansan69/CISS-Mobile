@@ -54,6 +54,18 @@ class _FieldOfficerGuardAttendanceScreenState
   DateTime? _historyEndDate;
   final TextEditingController _historySearchCtrl = TextEditingController();
 
+  late final LiveLocationService _liveLocationService;
+
+  @override
+  void initState() {
+    super.initState();
+    _liveLocationService = LiveLocationService();
+    // Initialize default history dates: this month
+    final now = DateTime.now();
+    _historyStartDate = DateTime(now.year, now.month, 1);
+    _historyEndDate = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+  }
+
   @override
   void dispose() {
     _historySearchCtrl.dispose();
@@ -263,7 +275,7 @@ class _FieldOfficerGuardAttendanceScreenState
                     return Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: StreamBuilder<List<GuardLocationData>>(
-                        stream: LiveLocationService().streamActiveLocations(),
+                        stream: _liveLocationService.streamActiveLocations(),
                         builder: (context, locSnap) {
                           final locations = locSnap.data ?? const <GuardLocationData>[];
                           return Column(
@@ -305,13 +317,6 @@ class _FieldOfficerGuardAttendanceScreenState
   // ────────────────── HISTORY TAB ──────────────────
   Widget _buildHistoryTab(CissThemeTokens tokens) {
     final entriesAsync = ref.watch(fieldOfficerGuardAttendanceProvider);
-
-    // Initialize default history dates: this month
-    if (_historyStartDate == null && _historyEndDate == null) {
-      final now = DateTime.now();
-      _historyStartDate = DateTime(now.year, now.month, 1);
-      _historyEndDate = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
-    }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(AppSpacing.md, 16, AppSpacing.md, AppSpacing.xxl),
@@ -391,7 +396,7 @@ class _FieldOfficerGuardAttendanceScreenState
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: isSelected ? Colors.white : tokens.ink,
+                  color: isSelected ? tokens.surface : tokens.ink,
                 ),
               ),
               onSelected: (v) {
@@ -401,7 +406,7 @@ class _FieldOfficerGuardAttendanceScreenState
                 });
               },
               selectedColor: tokens.accent,
-              checkmarkColor: Colors.white,
+              checkmarkColor: tokens.surface,
               side: BorderSide.none,
               backgroundColor: tokens.surface,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
