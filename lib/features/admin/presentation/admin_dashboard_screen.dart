@@ -169,7 +169,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
               const SizedBox(width: 12),
               Expanded(
                   child: _MetricCard(
-                      icon: Icons.person_check_rounded,
+                      icon: Icons.verified_user_rounded,
                       label: 'Active',
                       value: '$activeGuards',
                       color: tokens.success)),
