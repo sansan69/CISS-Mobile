@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/haptics.dart';
 
 /// Prominent duty status card for guard dashboard.
 ///
@@ -50,7 +51,12 @@ class DutyStatusCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.lg),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: onTap,
+          onTap: onTap == null
+              ? null
+              : () {
+                  Haptics.light();
+                  onTap!.call();
+                },
           borderRadius: BorderRadius.circular(AppRadius.lg),
           child: Container(
             padding: const EdgeInsets.all(AppSpacing.lg),

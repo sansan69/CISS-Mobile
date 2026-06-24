@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/haptics.dart';
 
 /// Clean activity feed list for dashboard recent items.
 ///
@@ -103,7 +104,12 @@ class _ActivityRow extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.md),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: item.onTap,
+          onTap: item.onTap == null
+              ? null
+              : () {
+                  Haptics.light();
+                  item.onTap!.call();
+                },
           borderRadius: BorderRadius.circular(AppRadius.md),
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.md),

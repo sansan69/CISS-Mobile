@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/auth/biometric_service.dart';
 import '../../../core/auth/saved_accounts_service.dart';
+import '../../../core/haptics.dart';
 import '../../../core/models/auth_session.dart';
 import '../../../core/network/ciss_error.dart';
 import '../../auth/application/auth_controller.dart';
@@ -165,6 +166,8 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
       _usernameController.text = account.loginId;
       _passwordController.text = password;
 
+      Haptics.heavy(); // Biometric auth success
+
       if (widget.role == LoginRole.guard) {
         await _doSignInGuard(account.loginId, password);
       } else {
@@ -192,6 +195,7 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
       _onLoginSuccess(session);
     } catch (error) {
       if (!mounted) return;
+      Haptics.error();
       setState(() {
         _loading = false;
         _error = CissError.parse(error);
@@ -213,6 +217,7 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
       _onLoginSuccess(session);
     } catch (error) {
       if (!mounted) return;
+      Haptics.error();
       setState(() {
         _loading = false;
         _error = CissError.parse(error);
@@ -222,6 +227,7 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
   }
 
   void _onLoginSuccess(AuthSession session) {
+    Haptics.heavy();
     setState(() => _loading = false);
     if (mounted) {
       context.go('/');
@@ -231,6 +237,8 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
   Future<void> _submit() async {
     final String loginId = _usernameController.text.trim();
     final String pin = _passwordController.text.trim();
+
+    Haptics.medium();
 
     if (widget.role == LoginRole.guard) {
       setState(() {

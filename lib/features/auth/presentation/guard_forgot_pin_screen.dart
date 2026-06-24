@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/haptics.dart';
 import '../../../core/network/providers.dart';
 
 /// Guard forgot PIN recovery screen.
@@ -34,6 +35,8 @@ class _GuardForgotPinScreenState extends ConsumerState<GuardForgotPinScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    Haptics.medium();
+
     setState(() {
       _loading = true;
       _error = null;
@@ -47,12 +50,14 @@ class _GuardForgotPinScreenState extends ConsumerState<GuardForgotPinScreen> {
       );
 
       if (!mounted) return;
+      Haptics.medium();
       setState(() {
         _loading = false;
         _submitted = true;
       });
     } catch (e) {
       if (!mounted) return;
+      Haptics.error();
       setState(() {
         _loading = false;
         _error = 'PIN reset failed. Check your details and try again.';

@@ -302,6 +302,18 @@ class MobileRepository {
       );
     }
 
+    if (role == AppRole.admin) {
+      return AuthSession(
+        role: role,
+        displayName: (claims['name'] as String?)?.trim().isNotEmpty == true
+            ? claims['name'] as String
+            : (user.displayName ?? user.email ?? 'Admin'),
+        primaryId: user.uid,
+        uid: user.uid,
+        email: user.email,
+      );
+    }
+
     return AuthSession(
       role: role,
       displayName: (claims['name'] as String?)?.trim().isNotEmpty == true
@@ -654,6 +666,29 @@ class MobileRepository {
         await _auth.signOut();
         throw StateError(
           'Field officer login is only allowed for field officer accounts.',
+        );
+      }
+      return session;
+    } catch (error) {
+      throw Exception(_extractApiError(error));
+    }
+  }
+
+  Future<AuthSession> signInAdminOrClient({
+    required String email,
+    required String password,
+  }) async {
+    try {
+      await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      final session = await resolveCurrentSession();
+      if (session == null ||
+          (session.role != AppRole.admin && session.role != AppRole.client)) {
+        await _auth.signOut();
+        throw StateError(
+          'Access denied. Admin or client credentials required.',
         );
       }
       return session;

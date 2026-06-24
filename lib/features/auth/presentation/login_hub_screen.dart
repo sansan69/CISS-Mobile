@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/brand.dart';
+import '../../../core/haptics.dart';
 import '../../../shared/widgets/auth/login_background.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -335,6 +336,7 @@ class _RoleCardState extends State<_RoleCard>
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
         setState(() => _pressed = false);
+        Haptics.light();
         widget.onTap();
       },
       onTapCancel: () => setState(() => _pressed = false),

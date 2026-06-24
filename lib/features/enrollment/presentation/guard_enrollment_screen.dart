@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/haptics.dart';
 
 /// Guard self-enrollment screen.
 /// Multi-step form: Personal → Documents → Review → Submit.
@@ -63,6 +64,7 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
       if (_isLastStep) {
         _submit();
       } else {
+        Haptics.selection();
         setState(() {
           _step++;
           _error = null;
@@ -105,6 +107,8 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
       if (!mounted) return;
       setState(() => _loading = false);
 
+      Haptics.medium();
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Enrollment submitted successfully!'),
@@ -117,6 +121,7 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (!mounted) return;
+      Haptics.error();
       setState(() {
         _loading = false;
         _error = 'Failed to submit enrollment: $e';

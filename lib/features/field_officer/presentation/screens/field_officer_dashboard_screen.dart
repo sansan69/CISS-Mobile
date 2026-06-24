@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
+import '../../../../../core/haptics.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../shared/widgets/dashboard/activity_feed.dart';
@@ -92,7 +93,10 @@ class _DashboardBody extends ConsumerWidget {
       backgroundColor: tokens.canvas,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () async => ref.invalidate(fieldOfficerDashboardProvider),
+          onRefresh: () async {
+            Haptics.medium();
+            ref.invalidate(fieldOfficerDashboardProvider);
+          },
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
               0,

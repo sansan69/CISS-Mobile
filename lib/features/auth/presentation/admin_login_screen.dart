@@ -1,11 +1,10 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/app_tokens.dart';
+import '../../../../core/haptics.dart';
 import '../../../../core/network/providers.dart';
-import '../application/auth_controller.dart';
 
 /// Admin login screen — email + password sign-in.
 /// Mirrors web app's /admin-login flow.
@@ -34,36 +33,20 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
+    Haptics.medium();
+
     setState(() {
       _loading = true;
       _error = null;
     });
 
     try {
-      final auth = ref.read(firebaseAuthProvider);
-      final cred = await auth.signInWithEmailAndPassword(
-        email: _emailCtrl.text.trim(),
-        password: _passwordCtrl.text,
-      );
-
-      final idToken = await cred.user!.getIdTokenResult();
-      final claims = idToken.claims ?? {};
-      final roleStr = claims['role']?.toString().toLowerCase() ?? '';
-      final isAdmin = claims['admin'] == true ||
-          roleStr == 'admin' ||
-          roleStr == 'superadmin';
-      final isClient = roleStr == 'client';
-
-      if (!isAdmin && !isClient) {
-        await auth.signOut();
-        if (mounted) {
-          setState(() {
-            _loading = false;
-            _error = 'Access denied. Admin or client credentials required.';
-          });
-        }
-        return;
-      }
+      final session = await ref
+          .read(mobileRepositoryProvider)
+          .signInAdminOrClient(
+            email: _emailCtrl.text.trim(),
+            password: _passwordCtrl.text,
+          );
 
       if (!mounted) return;
 
@@ -71,30 +54,18 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
       ref.invalidate(authSessionProvider);
       await Future.delayed(const Duration(milliseconds: 300));
 
-      if (isAdmin) {
-        context.go('/');
-      } else {
-        context.go('/');
-      }
-    } on FirebaseAuthException catch (e) {
       if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = switch (e.code) {
-          'user-not-found' ||
-          'wrong-password' ||
-          'invalid-credential' =>
-            'Invalid email or password.',
-          'invalid-email' => 'Invalid email format.',
-          'too-many-requests' => 'Too many attempts. Try again later.',
-          _ => 'Login failed. Please try again.',
-        };
-      });
+      context.go('/');
     } catch (e) {
       if (!mounted) return;
+      String message = e.toString();
+      // Strip leading 'Exception: ' prefix from repository errors
+      if (message.startsWith('Exception: ')) {
+        message = message.substring('Exception: '.length);
+      }
       setState(() {
         _loading = false;
-        _error = 'Network error. Check your connection.';
+        _error = message;
       });
     }
   }

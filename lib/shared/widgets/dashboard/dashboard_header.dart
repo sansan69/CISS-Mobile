@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/haptics.dart';
 
 /// Clean dashboard header with greeting, name, profile photo, and optional status.
 ///
@@ -67,7 +68,12 @@ class DashboardHeader extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.md),
           GestureDetector(
-            onTap: onProfileTap,
+            onTap: onProfileTap == null
+                ? null
+                : () {
+                    Haptics.light();
+                    onProfileTap!.call();
+                  },
             child: Stack(
               children: <Widget>[
                 Container(

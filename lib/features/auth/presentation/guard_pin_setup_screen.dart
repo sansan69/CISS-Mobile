@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/haptics.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../../shared/widgets/brand_banner.dart';
 
@@ -79,6 +80,7 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
             pin: pin,
           );
       if (!mounted) return;
+      Haptics.medium();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('PIN set successfully. Please log in to continue.'),
@@ -86,6 +88,7 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
       );
       context.go('/login/guard');
     } catch (error) {
+      Haptics.error();
       setState(() {
         _error = error.toString().replaceFirst('Exception: ', '');
       });

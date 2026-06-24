@@ -14,7 +14,7 @@ import '../../../core/brand.dart';
 import '../../../shared/widgets/auth/login_background.dart';
 import '../../field_officer/presentation/field_officer_shell.dart';
 import '../../guard/presentation/guard_shell.dart';
-import '../../admin/presentation/admin_dashboard_screen.dart';
+import '../../admin/presentation/admin_shell.dart';
 import '../../client/presentation/client_shell.dart';
 import 'login_hub_screen.dart';
 
@@ -161,7 +161,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
             return const FieldOfficerShell();
           }
           if (session.role == AppRole.admin) {
-            return const AdminDashboardScreen();
+            return const AdminShell();
           }
           if (session.role == AppRole.client) {
             return const ClientShell();

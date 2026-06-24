@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/haptics.dart';
 
 /// A horizontal scrollable action bar with prominent touch targets.
 ///
@@ -64,7 +65,10 @@ class _ActionItem extends StatelessWidget {
       borderRadius: BorderRadius.circular(AppRadius.md),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: action.onTap,
+        onTap: () {
+          Haptics.light();
+          action.onTap();
+        },
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
