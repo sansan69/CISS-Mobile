@@ -914,6 +914,51 @@ class MobileRepository {
     return _postJson('/api/guard/incidents', payload);
   }
 
+  // ── Client portal endpoints ──────────────────────────────────────────
+
+  Future<Map<String, dynamic>> fetchClientDashboard() async {
+    return _getJson('/api/client/dashboard');
+  }
+
+  Future<List<Map<String, dynamic>>> fetchClientGuards(String clientId) async {
+    final data = await _getJson(
+      '/api/client/guards',
+      queryParameters: <String, dynamic>{'clientId': clientId},
+    );
+    final guards = data['guards'] as List<dynamic>? ?? const <dynamic>[];
+    return guards.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchClientAttendance(
+    String clientId,
+  ) async {
+    final data = await _getJson(
+      '/api/client/attendance',
+      queryParameters: <String, dynamic>{'clientId': clientId},
+    );
+    final records = data['attendance'] as List<dynamic>? ?? const <dynamic>[];
+    return records.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchClientWorkOrders(
+    String clientId,
+  ) async {
+    final data = await _getJson(
+      '/api/client/work-orders',
+      queryParameters: <String, dynamic>{'clientId': clientId},
+    );
+    final orders = data['workOrders'] as List<dynamic>? ?? const <dynamic>[];
+    return orders.whereType<Map<String, dynamic>>().toList();
+  }
+
+  // ── Admin endpoints ──────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> fetchAdminDashboard() async {
+    return _getJson('/api/admin/dashboard');
+  }
+
+  // ── Field Officer endpoints ──────────────────────────────────────────
+
   Future<FieldOfficerDashboardSnapshot> fetchFieldOfficerDashboard() async {
     final data = await _getJson('/api/field-officer/dashboard');
     final upcoming =

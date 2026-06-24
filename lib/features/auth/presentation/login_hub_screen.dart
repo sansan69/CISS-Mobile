@@ -25,7 +25,7 @@ class _LoginHubScreenState extends State<LoginHubScreen>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(milliseconds: 900),
     )..forward();
   }
 
@@ -41,7 +41,7 @@ class _LoginHubScreenState extends State<LoginHubScreen>
       );
 
   Animation<Offset> _slide(double from, double to) =>
-      Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero).animate(
+      Tween<Offset>(begin: const Offset(0, 0.06), end: Offset.zero).animate(
         CurvedAnimation(
           parent: _ctrl,
           curve: Interval(from, to, curve: Curves.easeOutCubic),
@@ -54,17 +54,13 @@ class _LoginHubScreenState extends State<LoginHubScreen>
     final theme = Theme.of(context);
     final mediaHeight = MediaQuery.of(context).size.height;
 
-    // Determine responsive sizing
-    final bool isCompact = mediaHeight < 700;
-    final bool isShort = mediaHeight < 800;
-    final double logoSize = isCompact ? 52 : (isShort ? 64 : 80);
-    final double logoPadding = isCompact ? 12 : 16;
-    final double brandTopPadding = isCompact ? 16.0 : (isShort ? 24.0 : 40.0);
-    final double titleFontSize = isCompact ? 22.0 : (isShort ? 26.0 : 32.0);
-    final double titleLetterSpacing = isCompact ? 2.0 : (isShort ? 2.8 : 3.5);
-    final double labelTopPadding = isCompact ? 14.0 : (isShort ? 20.0 : 36.0);
-    final double cardGap = isCompact ? 8.0 : (isShort ? 10.0 : 14.0);
-    final double horizontalPadding = isCompact ? 14.0 : 20.0;
+    final bool isCompact = mediaHeight < 680;
+    final bool isShort = mediaHeight < 780;
+    final double logoSize = isCompact ? 48 : (isShort ? 56 : 72);
+    final double titleFontSize = isCompact ? 20.0 : (isShort ? 24.0 : 28.0);
+    final double cardGap = isCompact ? 12.0 : 16.0;
+    final double horizontalPadding = isCompact ? 16.0 : 24.0;
+    final double brandTopPadding = isCompact ? 12.0 : (isShort ? 20.0 : 32.0);
 
     return Scaffold(
       body: SecurityGridBackground(
@@ -76,24 +72,24 @@ class _LoginHubScreenState extends State<LoginHubScreen>
                 padding: EdgeInsets.fromLTRB(
                     horizontalPadding, brandTopPadding, horizontalPadding, 0),
                 child: FadeTransition(
-                  opacity: _fade(0.0, 0.4),
+                  opacity: _fade(0.0, 0.35),
                   child: SlideTransition(
-                    position: _slide(0.0, 0.4),
+                    position: _slide(0.0, 0.35),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: <Widget>[
                         Container(
                           width: logoSize,
                           height: logoSize,
-                          padding: EdgeInsets.all(logoPadding),
+                          padding: EdgeInsets.all(logoSize * 0.22),
                           decoration: BoxDecoration(
                             color: tokens.primarySoft,
                             shape: BoxShape.circle,
                             boxShadow: <BoxShadow>[
                               BoxShadow(
-                                color: tokens.primary.withValues(alpha: 0.18),
-                                blurRadius: 32,
-                                spreadRadius: 6,
+                                color: tokens.primary.withValues(alpha: 0.15),
+                                blurRadius: 28,
+                                spreadRadius: 4,
                               ),
                             ],
                           ),
@@ -102,7 +98,7 @@ class _LoginHubScreenState extends State<LoginHubScreen>
                             fit: BoxFit.contain,
                           ),
                         ),
-                        SizedBox(height: isCompact ? 8 : 16),
+                        const SizedBox(height: 10),
                         Text(
                           kCompanyName.toUpperCase(),
                           textAlign: TextAlign.center,
@@ -110,12 +106,12 @@ class _LoginHubScreenState extends State<LoginHubScreen>
                             fontSize: titleFontSize,
                             fontWeight: FontWeight.w800,
                             color: tokens.primary,
-                            letterSpacing: titleLetterSpacing,
+                            letterSpacing: 2.8,
                             height: 1,
                           ),
                         ),
                         if (!isCompact) ...[
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 4),
                           Text(
                             kCompanyTagline,
                             textAlign: TextAlign.center,
@@ -133,120 +129,93 @@ class _LoginHubScreenState extends State<LoginHubScreen>
 
               // ── Portal selector label ──
               Padding(
-                padding: EdgeInsets.fromLTRB(
-                    horizontalPadding, labelTopPadding, horizontalPadding, 0),
+                padding: EdgeInsets.fromLTRB(horizontalPadding,
+                    isCompact ? 16 : 24, horizontalPadding, isCompact ? 6 : 10),
                 child: FadeTransition(
-                  opacity: _fade(0.1, 0.5),
+                  opacity: _fade(0.1, 0.45),
                   child: SlideTransition(
-                    position: _slide(0.1, 0.5),
+                    position: _slide(0.1, 0.45),
                     child: Text(
                       'SELECT YOUR PORTAL',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: isCompact ? 10 : 12,
+                        fontSize: isCompact ? 10 : 11,
                         fontWeight: FontWeight.w800,
                         color: tokens.inkMuted,
-                        letterSpacing: 2,
+                        letterSpacing: 2.5,
                       ),
                     ),
                   ),
                 ),
               ),
 
-              // ── Role cards (fill remaining space) ──
+              // ── Role cards — content-driven (no Expanded forcing) ──
               Expanded(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                  child: Column(
-                    children: <Widget>[
-                      const Spacer(flex: 1),
-                      Expanded(
-                        flex: isCompact ? 7 : 8,
-                        child: Padding(
-                          padding: EdgeInsets.only(top: cardGap + 4),
-                          child: FadeTransition(
-                            opacity: _fade(0.15, 0.6),
-                            child: SlideTransition(
-                              position: _slide(0.15, 0.65),
-                              child: _RoleCard(
-                                title: isCompact
-                                    ? 'GUARD OPERATIONS'
-                                    : 'GUARD\nOPERATIONS',
-                                tagline: isCompact
-                                    ? 'Attendance · Shifts · Duty reports'
-                                    : 'Attendance  ·  Shifts  ·  Duty reports',
-                                icon: Icons.verified_user_rounded,
-                                accentColor: tokens.primary,
-                                softColor: tokens.primarySoft,
-                                darkSoftColor:
-                                    tokens.primary.withValues(alpha: 0.12),
-                                infographic: _InfographicType.guard,
-                                introDelay: const Duration(milliseconds: 360),
-                                compact: isCompact,
-                                onTap: () => context.go('/login/guard'),
-                              ),
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.symmetric(
+                        horizontal: horizontalPadding, vertical: 4),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        // Card 1 — Guard Operations
+                        FadeTransition(
+                          opacity: _fade(0.12, 0.52),
+                          child: SlideTransition(
+                            position: _slide(0.12, 0.56),
+                            child: _RoleCard(
+                              title: 'GUARD OPERATIONS',
+                              tagline: 'Attendance · Shifts · Duty reports',
+                              icon: Icons.verified_user_rounded,
+                              color: tokens.primary,
+                              softColor: tokens.primarySoft,
+                              introDelay: const Duration(milliseconds: 300),
+                              compact: isCompact,
+                              onTap: () => context.go('/login/guard'),
                             ),
                           ),
                         ),
-                      ),
-                      SizedBox(height: cardGap),
-                      Expanded(
-                        flex: isCompact ? 7 : 8,
-                        child: FadeTransition(
-                          opacity: _fade(0.25, 0.7),
+                        SizedBox(height: cardGap),
+
+                        // Card 2 — Field Command
+                        FadeTransition(
+                          opacity: _fade(0.22, 0.62),
                           child: SlideTransition(
-                            position: _slide(0.25, 0.75),
+                            position: _slide(0.22, 0.66),
                             child: _RoleCard(
-                              title: isCompact
-                                  ? 'FIELD COMMAND'
-                                  : 'FIELD\nCOMMAND',
-                              tagline: isCompact
-                                  ? 'Districts · Work orders · Reports'
-                                  : 'Districts  ·  Work orders  ·  Reports',
+                              title: 'FIELD COMMAND',
+                              tagline: 'Districts · Work orders · Reports',
                               icon: Icons.admin_panel_settings_rounded,
-                              accentColor: tokens.accent,
+                              color: tokens.accent,
                               softColor: tokens.accent.withValues(alpha: 0.1),
-                              darkSoftColor:
-                                  tokens.accent.withValues(alpha: 0.12),
-                              infographic: _InfographicType.field,
-                              introDelay: const Duration(milliseconds: 490),
+                              introDelay: const Duration(milliseconds: 500),
                               compact: isCompact,
-                              showPortalButton: false,
                               onTap: () => context.go('/login/field-officer'),
                             ),
                           ),
                         ),
-                      ),
-                      SizedBox(height: cardGap),
-                      Expanded(
-                        flex: isCompact ? 7 : 8,
-                        child: FadeTransition(
-                          opacity: _fade(0.35, 0.8),
+                        SizedBox(height: cardGap),
+
+                        // Card 3 — Admin / Client
+                        FadeTransition(
+                          opacity: _fade(0.32, 0.72),
                           child: SlideTransition(
-                            position: _slide(0.35, 0.85),
+                            position: _slide(0.32, 0.76),
                             child: _RoleCard(
-                              title: isCompact
-                                  ? 'ADMIN / CLIENT'
-                                  : 'ADMIN /\nCLIENT',
-                              tagline: isCompact
-                                  ? 'Dashboard · Reports · Settings'
-                                  : 'Dashboard  ·  Reports  ·  Settings',
+                              title: 'ADMIN / CLIENT',
+                              tagline: 'Dashboard · Reports · Settings',
                               icon: Icons.shield_rounded,
-                              accentColor: tokens.danger,
-                              softColor: tokens.danger.withValues(alpha: 0.1),
-                              darkSoftColor:
-                                  tokens.danger.withValues(alpha: 0.12),
-                              infographic: _InfographicType.field,
-                              introDelay: const Duration(milliseconds: 620),
+                              color: tokens.danger,
+                              softColor: tokens.danger.withValues(alpha: 0.08),
+                              introDelay: const Duration(milliseconds: 700),
                               compact: isCompact,
-                              showPortalButton: false,
+                              showLeftBorder: true,
                               onTap: () => context.go('/login/admin'),
                             ),
                           ),
                         ),
-                      ),
-                      const Spacer(flex: 1),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -254,7 +223,7 @@ class _LoginHubScreenState extends State<LoginHubScreen>
               // ── Footer ──
               Padding(
                 padding: EdgeInsets.fromLTRB(
-                    horizontalPadding, 0, horizontalPadding, isCompact ? 8 : 20),
+                    horizontalPadding, 0, horizontalPadding, isCompact ? 8 : 16),
                 child: FadeTransition(
                   opacity: _fade(0.5, 1.0),
                   child: Column(
@@ -290,10 +259,8 @@ class _LoginHubScreenState extends State<LoginHubScreen>
   }
 }
 
-enum _InfographicType { guard, field }
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Role card
+// Role card — horizontal Row layout for compact, content-driven cards
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RoleCard extends StatefulWidget {
@@ -301,27 +268,23 @@ class _RoleCard extends StatefulWidget {
     required this.title,
     required this.tagline,
     required this.icon,
-    required this.accentColor,
+    required this.color,
     required this.softColor,
-    required this.darkSoftColor,
-    required this.infographic,
     required this.introDelay,
     required this.onTap,
     this.compact = false,
-    this.showPortalButton = true,
+    this.showLeftBorder = false,
   });
 
   final String title;
   final String tagline;
   final IconData icon;
-  final Color accentColor;
+  final Color color;
   final Color softColor;
-  final Color darkSoftColor;
-  final _InfographicType infographic;
   final Duration introDelay;
   final VoidCallback onTap;
   final bool compact;
-  final bool showPortalButton;
+  final bool showLeftBorder;
 
   @override
   State<_RoleCard> createState() => _RoleCardState();
@@ -338,11 +301,11 @@ class _RoleCardState extends State<_RoleCard>
     super.initState();
     _introCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 700),
     );
     _introAnim = CurvedAnimation(
       parent: _introCtrl,
-      curve: Curves.easeInOut,
+      curve: Curves.easeOutBack,
     );
     Future.delayed(widget.introDelay, () {
       if (mounted) _introCtrl.forward();
@@ -358,6 +321,15 @@ class _RoleCardState extends State<_RoleCard>
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
+    final theme = Theme.of(context);
+    final bool veryCompact = widget.compact;
+
+    final double iconSize = veryCompact ? 42 : 52;
+    final double iconRadius = veryCompact ? 12 : 14;
+    final double hPad = veryCompact ? 14 : 20;
+    final double vPad = veryCompact ? 12 : 18;
+    final double titleSize = veryCompact ? 17 : 20;
+    final double arrowSize = veryCompact ? 18 : 22;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -367,204 +339,146 @@ class _RoleCardState extends State<_RoleCard>
       },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
-        scale: _pressed ? 0.97 : 1.0,
-        duration: const Duration(milliseconds: 120),
+        scale: _pressed ? 0.975 : 1.0,
+        duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final cardHeight = constraints.maxHeight;
-            final bool veryTight = cardHeight < 130;
-            final bool tight = cardHeight < 160;
-            final double iconSize = tight ? 36 : (widget.compact ? 42 : 50);
-            final double iconRadius = tight ? 10 : (widget.compact ? 12 : 14);
-            final double titleSize = veryTight ? 18 : (tight ? 22 : (widget.compact ? 28 : 36));
-            final double infographicHeight = tight ? (cardHeight * 0.12) : (cardHeight * 0.15);
-            final double contentPadH = tight ? 14.0 : (widget.compact ? 18.0 : 22.0);
-            final double contentPadV = tight ? 10.0 : (widget.compact ? 14.0 : 20.0);
-
+        child: AnimatedBuilder(
+          animation: _introAnim,
+          builder: (context, _) {
             return Container(
               width: double.infinity,
               decoration: BoxDecoration(
                 color: tokens.surface,
-                borderRadius: BorderRadius.circular(AppRadius.md),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
                 border: Border.all(
                   color: _pressed
-                      ? widget.accentColor.withValues(alpha: 0.5)
-                      : tokens.border.withValues(alpha: 0.6),
+                      ? widget.color.withValues(alpha: 0.5)
+                      : tokens.border.withValues(alpha: 0.5),
                   width: _pressed ? 1.5 : 1,
                 ),
                 boxShadow: _pressed
                     ? const <BoxShadow>[]
                     : <BoxShadow>[
                         BoxShadow(
-                          color: tokens.ink.withValues(alpha: 0.06),
-                          blurRadius: 20,
-                          offset: Offset(0, 8),
+                          color: tokens.ink.withValues(alpha: 0.05),
+                          blurRadius: 16,
+                          offset: const Offset(0, 6),
                           spreadRadius: -2,
                         ),
                       ],
               ),
               clipBehavior: Clip.antiAlias,
-              child: Stack(
-                children: <Widget>[
-                  // Top accent bar
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    height: 4,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            widget.accentColor.withValues(alpha: 0.8),
-                            widget.accentColor.withValues(alpha: 0.3),
-                          ],
+              child: IntrinsicHeight(
+                child: Row(
+                  children: <Widget>[
+                    // Left accent border (Admin/Client card only)
+                    if (widget.showLeftBorder)
+                      Container(
+                        width: 4,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              widget.color.withValues(alpha: 0.9),
+                              widget.color.withValues(alpha: 0.2),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ),
-                  // Background pattern
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    bottom: 0,
-                    width: 140,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                          colors: [
-                            Colors.transparent,
-                            widget.darkSoftColor,
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Content
-                  Padding(
-                    padding: EdgeInsets.fromLTRB(
-                        contentPadH, contentPadV, contentPadH, contentPadV),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
-                        // Icon
-                        Container(
-                          width: iconSize,
-                          height: iconSize,
-                          decoration: BoxDecoration(
-                            color: widget.softColor,
-                            borderRadius: BorderRadius.circular(iconRadius),
-                          ),
-                          child: Icon(
-                            widget.icon,
-                            color: widget.accentColor,
-                            size: iconSize * 0.52,
-                          ),
-                        ),
-                        // Infographic
-                        if (!veryTight)
-                          Expanded(
-                            child: Center(
-                              child: AnimatedBuilder(
-                                animation: _introAnim,
-                                builder: (context, _) {
-                                  return widget.infographic ==
-                                          _InfographicType.guard
-                                      ? CustomPaint(
-                                          painter: _AttendancePainter(
-                                            color: widget.accentColor,
-                                            progress: _introAnim.value,
-                                          ),
-                                          size: Size(
-                                            100,
-                                            infographicHeight.clamp(16, 72),
-                                          ),
-                                        )
-                                      : CustomPaint(
-                                          painter: _NetworkPainter(
-                                            color: widget.accentColor,
-                                            progress: _introAnim.value,
-                                          ),
-                                          size: Size(
-                                            100,
-                                            infographicHeight.clamp(16, 88),
-                                          ),
-                                        );
-                                },
-                              ),
-                            ),
-                          ),
-                        // Title
-                        Text(
-                          widget.title,
-                          style: TextStyle(
-                            fontSize: titleSize,
-                            fontWeight: FontWeight.w800,
-                            color: tokens.ink,
-                            height: 0.95,
-                            letterSpacing: 0.4,
-                          ),
-                        ),
-                        SizedBox(height: tight ? 4 : 8),
-                        // Tagline
-                        if (!veryTight)
-                          Text(
-                            widget.tagline,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(
-                                  color: tokens.inkMuted,
-                                  letterSpacing: 0.1,
-                                ),
-                          ),
-                        SizedBox(height: tight ? 8 : 16),
-                        // CTA button
-                        if (widget.showPortalButton)
-                        Row(
+
+                    // Content
+                    Expanded(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(
+                            widget.showLeftBorder ? hPad - 4 : hPad,
+                            vPad,
+                            hPad,
+                            vPad),
+                        child: Row(
                           children: <Widget>[
-                            Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: tight ? 10 : 14,
-                                vertical: tight ? 5 : 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: widget.softColor,
-                                borderRadius:
-                                    BorderRadius.circular(tight ? 8 : 10),
-                              ),
-                              child: Row(
+                            // Icon
+                            AnimatedBuilder(
+                              animation: _introAnim,
+                              builder: (context, _) {
+                                return Transform.scale(
+                                  scale: _introAnim.value.clamp(0.0, 1.0),
+                                  child: Container(
+                                    width: iconSize,
+                                    height: iconSize,
+                                    decoration: BoxDecoration(
+                                      color: widget.softColor,
+                                      borderRadius:
+                                          BorderRadius.circular(iconRadius),
+                                    ),
+                                    child: Icon(
+                                      widget.icon,
+                                      color: widget.color,
+                                      size: iconSize * 0.5,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 16),
+
+                            // Title + Tagline
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 mainAxisSize: MainAxisSize.min,
                                 children: <Widget>[
                                   Text(
-                                    'Enter portal',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelMedium
-                                        ?.copyWith(
-                                          color: widget.accentColor,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: tight ? 11 : null,
-                                        ),
+                                    widget.title,
+                                    style: TextStyle(
+                                      fontSize: titleSize,
+                                      fontWeight: FontWeight.w800,
+                                      color: tokens.ink,
+                                      height: 1.1,
+                                      letterSpacing: 0.3,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  const SizedBox(width: 6),
-                                  Icon(
-                                    Icons.arrow_forward_rounded,
-                                    color: widget.accentColor,
-                                    size: tight ? 14 : 16,
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    widget.tagline,
+                                    style:
+                                        theme.textTheme.bodySmall?.copyWith(
+                                      color: tokens.inkMuted,
+                                      fontSize: veryCompact ? 11 : 12,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
                               ),
                             ),
+
+                            // Arrow
+                            AnimatedBuilder(
+                              animation: _introAnim,
+                              builder: (context, _) {
+                                return Transform.translate(
+                                  offset: Offset(
+                                      (1 - _introAnim.value) * 12, 0),
+                                  child: Opacity(
+                                    opacity: _introAnim.value,
+                                    child: Icon(
+                                      Icons.arrow_forward_ios_rounded,
+                                      color: widget.color.withValues(alpha: 0.5),
+                                      size: arrowSize,
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                           ],
                         ),
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           },
@@ -572,166 +486,4 @@ class _RoleCardState extends State<_RoleCard>
       ),
     );
   }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Guard infographic — attendance dot grid
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _AttendancePainter extends CustomPainter {
-  const _AttendancePainter({required this.color, required this.progress});
-
-  final Color color;
-  final double progress;
-
-  static const int _cols = 5;
-  static const int _rows = 4;
-  static const int _total = _cols * _rows;
-  static const double _dotR = 4.8;
-  static const double _colGap = 17.0;
-  static const double _rowGap = 17.0;
-
-  static const Set<int> _present = {
-    0, 1, 2, 5, 6, 7, 9, 10, 11, 12, 14, 15, 16,
-  };
-  static const Set<int> _absent = {3, 8};
-  static const int _todayIdx = 16;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final totalW = (_cols - 1) * _colGap;
-    final totalH = (_rows - 1) * _rowGap;
-    final ox = (size.width - totalW) / 2;
-    final oy = (size.height - totalH) / 2;
-
-    for (int r = 0; r < _rows; r++) {
-      for (int c = 0; c < _cols; c++) {
-        final idx = r * _cols + c;
-        final x = ox + c * _colGap;
-        final y = oy + r * _rowGap;
-
-        final threshold = (idx / (_total - 1)) * 0.72;
-        if (progress <= threshold) continue;
-
-        final dotP = ((progress - threshold) / 0.28).clamp(0.0, 1.0);
-
-        if (_present.contains(idx)) {
-          final scl = Curves.easeOutBack.transform(dotP).clamp(0.0, 1.25);
-          canvas.drawCircle(
-            Offset(x, y),
-            _dotR * scl,
-            Paint()..color = color.withValues(alpha: dotP * 0.88),
-          );
-        } else if (_absent.contains(idx)) {
-          canvas.drawCircle(
-            Offset(x, y),
-            _dotR * 0.82,
-            Paint()
-              ..color = color.withValues(alpha: dotP * 0.14)
-              ..style = PaintingStyle.fill,
-          );
-          canvas.drawCircle(
-            Offset(x, y),
-            _dotR * 0.82,
-            Paint()
-              ..color = color.withValues(alpha: dotP * 0.38)
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 0.9,
-          );
-        } else {
-          canvas.drawCircle(
-            Offset(x, y),
-            _dotR * 0.65,
-            Paint()
-              ..color = color.withValues(alpha: dotP * 0.1)
-              ..style = PaintingStyle.fill,
-          );
-        }
-
-        // Today pulse
-        if (idx == _todayIdx && dotP >= 0.85) {
-          final pulse = ((progress - 0.85) / 0.15).clamp(0.0, 1.0);
-          canvas.drawCircle(
-            Offset(x, y),
-            _dotR * (1.0 + pulse * 0.5),
-            Paint()
-              ..color = color.withValues(alpha: (1.0 - pulse) * 0.25)
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 1.0,
-          );
-        }
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _AttendancePainter oldDelegate) =>
-      oldDelegate.progress != progress;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Field infographic — node network
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _NetworkPainter extends CustomPainter {
-  const _NetworkPainter({required this.color, required this.progress});
-
-  final Color color;
-  final double progress;
-
-  static const List<Offset> _nodes = [
-    Offset(26, 50),
-    Offset(62, 20),
-    Offset(34, 8),
-    Offset(56, 40),
-    Offset(12, 30),
-    Offset(78, 48),
-    Offset(44, 62),
-    Offset(68, 72),
-  ];
-
-  static const List<({int from, int to})> _edges = [
-    (from: 0, to: 1),
-    (from: 1, to: 3),
-    (from: 0, to: 4),
-    (from: 4, to: 2),
-    (from: 2, to: 1),
-    (from: 3, to: 6),
-    (from: 6, to: 7),
-    (from: 1, to: 5),
-    (from: 5, to: 7),
-  ];
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final total = (_edges.length + _nodes.length).toDouble();
-
-    for (int i = 0; i < _edges.length; i++) {
-      final edgeP = ((i.toDouble() / total) + progress * 0.6).clamp(0.0, 1.0);
-      final edge = _edges[i];
-      canvas.drawLine(
-        _nodes[edge.from],
-        _nodes[edge.to],
-        Paint()
-          ..color = color.withValues(alpha: edgeP * 0.2)
-          ..strokeWidth = 1.2,
-      );
-    }
-
-    for (int i = 0; i < _nodes.length; i++) {
-      final nodeP =
-          (((_edges.length + i).toDouble() / total) + progress * 0.4)
-              .clamp(0.0, 1.0);
-      final r = 3.5 * Curves.easeOutBack.transform(nodeP).clamp(0.0, 1.4);
-      canvas.drawCircle(
-        _nodes[i],
-        r,
-        Paint()..color = color.withValues(alpha: nodeP * 0.7),
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _NetworkPainter oldDelegate) =>
-      oldDelegate.progress != progress;
 }

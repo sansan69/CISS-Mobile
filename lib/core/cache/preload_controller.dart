@@ -13,6 +13,10 @@ class PreloadController {
   void preloadAllFieldOfficer() {
     debugPrint('PreloadController: FO preload not yet implemented');
   }
+
+  void preloadAllClient() {
+    debugPrint('PreloadController: client preload not yet implemented');
+  }
 }
 
 final preloadControllerProvider = Provider<PreloadController>((ref) => PreloadController());

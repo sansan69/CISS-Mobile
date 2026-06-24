@@ -25,6 +25,10 @@ final Provider<ApiClient> apiClientProvider = Provider<ApiClient>((Ref ref) {
   );
 });
 
+/// Drives the selected tab in [ClientShell].
+/// Dashboard quick-action buttons write to this provider to navigate tabs.
+final clientTabIndexProvider = StateProvider<int>((ref) => 0);
+
 final Provider<MobileRepository> mobileRepositoryProvider =
     Provider<MobileRepository>((Ref ref) {
       return MobileRepository(
