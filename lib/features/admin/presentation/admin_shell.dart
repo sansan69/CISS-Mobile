@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/haptics.dart';
 import '../../../core/network/providers.dart';
+import '../../auth/application/auth_controller.dart';
 import '../../../shared/widgets/branded_navigation_bar.dart';
 import 'admin_dashboard_screen.dart';
 import 'admin_guards_screen.dart';

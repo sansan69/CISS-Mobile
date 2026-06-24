@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_tokens.dart';
 import '../../../../core/haptics.dart';
 import '../../../../core/network/providers.dart';
+import '../application/auth_controller.dart';
 
 /// Admin login screen — email + password sign-in.
 /// Mirrors web app's /admin-login flow.
