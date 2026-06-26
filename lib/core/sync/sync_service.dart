@@ -119,7 +119,7 @@ class SyncService {
           if (isVisitReport || isTrainingReport) {
             final folder = isVisitReport ? 'visitReports' : 'trainingReports';
             final uid = _repository.currentUser?.uid ?? 'unknown';
-            uploadPath = 'foReports/$folder/offline_sync/${uid}_${ts}_$i.jpg';
+            uploadPath = 'foReports/$folder/$uid/${ts}_$i.jpg';
           } else {
             uploadPath = 'reports/${ts}_$i.jpg';
           }
