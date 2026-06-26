@@ -1,6 +1,7 @@
 class VisitReportModel {
   const VisitReportModel({
     required this.id,
+    required this.fieldOfficerName,
     required this.siteName,
     required this.clientName,
     required this.district,
@@ -44,6 +45,7 @@ class VisitReportModel {
     }
     return VisitReportModel(
       id: (json['id'] as String?) ?? '',
+      fieldOfficerName: (json['fieldOfficerName'] as String?) ?? '',
       siteName: (json['siteName'] as String?) ?? '',
       clientName: (json['clientName'] as String?) ?? '',
       district: (json['district'] as String?) ?? '',
@@ -90,6 +92,7 @@ class TrainingAttendee {
 class TrainingReportModel {
   const TrainingReportModel({
     required this.id,
+    required this.fieldOfficerName,
     required this.siteName,
     required this.clientName,
     required this.district,
@@ -149,6 +152,7 @@ class TrainingReportModel {
     }
     return TrainingReportModel(
       id: (json['id'] as String?) ?? '',
+      fieldOfficerName: (json['fieldOfficerName'] as String?) ?? '',
       siteName: (json['siteName'] as String?) ?? '',
       clientName: (json['clientName'] as String?) ?? '',
       district: (json['district'] as String?) ?? '',

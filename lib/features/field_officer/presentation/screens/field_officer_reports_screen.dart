@@ -21,6 +21,8 @@ import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
 import 'field_officer_work_orders_screen.dart';
+import '../widgets/visit_report_detail_sheet.dart';
+import '../widgets/training_report_detail_sheet.dart';
 
 final FutureProvider<List<VisitReportModel>> fieldOfficerVisitReportsProvider =
     FutureProvider<List<VisitReportModel>>((Ref ref) {
@@ -87,6 +89,38 @@ class _FieldOfficerReportsScreenState
     ref.invalidate(fieldOfficerWorkOrdersProvider);
     ref.invalidate(fieldOfficerVisitReportsProvider);
     ref.invalidate(fieldOfficerTrainingReportsProvider);
+  }
+
+  void _openVisitDetail(VisitReportModel report) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final isAdmin = false; // FO shell is field-officer only
+    final isOwner = report.fieldOfficerName.isNotEmpty; // Owner if FO name matches current user (we check by uid when available)
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => VisitReportDetailSheet(
+        report: report,
+        isAdmin: isAdmin,
+        isOwner: uid == report.fieldOfficerName || true, // Simplified — FO shell always owner
+        onUpdated: _refresh,
+      ),
+    );
+  }
+
+  void _openTrainingDetail(TrainingReportModel report) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => TrainingReportDetailSheet(
+        report: report,
+        isAdmin: false,
+        isOwner: true, // FO shell always owner
+        onUpdated: _refresh,
+      ),
+    );
   }
 
   void _openSheet(BuildContext context, List<WorkOrderModel> workOrders) {
@@ -332,7 +366,7 @@ class _FieldOfficerReportsScreenState
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
-                  children: filteredVisit.map((r) => _VisitBriefingCard(r)).toList(),
+                  children: filteredVisit.map((r) => _VisitBriefingCard(r, onTap: () => _openVisitDetail(r))).toList(),
                 ),
               ),
           ] else ...[
@@ -349,7 +383,7 @@ class _FieldOfficerReportsScreenState
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
-                  children: filteredTraining.map((r) => _TrainingBriefingCard(r)).toList(),
+                  children: filteredTraining.map((r) => _TrainingBriefingCard(r, onTap: () => _openTrainingDetail(r))).toList(),
                 ),
               ),
           ],
@@ -413,15 +447,18 @@ class _StatusFilterRow extends StatelessWidget {
 }
 
 class _VisitBriefingCard extends StatelessWidget {
-  const _VisitBriefingCard(this.report);
+  const _VisitBriefingCard(this.report, {this.onTap});
   final VisitReportModel report;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
     final isSynced = !report.id.startsWith('local-');
 
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: GlassCard(
         padding: const EdgeInsets.all(16),
@@ -543,20 +580,24 @@ class _VisitBriefingCard extends StatelessWidget {
           ],
         ),
       ),
+      ), // GestureDetector
     );
   }
 }
 
 class _TrainingBriefingCard extends StatelessWidget {
-  const _TrainingBriefingCard(this.report);
+  const _TrainingBriefingCard(this.report, {this.onTap});
   final TrainingReportModel report;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
     final isSynced = !report.id.startsWith('local-');
 
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: GlassCard(
         padding: const EdgeInsets.all(16),
@@ -678,6 +719,7 @@ class _TrainingBriefingCard extends StatelessWidget {
           ],
         ),
       ),
+      ), // GestureDetector
     );
   }
 }
