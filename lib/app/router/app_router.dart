@@ -9,6 +9,7 @@ import '../../features/auth/presentation/admin_login_screen.dart';
 import '../../features/auth/presentation/permission_onboarding_screen.dart';
 import '../../features/attendance_qr/qr_attendance_flow.dart';
 import '../../features/enrollment/presentation/guard_enrollment_screen.dart';
+import '../../features/attendance_public/public_attendance_screen.dart';
 import '../../core/gestures/edge_gesture_screen.dart';
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -137,6 +138,16 @@ final GoRouter appRouter = GoRouter(
           context: context,
           state: state,
           child: const QrAttendanceFlow(),
+        );
+      },
+    ),
+    GoRoute(
+      path: '/attendance',
+      pageBuilder: (BuildContext context, GoRouterState state) {
+        return _buildPage(
+          context: context,
+          state: state,
+          child: const PublicAttendanceScreen(),
         );
       },
     ),

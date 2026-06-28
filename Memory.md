@@ -181,3 +181,12 @@ flutter run --dart-define-from-file=mobile.env
 - Add production-grade offline sync for attendance and field reports.
 - Add push notification handling and background refresh.
 - Wire dummy-data verification flows against the live backend before release.
+
+### [2026-06-28] — Camera fix, guardLocations doc ID, manual ID entry, public attendance page
+
+- Replaced stub `CameraCaptureScreen` with working implementation using `image_picker`.
+- Fixed `LiveLocationService` to use `employeeDocId` as Firestore document ID instead of `employeeId` (which contains slashes).
+- Added manual employee ID / phone / resource ID entry fields to QR attendance flow.
+- Added `PublicAttendanceScreen` — no-login attendance flow with guard identification (ID/phone/resource), site selection, photo capture, and submission.
+- Added `/attendance` route in app router for the public attendance page.
+- Updated `fetchAttendanceEmployee` in repository to accept optional phone and resourceId params.

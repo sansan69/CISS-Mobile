@@ -77,6 +77,65 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
     );
   }
 
+  // Manual ID entry state
+  final _manualIdCtrl = TextEditingController();
+  final _manualPhoneCtrl = TextEditingController();
+  final _manualResourceCtrl = TextEditingController();
+  bool _showManualEntry = false;
+
+  Future<void> _lookupManual() async {
+    final id = _manualIdCtrl.text.trim();
+    final phone = _manualPhoneCtrl.text.trim();
+    final rid = _manualResourceCtrl.text.trim();
+    if (id.isEmpty && phone.isEmpty && rid.isEmpty) {
+      setState(() => _error = 'Enter employee ID, phone number, or resource ID');
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      final repo = ref.read(mobileRepositoryProvider);
+      final employee = await repo.fetchAttendanceEmployee(id, phone, rid);
+      final sites = await repo.fetchAttendanceSites();
+      if (employee == null) {
+        setState(() {
+          _error = 'No guard found with that information.';
+          _loading = false;
+        });
+        return;
+      }
+      Position? position;
+      try {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 8),
+          ),
+        );
+      } catch (_) {}
+
+      SiteOptionModel? nearest;
+      if (position != null && sites.isNotEmpty) {
+        nearest = _findNearestSite(sites, position);
+      }
+      final status = employee.attendanceHint?.lastStatus == 'In' ? 'Out' : 'In';
+      if (!mounted) return;
+      setState(() {
+        _employee = employee;
+        _selectedSite = nearest ?? (sites.isNotEmpty ? sites.first : null);
+        _error = null;
+        _loading = false;
+        _step = _QrFlowStep.action;
+        _attendanceStatus = status;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Lookup failed. ${e.toString().replaceFirst("Exception: ", "")}';
+        _loading = false;
+      });
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Scanner
   // ═══════════════════════════════════════════════════════════════════════════
@@ -195,6 +254,105 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
                         child: const Text(
                           'Try again',
                           style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    // Manual entry toggle
+                    if (!_showManualEntry)
+                      TextButton.icon(
+                        onPressed: () => setState(() => _showManualEntry = true),
+                        icon: const Icon(Icons.edit_rounded, color: Colors.white70, size: 18),
+                        label: const Text(
+                          'Type employee ID / phone / resource ID',
+                          style: TextStyle(color: Colors.white70, fontSize: 13),
+                        ),
+                      ),
+                    if (_showManualEntry) ...[
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 24),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            TextField(
+                              controller: _manualIdCtrl,
+                              style: const TextStyle(color: Colors.white, fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: 'Employee ID (e.g. CISS/TCS/...)',
+                                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
+                                prefixIcon: Icon(Icons.badge_rounded, color: Colors.white.withValues(alpha: 0.5), size: 20),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                filled: true,
+                                fillColor: Colors.white.withValues(alpha: 0.06),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Expanded(child: Divider(color: Colors.white24)),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  child: Text('OR', style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
+                                ),
+                                const Expanded(child: Divider(color: Colors.white24)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _manualPhoneCtrl,
+                              style: const TextStyle(color: Colors.white, fontSize: 14),
+                              keyboardType: TextInputType.phone,
+                              maxLength: 10,
+                              decoration: InputDecoration(
+                                hintText: 'Phone number (10 digits)',
+                                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
+                                prefixIcon: Icon(Icons.phone_rounded, color: Colors.white.withValues(alpha: 0.5), size: 20),
+                                counterStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 10),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                filled: true,
+                                fillColor: Colors.white.withValues(alpha: 0.06),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Expanded(child: Divider(color: Colors.white24)),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                  child: Text('OR', style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
+                                ),
+                                const Expanded(child: Divider(color: Colors.white24)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: _manualResourceCtrl,
+                              style: const TextStyle(color: Colors.white, fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: 'Resource ID',
+                                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
+                                prefixIcon: Icon(Icons.qr_code_rounded, color: Colors.white.withValues(alpha: 0.5), size: 20),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                filled: true,
+                                fillColor: Colors.white.withValues(alpha: 0.06),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton(
+                                onPressed: _loading ? null : _lookupManual,
+                                child: _loading
+                                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    : const Text('Look up guard'),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],

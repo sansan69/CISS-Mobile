@@ -1,11 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-// Firestore collection: guardLocations/{employeeId}
+// Firestore collection: guardLocations/{employeeDocId}
+// Document ID is the employeeDocId (Firestore doc ID, no slashes).
 // Shared real-time layer for Flutter FO app + Next.js admin/client dashboards.
 
 class GuardLocationData {
   const GuardLocationData({
+    required this.employeeDocId,
     required this.employeeId,
     required this.guardName,
     required this.siteId,
@@ -24,6 +26,10 @@ class GuardLocationData {
     this.geofenceRadius,
   });
 
+  /// Firestore doc ID (no slashes)
+  final String employeeDocId;
+
+  /// Employee code (e.g. CISS/TCS/2025-26/871)
   final String employeeId;
   final String guardName;
   final String siteId;
@@ -46,7 +52,8 @@ class GuardLocationData {
   ) {
     final d = doc.data()!;
     return GuardLocationData(
-      employeeId: (d['employeeId'] as String?) ?? doc.id,
+      employeeDocId: doc.id,
+      employeeId: (d['employeeId'] as String?) ?? '',
       guardName: (d['guardName'] as String?) ?? '',
       siteId: (d['siteId'] as String?) ?? '',
       siteName: (d['siteName'] as String?) ?? '',
@@ -66,6 +73,7 @@ class GuardLocationData {
   }
 
   Map<String, dynamic> toFirestore() => {
+    'employeeDocId': employeeDocId,
     'employeeId': employeeId,
     'guardName': guardName,
     'siteId': siteId,
@@ -99,14 +107,14 @@ class LiveLocationService {
   Future<void> setLocation(GuardLocationData data) async {
     await _firestore
         .collection(collection)
-        .doc(data.employeeId)
+        .doc(data.employeeDocId)
         .set(data.toFirestore(), SetOptions(merge: true));
   }
 
   /// Called when a guard marks OUT — clears location but keeps the doc for
   /// the shared status flag.
-  Future<void> markOut(String employeeId) async {
-    await _firestore.collection(collection).doc(employeeId).update({
+  Future<void> markOut(String employeeDocId) async {
+    await _firestore.collection(collection).doc(employeeDocId).update({
       'status': 'Out',
       'lat': 0,
       'lng': 0,
@@ -116,8 +124,8 @@ class LiveLocationService {
   }
 
   /// Remove the document entirely (e.g. guard logs out or data stale).
-  Future<void> remove(String employeeId) async {
-    await _firestore.collection(collection).doc(employeeId).delete();
+  Future<void> remove(String employeeDocId) async {
+    await _firestore.collection(collection).doc(employeeDocId).delete();
   }
 
   // ── Read ───────────────────────────────────────────────────────────────────
@@ -139,10 +147,10 @@ class LiveLocationService {
   }
 
   /// Stream a single guard's location. Used by the guard detail screen.
-  Stream<GuardLocationData?> streamGuardLocation(String employeeId) {
+  Stream<GuardLocationData?> streamGuardLocation(String employeeDocId) {
     return _firestore
         .collection(collection)
-        .doc(employeeId)
+        .doc(employeeDocId)
         .snapshots()
         .map((doc) =>
             doc.exists ? GuardLocationData.fromFirestore(doc) : null);

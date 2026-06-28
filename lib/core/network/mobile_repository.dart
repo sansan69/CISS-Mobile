@@ -773,13 +773,21 @@ class MobileRepository {
         .toList();
   }
 
-  Future<PublicAttendanceEmployeeModel> fetchAttendanceEmployee(
-    String employeeId,
-  ) async {
+  Future<PublicAttendanceEmployeeModel?> fetchAttendanceEmployee(
+    String employeeId, [
+    String? phoneNumber,
+    String? resourceId,
+  ]) async {
+    final params = <String, dynamic>{};
+    if (employeeId.isNotEmpty) params['employeeId'] = employeeId;
+    if (phoneNumber != null && phoneNumber.isNotEmpty) params['phoneNumber'] = phoneNumber;
+    if (resourceId != null && resourceId.isNotEmpty) params['resourceId'] = resourceId;
+    if (params.isEmpty) return null;
     final data = await _getJson(
       '/api/public/attendance/employee',
-      queryParameters: <String, dynamic>{'employeeId': employeeId},
+      queryParameters: params,
     );
+    if (data['found'] != true) return null;
     final employee = data['employee'] is Map<String, dynamic>
         ? Map<String, dynamic>.from(data['employee'] as Map)
         : <String, dynamic>{};
