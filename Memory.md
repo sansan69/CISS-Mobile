@@ -167,6 +167,14 @@ flutter run --dart-define-from-file=mobile.env
 - The mobile app should continue to treat guard and field officer as separate login surfaces.
 - Future work should preserve the isolated repo structure.
 
+### [2026-06-28] — Reports redesign: preview, photo stamping, minimums
+
+- Added `toJson()` to `VisitReportModel` and `TrainingReportModel` for proper serialization.
+- Added `_stampPhoto` method — applies canvas overlay (dark bottom bar with timestamp, GPS, title, "Captured by CISS Field Officer") to all photos before upload.
+- Changed training photo minimum from 3 to 1; visit reports now block submit with zero photos.
+- Added preview step in `_NewReportSheet`: shows read-only summary (client/site, date, GPS, fields, photos) with Edit/Submit buttons before final submission.
+- Included `fieldOfficerName` in submit payload for both report types.
+
 ## Known next work
 
 - Finish backend wiring for any remaining guard and field officer screens.

@@ -65,6 +65,22 @@ class VisitReportModel {
       visitLocation: location,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'fieldOfficerName': fieldOfficerName,
+    'siteName': siteName,
+    'clientName': clientName,
+    'district': district,
+    'visitDate': dateLabel,
+    'summary': summary,
+    'issuesFound': issuesFound,
+    'guardsPresentCount': guardsPresentCount,
+    'guardsAbsentCount': guardsAbsentCount,
+    'status': status,
+    'photoUrls': photoUrls,
+    if (visitLocation != null) 'visitLocation': visitLocation,
+  };
 }
 
 class TrainingAttendee {
@@ -186,6 +202,26 @@ class TrainingReportModel {
           const <TrainingAttendee>[],
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'fieldOfficerName': fieldOfficerName,
+    'siteName': siteName,
+    'clientName': clientName,
+    'district': district,
+    'trainingDate': dateLabel,
+    'topic': topic,
+    'description': description,
+    'attendeeCount': attendeeCount,
+    'durationMinutes': durationMinutes,
+    'status': status,
+    'photoUrls': photoUrls,
+    'attachmentUrls': attachmentUrls,
+    if (clientReportUrl != null) 'clientReportUrl': clientReportUrl,
+    if (visitLocation != null) 'visitLocation': visitLocation,
+    'attendeeNames': attendeeNames,
+    'attendees': attendees.map((a) => a.toJson()).toList(),
+  };
 }
 
 class WorkOrderModel {

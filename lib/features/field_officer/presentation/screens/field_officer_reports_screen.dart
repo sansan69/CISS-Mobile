@@ -807,6 +807,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
   Map<String, double>? _visitLocation;
   bool _loading = false;
   String? _error;
+  bool _showPreview = false;
 
   // Guard attendee selection for training reports
   final List<Map<String, String>> _selectedAttendees = <Map<String, String>>[]; // [{userId, name}]
@@ -1063,6 +1064,68 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     setState(() => _photos.removeAt(index));
   }
 
+  Future<Uint8List> _stampPhoto(Uint8List photoBytes, String title) async {
+    final codec = await ui.instantiateImageCodec(photoBytes);
+    final frame = await codec.getNextFrame();
+    final image = frame.image;
+    final w = image.width.toDouble();
+    final h = image.height.toDouble();
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    canvas.drawImage(image, Offset.zero, Paint());
+
+    final barH = (h * 0.22).clamp(120.0, 220.0);
+    final overlayRRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(20, h - barH - 20, w - 40, barH),
+      const Radius.circular(24),
+    );
+    canvas.drawRRect(overlayRRect, Paint()..color = const Color(0xB8080E1E));
+
+    final now = DateTime.now();
+    final dateStr = DateFormat('dd/MM/yyyy, hh:mm a').format(now);
+    final gpsStr = _visitLocation != null
+        ? 'GPS ${_visitLocation!['lat']!.toStringAsFixed(5)}, ${_visitLocation!['lng']!.toStringAsFixed(5)}'
+        : null;
+
+    final titleTp = TextPainter(
+      text: TextSpan(text: title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+      textDirection: TextDirection.ltr,
+    );
+    titleTp.layout(maxWidth: w - 72);
+    titleTp.paint(canvas, Offset(36, h - barH - 20 + 14));
+
+    final lines = <String>[];
+    lines.add('Captured at $dateStr');
+    if (gpsStr != null) lines.add(gpsStr);
+    lines.add('Captured by CISS Field Officer');
+
+    var lineY = h - barH - 20 + 44;
+    for (int i = 0; i < lines.length; i++) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: lines[i],
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.92),
+            fontSize: i == lines.length - 1 ? 10 : 12,
+            fontWeight: i == lines.length - 1 ? FontWeight.w400 : FontWeight.w500,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      tp.layout(maxWidth: w - 72);
+      tp.paint(canvas, Offset(36, lineY));
+      lineY += i == lines.length - 1 ? 20 : 26;
+    }
+
+    final picture = recorder.endRecording();
+    final stampedImage = await picture.toImage(image.width, image.height);
+    final byteData = await stampedImage.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    return byteData!.buffer.asUint8List();
+  }
+
   Future<List<String>> _uploadPhotos({required String folder}) async {
     final urls = <String>[];
     final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -1073,13 +1136,14 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
       }
       setState(() => entry.uploading = true);
       try {
-        final ext = entry.mimeType.split('/').last;
+        final stampedBytes = await _stampPhoto(entry.bytes, folder == 'visitReports' ? 'Site Visit' : 'Training Session');
+        final ext = 'png';
         final safeName = '${timestamp}_photo_${urls.length}.$ext';
         final uid = FirebaseAuth.instance.currentUser?.uid ?? 'unknown';
         final path = 'foReports/$folder/$uid/$safeName';
         final dataUrl = await ref
             .read(mobileRepositoryProvider)
-            .encodeFileToDataUrl(entry.bytes.toList(), entry.mimeType);
+            .encodeFileToDataUrl(stampedBytes.toList(), 'image/png');
         final result = await ref
             .read(mobileRepositoryProvider)
             .uploadReportPhoto(path: path, dataUrl: dataUrl);
@@ -1107,11 +1171,38 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
       return;
     }
 
-    // Training reports require at least 3 photos when submitting
-    if (_tab == _Tab.training && _reportStatus == 'submitted' && _photos.length < 3) {
-      setState(() => _error = 'Training reports require at least 3 photos. You have ${_photos.length}. Please add more training session photos.');
+    // Training reports require at least 1 photo when submitting
+    if (_tab == _Tab.training && _reportStatus == 'submitted' && _photos.isEmpty) {
+      setState(() => _error = 'Training reports require at least 1 training session photo.');
       return;
     }
+    // Training reports require client report when submitting
+    if (_tab == _Tab.training && _reportStatus == 'submitted' && _clientReportPhotos.isEmpty) {
+      setState(() => _error = 'Upload the client-signed training report before submitting.');
+      return;
+    }
+    // Visit reports require at least 1 photo
+    if (_tab == _Tab.visit && _reportStatus == 'submitted' && _photos.isEmpty) {
+      setState(() => _error = 'Visit reports require at least one photo (guard photo or selfie with guards).');
+      return;
+    }
+
+    setState(() {
+      _showPreview = true;
+      _error = null;
+    });
+  }
+
+  String _buildPreviewGpsLine() {
+    if (_visitLocation == null) return '';
+    final lat = _visitLocation!['lat']!;
+    final lng = _visitLocation!['lng']!;
+    return 'GPS: ${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
+  }
+
+  Future<void> _confirmSubmit() async {
+    final selected = _selectedWorkOrder;
+    final date = _tab == _Tab.visit ? _visitDate : _trainingDate;
 
     setState(() {
       _loading = true;
@@ -1128,11 +1219,12 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
       }
 
       final common = <String, dynamic>{
-        'clientId': selected.clientId,
+        'clientId': selected!.clientId,
         'clientName': selected.clientName,
         'siteId': selected.siteId,
         'siteName': selected.siteName,
         'district': selected.district,
+        'fieldOfficerName': FirebaseAuth.instance.currentUser?.displayName ?? '',
         'status': _reportStatus,
       };
 
@@ -1140,55 +1232,29 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
       String path;
       String photoFolder;
       if (_tab == _Tab.visit) {
-        final summary = _visitSummaryCtrl.text.trim();
-        if (summary.isEmpty) {
-          setState(() {
-            _loading = false;
-            _error = 'Please write a visit summary.';
-          });
-          return;
-        }
         path = '/api/field-officer/visit-reports';
         photoFolder = 'visitReports';
         payload = {
           ...common,
-          'visitDate': _apiFmt.format(date),
-          'summary': summary,
+          'visitDate': _apiFmt.format(date!),
+          'summary': _visitSummaryCtrl.text.trim(),
           'issuesFound': _visitIssuesCtrl.text.trim(),
           'actionsRequired': _visitActionsCtrl.text.trim(),
           'guardsPresentCount': int.tryParse(_visitPresentCtrl.text.trim()) ?? 0,
           'guardsAbsentCount': int.tryParse(_visitAbsentCtrl.text.trim()) ?? 0,
         };
       } else {
-        final topic = _trainingTopicCtrl.text.trim();
-        if (topic.isEmpty) {
-          setState(() {
-            _loading = false;
-            _error = 'Please enter a training topic.';
-          });
-          return;
-        }
-
-        final attendeeCount = int.tryParse(_trainingAttendeeCtrl.text.trim()) ?? _selectedAttendees.length;
-        if (attendeeCount < 1) {
-          setState(() {
-            _loading = false;
-            _error = 'Please specify at least one attendee. Use the "Add Guards" button or enter a count.';
-          });
-          return;
-        }
-
         path = '/api/field-officer/training-reports';
         photoFolder = 'trainingReports';
         payload = {
           ...common,
-          'trainingDate': _apiFmt.format(date),
+          'trainingDate': _apiFmt.format(date!),
           'durationMinutes': int.tryParse(_trainingDurationCtrl.text.trim()) ?? 60,
-          'topic': topic,
+          'topic': _trainingTopicCtrl.text.trim(),
           'description': _trainingDescCtrl.text.trim(),
           'attendeeIds': _selectedAttendees.map((g) => g['userId']!).toList(),
           'attendeeNames': _selectedAttendees.map((g) => g['name']!).toList(),
-          'attendeeCount': attendeeCount,
+          'attendeeCount': int.tryParse(_trainingAttendeeCtrl.text.trim()) ?? _selectedAttendees.length,
         };
       }
 
@@ -1199,7 +1265,6 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
       try {
         final photoUrls = await _uploadPhotos(folder: photoFolder);
 
-        // Upload client report for training reports
         String? clientReportUrl;
         if (_tab == _Tab.training && _clientReportPhotos.isNotEmpty) {
           final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -1225,13 +1290,13 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           'photoUrls': photoUrls,
           if (clientReportUrl != null) 'clientReportUrl': clientReportUrl,
         };
-        
+
         if (_tab == _Tab.visit) {
           await ref.read(mobileRepositoryProvider).submitVisitReport(finalPayload);
         } else {
           await ref.read(mobileRepositoryProvider).submitTrainingReport(finalPayload);
         }
-        
+
         await ref.read(draftServiceProvider).clearDraft(_draftKey);
         widget.onSubmitted();
         if (mounted) Navigator.of(context).pop();
@@ -1298,11 +1363,14 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                       children: [
                         Expanded(
                           child: Text(
-                            'NEW BRIEFING',
+                            _showPreview ? 'PREVIEW' : 'NEW BRIEFING',
                             style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 1),
                           ),
                         ),
-                        IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
+                        if (_showPreview)
+                          IconButton(onPressed: () => setState(() => _showPreview = false), icon: const Icon(Icons.arrow_back_rounded))
+                        else
+                          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -1324,7 +1392,9 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                 child: ListView(
                   controller: scrollController,
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
-                  children: [
+                  children: _showPreview
+                      ? _buildPreviewContent(tokens)
+                      : [
                     if (widget.workOrders.isNotEmpty) ...[
                       DropdownButtonFormField<WorkOrderModel>(
                         value: _selectedWorkOrder,
@@ -1355,11 +1425,37 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                 decoration: BoxDecoration(color: tokens.surface, border: Border(top: BorderSide(color: tokens.border))),
                 child: Row(
                   children: [
-                    if (_error != null)
+                    if (_error != null && !_showPreview)
                       Expanded(child: Text(_error!, style: theme.textTheme.bodySmall?.copyWith(color: tokens.danger), maxLines: 2))
                     else
                       const Spacer(),
                     const SizedBox(width: 16),
+                    if (_showPreview)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            height: 48,
+                            child: OutlinedButton(
+                              onPressed: () => setState(() => _showPreview = false),
+                              style: OutlinedButton.styleFrom(minimumSize: const Size(100, 48)),
+                              child: const Text('EDIT'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          SizedBox(
+                            height: 48,
+                            child: FilledButton(
+                              onPressed: _loading ? null : _confirmSubmit,
+                              style: FilledButton.styleFrom(minimumSize: const Size(140, 48)),
+                              child: _loading
+                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  : const Text('SUBMIT'),
+                            ),
+                          ),
+                        ],
+                      )
+                    else
                     SizedBox(
                       height: 48,
                       child: FilledButton(
@@ -1380,11 +1476,16 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                       ),
                     ),
                   ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
+              if (_error != null && _showPreview)
+                Padding(
+                  padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
+                  child: Text(_error!, style: theme.textTheme.bodySmall?.copyWith(color: tokens.danger), maxLines: 2),
+                ),
       ),
     );
   }
@@ -1685,8 +1786,8 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     final isVisit = _tab == _Tab.visit;
     final label = isVisit ? 'VISIT PHOTOS / FILES' : 'TRAINING PHOTOS';
     final hint = isVisit
-        ? 'Attach at least one photo or file. Use camera, gallery, or attach a PDF. You can submit now and add more later.'
-        : 'Attach at least 3 photos of the training session. Use camera, gallery (including HEIC/WEBP), or attach PDFs.';
+        ? 'Take a guard photo (back camera) or selfie with guards (front camera). At least one required for submission. Photos are timestamped with date, time and GPS.'
+        : 'Take training session photos. At least 1 photo required for submission. Photos are timestamped with date, time and GPS.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1702,33 +1803,8 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
             _AddPhotoButton(onGallery: _pickPhotos, onCamera: _takePhoto, onFiles: _pickFiles),
           ],
         ),
-        // Show warning for visit reports with no photos when submitting
+        // Show requirement for visit reports with no photos
         if (isVisit && _reportStatus == 'submitted' && _photos.isEmpty) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: tokens.warning.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: tokens.warning.withValues(alpha: 0.25)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.warning_amber_rounded, size: 14, color: tokens.warning),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'No photos attached. Visit reports require at least one photo or file. You can still submit and add them later by editing this report.',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.ink),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        // Show requirement for training reports
-        if (!isVisit && _reportStatus == 'submitted' && _photos.length < 3) ...[
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(10),
@@ -1744,7 +1820,32 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Training reports require at least 3 photos. You currently have ${_photos.length}. Please add more before submitting.',
+                    'Visit reports require at least one photo (guard photo or selfie with guards).',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.ink),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        // Show requirement for training reports
+        if (!isVisit && _reportStatus == 'submitted' && _photos.isEmpty) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: tokens.danger.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: tokens.danger.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.error_outline_rounded, size: 14, color: tokens.danger),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Training reports require at least 1 photo. You currently have ${_photos.length}.',
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.ink),
                   ),
                 ),
@@ -1788,6 +1889,83 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
             ),
           ),
         ),
+      ],
+    );
+  }
+
+  List<Widget> _buildPreviewContent(CissThemeTokens tokens) {
+    final isVisit = _tab == _Tab.visit;
+    return [
+      if (_selectedWorkOrder != null) ...[
+        _buildPreviewRow('Client', _selectedWorkOrder!.clientName),
+        const SizedBox(height: 12),
+        _buildPreviewRow('Site', _selectedWorkOrder!.siteName),
+        const SizedBox(height: 12),
+      ],
+      _buildPreviewRow('Date', isVisit
+          ? (_visitDate != null ? _displayFmt.format(_visitDate!) : '')
+          : (_trainingDate != null ? _displayFmt.format(_trainingDate!) : '')),
+      const SizedBox(height: 12),
+      if (_visitLocation != null) ...[
+        _buildPreviewRow('GPS', '${_visitLocation!['lat']!.toStringAsFixed(5)}, ${_visitLocation!['lng']!.toStringAsFixed(5)}'),
+        const SizedBox(height: 12),
+      ],
+      if (isVisit) ...[
+        _buildPreviewRow('Guards Present', _visitPresentCtrl.text),
+        const SizedBox(height: 12),
+        _buildPreviewRow('Guards Absent', _visitAbsentCtrl.text),
+        const SizedBox(height: 12),
+        _buildPreviewRow('Summary', _visitSummaryCtrl.text),
+        if (_visitIssuesCtrl.text.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _buildPreviewRow('Issues Found', _visitIssuesCtrl.text),
+        ],
+      ] else ...[
+        _buildPreviewRow('Topic', _trainingTopicCtrl.text),
+        const SizedBox(height: 12),
+        _buildPreviewRow('Duration', '${_trainingDurationCtrl.text} minutes'),
+        const SizedBox(height: 12),
+        _buildPreviewRow('Attendees', _trainingAttendeeCtrl.text),
+        if (_selectedAttendees.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _buildPreviewRow('Attendees Selected', _selectedAttendees.map((g) => g['name']!).join(', ')),
+        ],
+        if (_trainingDescCtrl.text.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          _buildPreviewRow('Description', _trainingDescCtrl.text),
+        ],
+      ],
+      const SizedBox(height: 24),
+      Text('PHOTOS (${_photos.length})', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.inkMuted)),
+      if (_photos.isNotEmpty) ...[
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 80,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: _photos.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (_, i) => ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.memory(_photos[i].bytes, width: 80, height: 80, fit: BoxFit.cover),
+            ),
+          ),
+        ),
+      ],
+      if (!isVisit && _clientReportPhotos.isNotEmpty) ...[
+        const SizedBox(height: 16),
+        Text('CLIENT REPORT ATTACHED', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.inkMuted)),
+      ],
+    ];
+  }
+
+  Widget _buildPreviewRow(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label.toUpperCase(), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey[600])),
+        const SizedBox(height: 2),
+        Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
       ],
     );
   }
