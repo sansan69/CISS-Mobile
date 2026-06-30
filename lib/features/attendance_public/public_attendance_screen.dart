@@ -429,7 +429,7 @@ class _PublicAttendanceScreenState
                 child: GestureDetector(
                   onTap: () => setState(() => _photoPath = null),
                   child: Container(
-                    decoration: const BoxDecoration(Colors.black54, shape: BoxShape.circle),
+                    decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
                     padding: const EdgeInsets.all(4),
                     child: const Icon(Icons.close_rounded, size: 18, color: Colors.white),
                   ),

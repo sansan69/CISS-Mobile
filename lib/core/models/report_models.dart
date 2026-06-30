@@ -16,6 +16,7 @@ class VisitReportModel {
   });
 
   final String id;
+  final String fieldOfficerName;
   final String siteName;
   final String clientName;
   final String district;
@@ -127,6 +128,7 @@ class TrainingReportModel {
   });
 
   final String id;
+  final String fieldOfficerName;
   final String siteName;
   final String clientName;
   final String district;

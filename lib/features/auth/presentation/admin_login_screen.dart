@@ -352,7 +352,7 @@ class _SavedAccountChip extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(maxWidth: 160),
       child: Material(
-        color: tokens.surfaceVariant,
+        color: tokens.surfaceMuted,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: onTap,

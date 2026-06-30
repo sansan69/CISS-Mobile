@@ -25,7 +25,7 @@ class AdminAttendanceScreen extends ConsumerWidget {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: tokens.surfaceVariant,
+            color: tokens.surfaceMuted,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

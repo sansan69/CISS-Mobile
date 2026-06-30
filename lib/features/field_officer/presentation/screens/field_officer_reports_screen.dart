@@ -1,5 +1,5 @@
 import 'dart:typed_data';
-import 'dart:ui';
+import 'dart:ui' as ui;
 
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -1091,7 +1091,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
 
     final titleTp = TextPainter(
       text: TextSpan(text: title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
-      textDirection: TextDirection.ltr,
+      textDirection: ui.TextDirection.ltr,
     );
     titleTp.layout(maxWidth: w - 72);
     titleTp.paint(canvas, Offset(36, h - barH - 20 + 14));
@@ -1112,7 +1112,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
             fontWeight: i == lines.length - 1 ? FontWeight.w400 : FontWeight.w500,
           ),
         ),
-        textDirection: TextDirection.ltr,
+      textDirection: ui.TextDirection.ltr,
       );
       tp.layout(maxWidth: w - 72);
       tp.paint(canvas, Offset(36, lineY));
@@ -1347,7 +1347,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         ),
         clipBehavior: Clip.antiAlias,
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Column(
             children: [
               Padding(
@@ -1476,9 +1476,6 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                       ),
                     ),
                   ],
-                      ),
-                    ),
-                  ],
                 ),
               ),
               if (_error != null && _showPreview)
@@ -1486,6 +1483,9 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                   padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
                   child: Text(_error!, style: theme.textTheme.bodySmall?.copyWith(color: tokens.danger), maxLines: 2),
                 ),
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/biometric_credential_store.dart';
 import '../../../core/auth/saved_accounts_service.dart';
 import '../../../core/fcm/providers.dart';
+import '../../../core/models/app_role.dart';
 import '../../../core/models/auth_session.dart';
 import '../../../core/models/guard_pin_status.dart';
 import '../../../core/network/providers.dart';

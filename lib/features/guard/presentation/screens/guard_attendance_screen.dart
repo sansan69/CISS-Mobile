@@ -534,6 +534,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     try {
       await LiveLocationService().setLocation(
         GuardLocationData(
+          employeeDocId: profile.id,
           employeeId: profile.employeeId,
           guardName: profile.fullName,
           siteId: site.id,

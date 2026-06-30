@@ -383,6 +383,10 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
 
       final repo = ref.read(mobileRepositoryProvider);
       final employee = await repo.fetchAttendanceEmployee(employeeId);
+      if (employee == null) {
+        setState(() { _error = 'Employee not found.'; _loading = false; });
+        return;
+      }
       final sites = await repo.fetchAttendanceSites();
 
       Position? position;
@@ -878,6 +882,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
     try {
       await LiveLocationService().setLocation(
         GuardLocationData(
+          employeeDocId: employee.id,
           employeeId: employee.employeeCode ?? employee.id,
           guardName: employee.fullName,
           siteId: site.id,

@@ -181,15 +181,6 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
     }
   }
 
-  Future<void> _pickImage(StateSetter setField, File? currentFile, {bool camera = false}) async {
-    final picker = ImagePicker();
-    final source = camera ? ImageSource.camera : ImageSource.gallery;
-    final picked = await picker.pickImage(source: source, maxWidth: 1024, maxHeight: 1024, imageQuality: 70);
-    if (picked != null) {
-      setField(File(picked.path));
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
@@ -513,13 +504,13 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
             ),
           ),
         TextButton.icon(
-          onPressed: () => _pickImage((f) => onPicked(f), current),
+          onPressed: () => _pickImageFromGallery(onPicked),
           icon: const Icon(Icons.photo_library, size: 18),
           label: const Text('Gallery'),
         ),
         const SizedBox(width: 8),
         TextButton.icon(
-          onPressed: () => _pickImage((f) => onPicked(f), current, camera: true),
+          onPressed: () => _pickImageFromCamera(onPicked),
           icon: const Icon(Icons.camera_alt, size: 18),
           label: const Text('Camera'),
         ),
@@ -531,5 +522,17 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
       ]),
       const SizedBox(height: 14),
     ]);
+  }
+
+  Future<void> _pickImageFromGallery(ValueChanged<File?> onPicked) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 1024, maxHeight: 1024, imageQuality: 70);
+    if (picked != null) onPicked(File(picked.path));
+  }
+
+  Future<void> _pickImageFromCamera(ValueChanged<File?> onPicked) async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.camera, maxWidth: 1024, maxHeight: 1024, imageQuality: 70);
+    if (picked != null) onPicked(File(picked.path));
   }
 }
