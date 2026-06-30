@@ -10,6 +10,7 @@ import '../../../core/fcm/providers.dart';
 import '../../../core/models/auth_session.dart';
 import '../../../core/models/guard_pin_status.dart';
 import '../../../core/network/providers.dart';
+import '../../../app/theme/theme_mode_controller.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Session notifier — owns the logged-in session state.
@@ -177,6 +178,9 @@ class AuthController {
           password: pin,
         ),
       );
+      unawaited(
+        _ref.read(appSettingsControllerProvider.notifier).setBiometricsEnabled(true),
+      );
     }
 
     return session;
@@ -241,6 +245,9 @@ class AuthController {
           password: password,
         ),
       );
+      unawaited(
+        _ref.read(appSettingsControllerProvider.notifier).setBiometricsEnabled(true),
+      );
     }
 
     return session;
@@ -297,6 +304,48 @@ class AuthController {
       role: role,
       loginId: loginId,
     );
+  }
+
+  Future<AuthSession> signInAsAdminOrClient({
+    required String email,
+    required String password,
+    bool saveForBiometric = false,
+  }) async {
+    final session = await _ref
+        .read(mobileRepositoryProvider)
+        .signInAdminOrClient(email: email, password: password);
+
+    _ref.read(authSessionProvider.notifier).setSession(session);
+    unawaited(
+      _ref.read(notificationServiceProvider).refreshTopicSubscription(),
+    );
+
+    final trimmedEmail = email.trim();
+    final roleLabel = session.role == AppRole.admin ? 'admin' : 'client';
+    unawaited(_ref.read(savedAccountsServiceProvider).saveAccount(
+      SavedAccount(
+        role: roleLabel,
+        loginId: trimmedEmail,
+        displayName: session.displayName,
+        lastLoginAt: DateTime.now(),
+        biometricEnabled: saveForBiometric,
+      ),
+    ));
+
+    if (saveForBiometric) {
+      unawaited(
+        _ref.read(biometricCredentialStoreProvider).saveCredentials(
+          role: roleLabel,
+          loginId: trimmedEmail,
+          password: password,
+        ),
+      );
+      unawaited(
+        _ref.read(appSettingsControllerProvider.notifier).setBiometricsEnabled(true),
+      );
+    }
+
+    return session;
   }
 
   Future<void> signOut() async {
