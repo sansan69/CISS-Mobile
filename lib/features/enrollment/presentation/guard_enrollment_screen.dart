@@ -1,13 +1,16 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/haptics.dart';
+import '../../../core/network/api_config.dart';
 
-/// Guard self-enrollment screen.
-/// Multi-step form: Personal → Documents → Review → Submit.
-///
-/// Mirrors web app's /enroll page in a mobile-friendly format.
 class GuardEnrollmentScreen extends StatefulWidget {
   const GuardEnrollmentScreen({super.key});
 
@@ -20,31 +23,51 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
   bool _loading = false;
   String? _error;
 
-  // Step 1: Personal
+  final _formKey = GlobalKey<FormState>();
+
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
+  final _fatherNameCtrl = TextEditingController();
+  final _motherNameCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController();
+  final _idNumberCtrl = TextEditingController();
+  final _bankAccountCtrl = TextEditingController();
+  final _ifscCtrl = TextEditingController();
+  final _bankNameCtrl = TextEditingController();
+
   String? _gender;
   String _district = '';
-
-  // Step 2: Documents
+  String? _maritalStatus;
+  DateTime? _dateOfBirth;
+  String? _educationalQualification;
+  String _clientName = '';
   String _idProofType = 'Aadhar Card';
-  final _idNumberCtrl = TextEditingController();
+  String _addressProofType = 'Voter ID';
 
-  final _formKey = GlobalKey<FormState>();
+  File? _profilePicture;
+  File? _signature;
+  File? _idFront;
+  File? _idBack;
+  File? _addressFront;
+  File? _addressBack;
 
   static const _genders = ['Male', 'Female', 'Other'];
-
+  static const _maritalStatuses = ['Married', 'Unmarried'];
+  static const _educationOptions = [
+    'Below 10th', '10th Pass', '12th Pass', 'Graduate', 'Post Graduate', 'ITI', 'Diploma', 'Any Other Qualification',
+  ];
   static const _keralaDistricts = [
     'Alappuzha', 'Ernakulam', 'Idukki', 'Kannur', 'Kasaragod',
     'Kollam', 'Kottayam', 'Kozhikode', 'Malappuram', 'Palakkad',
     'Pathanamthitta', 'Thiruvananthapuram', 'Thrissur', 'Wayanad',
   ];
+  static const _idTypes = ['Aadhar Card', 'PAN Card', 'Voter ID', 'Passport', 'Driving License'];
+  static const _clientNames = ['TCS', 'J & K Bank', 'Logiware', 'Geodis India Ltd.'];
 
-  static const _idTypes = [
-    'Aadhar Card', 'PAN Card', 'Voter ID', 'Passport', 'Driving License'
-  ];
+  int get _totalSteps => 5;
+  bool get _isLastStep => _step == _totalSteps - 1;
 
   @override
   void dispose() {
@@ -52,87 +75,125 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
     _lastNameCtrl.dispose();
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
+    _fatherNameCtrl.dispose();
+    _motherNameCtrl.dispose();
+    _addressCtrl.dispose();
     _idNumberCtrl.dispose();
+    _bankAccountCtrl.dispose();
+    _ifscCtrl.dispose();
+    _bankNameCtrl.dispose();
     super.dispose();
   }
 
-  bool get _isLastStep => _step == 2;
-  int get _totalSteps => 3;
+  Future<String> _uploadFile(File file, String folder) async {
+    final phone = _phoneCtrl.text.trim();
+    final ext = file.path.split('.').last;
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final path = 'enrollments/$phone/$folder/${timestamp}_$folder.$ext';
 
-  void _next() {
-    if (_formKey.currentState!.validate()) {
-      if (_isLastStep) {
-        _submit();
-      } else {
-        Haptics.selection();
-        setState(() {
-          _step++;
-          _error = null;
-        });
-      }
+    final uri = Uri.parse('${ApiConfig.baseUrl}/api/public/enroll/upload');
+    final request = http.MultipartRequest('POST', uri);
+    request.fields['path'] = path;
+    request.files.add(await http.MultipartFile.fromPath('file', file.path));
+
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode != 200) {
+      throw Exception('Upload failed: ${response.body}');
     }
-  }
-
-  void _prev() {
-    setState(() {
-      _step--;
-      _error = null;
-    });
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return data['url'] as String;
   }
 
   Future<void> _submit() async {
-    setState(() {
-      _loading = true;
-      _error = null;
-    });
+    if (!_formKey.currentState!.validate()) return;
+    Haptics.medium();
+    setState(() { _loading = true; _error = null; });
 
     try {
-      // Build enrollment payload
+      final profilePicUrl = _profilePicture != null ? await _uploadFile(_profilePicture!, 'profilePictures') : '';
+      final signatureUrl = _signature != null ? await _uploadFile(_signature!, 'signatures') : '';
+      final idFrontUrl = _idFront != null ? await _uploadFile(_idFront!, 'idProofs') : '';
+      final idBackUrl = _idBack != null ? await _uploadFile(_idBack!, 'idProofs') : '';
+      final addrFrontUrl = _addressFront != null ? await _uploadFile(_addressFront!, 'addressProofs') : '';
+      final addrBackUrl = _addressBack != null ? await _uploadFile(_addressBack!, 'addressProofs') : '';
+
       final payload = <String, dynamic>{
         'firstName': _firstNameCtrl.text.trim(),
         'lastName': _lastNameCtrl.text.trim(),
-        'phone': _phoneCtrl.text.trim(),
-        'email': _emailCtrl.text.trim(),
+        'phoneNumber': _phoneCtrl.text.trim(),
+        'emailAddress': _emailCtrl.text.trim().isEmpty ? null : _emailCtrl.text.trim(),
+        'fatherName': _fatherNameCtrl.text.trim(),
+        'motherName': _motherNameCtrl.text.trim(),
         'gender': _gender,
+        'maritalStatus': _maritalStatus,
+        'dateOfBirth': _dateOfBirth?.toIso8601String(),
+        'educationalQualification': _educationalQualification,
         'district': _district,
-        'idProofType': _idProofType,
-        'idProofNumber': _idNumberCtrl.text.trim(),
+        'clientName': _clientName,
+        'fullAddress': _addressCtrl.text.trim(),
+        'identityProofType': _idProofType,
+        'identityProofNumber': _idNumberCtrl.text.trim(),
+        'identityProofUrlFront': idFrontUrl,
+        'identityProofUrlBack': idBackUrl,
+        'addressProofType': _addressProofType,
+        'addressProofNumber': _idNumberCtrl.text.trim(),
+        'addressProofUrlFront': addrFrontUrl,
+        'addressProofUrlBack': addrBackUrl,
+        'profilePictureUrl': profilePicUrl,
+        'signatureUrl': signatureUrl,
+        'bankAccountNumber': _bankAccountCtrl.text.trim().isEmpty ? null : _bankAccountCtrl.text.trim(),
+        'ifscCode': _ifscCtrl.text.trim().isEmpty ? null : _ifscCtrl.text.trim(),
+        'bankName': _bankNameCtrl.text.trim().isEmpty ? null : _bankNameCtrl.text.trim(),
+        'joiningDate': DateTime.now().toIso8601String(),
+        'termsAccepted': true,
       };
 
-      // TODO: Call enrollment API when backend endpoint is ready
-      // Currently the web app's enrollment is a client-side flow with Firebase
-      // direct writes. Mobile enrollment needs a dedicated API endpoint.
-      // For now, show success and log the payload.
-
-      if (!mounted) return;
-      setState(() => _loading = false);
-
-      Haptics.medium();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Enrollment submitted successfully!'),
-          backgroundColor: CissThemeTokens.of(context).success,
-          behavior: SnackBarBehavior.floating,
-        ),
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/employees/enroll');
+      final response = await http.post(
+        uri,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
       );
 
-      // Navigate back
-      if (mounted) Navigator.of(context).pop();
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        Haptics.success();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Enrolled successfully!'),
+            backgroundColor: CissThemeTokens.of(context).success,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        Navigator.of(context).pop();
+      } else {
+        final body = jsonDecode(response.body) as Map<String, dynamic>;
+        throw Exception(body['error'] ?? 'Enrollment failed (HTTP ${response.statusCode})');
+      }
     } catch (e) {
       if (!mounted) return;
       Haptics.error();
-      setState(() {
-        _loading = false;
-        _error = 'Failed to submit enrollment: $e';
-      });
+      setState(() => _error = 'Failed to submit enrollment: $e');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _pickImage(StateSetter setField, File? currentFile, {bool camera = false}) async {
+    final picker = ImagePicker();
+    final source = camera ? ImageSource.camera : ImageSource.gallery;
+    final picked = await picker.pickImage(source: source, maxWidth: 1024, maxHeight: 1024, imageQuality: 70);
+    if (picked != null) {
+      setField(File(picked.path));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    final isLast = _isLastStep;
+    final stepLabels = ['Client', 'Personal', 'Documents', 'Bank', 'Review'];
 
     return Scaffold(
       backgroundColor: tokens.canvas,
@@ -148,14 +209,12 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
           key: _formKey,
           child: Column(
             children: [
-              // Progress bar
               LinearProgressIndicator(
                 value: (_step + 1) / _totalSteps,
                 backgroundColor: tokens.surfaceMuted,
                 color: tokens.primary,
                 minHeight: 3,
               ),
-              // Step indicator
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                 child: Row(
@@ -165,104 +224,70 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
                       child: Row(
                         children: [
                           Container(
-                            width: 28,
-                            height: 28,
+                            width: 28, height: 28,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               color: isActive ? tokens.primary : tokens.surfaceMuted,
                             ),
                             child: Center(
-                              child: isActive
-                                  ? Text('${i + 1}',
-                                      style: TextStyle(
-                                          color: tokens.canvas,
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w700))
-                                  : Text('${i + 1}',
-                                      style: TextStyle(
-                                          color: tokens.inkMuted, fontSize: 13)),
+                              child: Text('${i + 1}',
+                                style: TextStyle(color: isActive ? tokens.canvas : tokens.inkMuted, fontSize: 13, fontWeight: FontWeight.w700)),
                             ),
                           ),
                           if (i < _totalSteps - 1)
-                            Expanded(
-                              child: Container(
-                                height: 2,
-                                color: i < _step ? tokens.primary : tokens.surfaceMuted,
-                              ),
-                            ),
+                            Expanded(child: Container(height: 2, color: i < _step ? tokens.primary : tokens.surfaceMuted)),
                         ],
                       ),
                     );
                   }),
                 ),
               ),
-              // Step titles
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 child: Text(
-                  ['Personal Info', 'Documents', 'Review'][_step],
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: tokens.ink,
-                  ),
+                  stepLabels[_step],
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: tokens.ink),
                 ),
               ),
-              // Error
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
+                    width: double.infinity, padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: tokens.danger.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Text(_error!,
-                        style: TextStyle(color: tokens.danger, fontSize: 13)),
+                    child: Text(_error!, style: TextStyle(color: tokens.danger, fontSize: 13)),
                   ),
                 ),
-              // Step content
               Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: _buildStep(),
-                ),
+                child: SingleChildScrollView(padding: const EdgeInsets.all(20), child: _buildStep()),
               ),
-              // Bottom buttons
               Container(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
                 decoration: BoxDecoration(
                   color: tokens.canvas,
                   border: Border(top: BorderSide(color: tokens.border.withValues(alpha: 0.3))),
                 ),
-                child: Row(
-                  children: [
-                    if (_step > 0)
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: _loading ? null : _prev,
-                          child: const Text('Back'),
-                        ),
-                      ),
-                    if (_step > 0) const SizedBox(width: 12),
-                    Expanded(
-                      flex: 2,
-                      child: FilledButton(
-                        onPressed: _loading ? null : _next,
-                        child: _loading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white),
-                              )
-                            : Text(isLast ? 'Submit' : 'Continue'),
-                      ),
+                child: Row(children: [
+                  if (_step > 0)
+                    Expanded(child: OutlinedButton(onPressed: _loading ? null : () => setState(() { _step--; _error = null; }), child: const Text('Back'))),
+                  if (_step > 0) const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton(
+                      onPressed: _loading ? null : () {
+                        if (_formKey.currentState!.validate()) {
+                          if (_isLastStep) { _submit(); } else { Haptics.selection(); setState(() { _step++; _error = null; }); }
+                        }
+                      },
+                      child: _loading
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : Text(_isLastStep ? 'Submit' : 'Continue'),
                     ),
-                  ],
-                ),
+                  ),
+                ]),
               ),
             ],
           ),
@@ -273,214 +298,238 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
 
   Widget _buildStep() {
     switch (_step) {
-      case 0:
-        return _buildPersonalStep();
-      case 1:
-        return _buildDocumentsStep();
-      case 2:
-        return _buildReviewStep();
-      default:
-        return const SizedBox.shrink();
+      case 0: return _buildClientStep();
+      case 1: return _buildPersonalStep();
+      case 2: return _buildDocumentsStep();
+      case 3: return _buildBankStep();
+      case 4: return _buildReviewStep();
+      default: return const SizedBox.shrink();
     }
   }
 
+  Widget _buildClientStep() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      DropdownButtonFormField<String>(
+        value: _clientName.isEmpty ? null : _clientName,
+        decoration: const InputDecoration(labelText: 'Client *', prefixIcon: Icon(Icons.business)),
+        items: _clientNames.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+        onChanged: (v) => setState(() => _clientName = v ?? ''),
+        validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+      ),
+      const SizedBox(height: 14),
+      DropdownButtonFormField<String>(
+        value: _district.isEmpty ? null : _district,
+        decoration: const InputDecoration(labelText: 'District *', prefixIcon: Icon(Icons.map)),
+        items: _keralaDistricts.map((d) => DropdownMenuItem(value: d, child: Text(d))).toList(),
+        onChanged: (v) => setState(() => _district = v ?? ''),
+        validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+      ),
+    ]);
+  }
+
   Widget _buildPersonalStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextFormField(
-          controller: _firstNameCtrl,
-          decoration: const InputDecoration(
-            labelText: 'First Name *',
-            prefixIcon: Icon(Icons.person_outline),
-          ),
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        Expanded(child: TextFormField(
+          controller: _firstNameCtrl, decoration: const InputDecoration(labelText: 'First Name *', prefixIcon: Icon(Icons.person_outline)),
           textCapitalization: TextCapitalization.words,
           validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-        ),
-        const SizedBox(height: 14),
-        TextFormField(
-          controller: _lastNameCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Last Name *',
-            prefixIcon: Icon(Icons.person_outline),
-          ),
+        )),
+        const SizedBox(width: 12),
+        Expanded(child: TextFormField(
+          controller: _lastNameCtrl, decoration: const InputDecoration(labelText: 'Last Name *', prefixIcon: Icon(Icons.person_outline)),
           textCapitalization: TextCapitalization.words,
           validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+        )),
+      ]),
+      const SizedBox(height: 14),
+      TextFormField(
+        controller: _phoneCtrl, decoration: const InputDecoration(labelText: 'Phone *', prefixIcon: Icon(Icons.phone), hintText: '10-digit mobile'),
+        keyboardType: TextInputType.phone, inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
+        validator: (v) => (v == null || v.trim().length != 10) ? '10 digits required' : null,
+      ),
+      const SizedBox(height: 14),
+      TextFormField(
+        controller: _emailCtrl, decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
+        keyboardType: TextInputType.emailAddress,
+      ),
+      const SizedBox(height: 14),
+      Row(children: [
+        Expanded(child: TextFormField(
+          controller: _fatherNameCtrl, decoration: const InputDecoration(labelText: "Father's Name *", prefixIcon: Icon(Icons.person)),
+          textCapitalization: TextCapitalization.words,
+          validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+        )),
+        const SizedBox(width: 12),
+        Expanded(child: TextFormField(
+          controller: _motherNameCtrl, decoration: const InputDecoration(labelText: "Mother's Name *", prefixIcon: Icon(Icons.person)),
+          textCapitalization: TextCapitalization.words,
+          validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+        )),
+      ]),
+      const SizedBox(height: 14),
+      TextFormField(
+        readOnly: true,
+        decoration: InputDecoration(
+          labelText: 'Date of Birth *',
+          prefixIcon: const Icon(Icons.calendar_today),
+          hintText: _dateOfBirth != null ? DateFormat('dd-MM-yyyy').format(_dateOfBirth!) : 'Tap to select',
         ),
-        const SizedBox(height: 14),
-        TextFormField(
-          controller: _phoneCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Phone Number *',
-            prefixIcon: Icon(Icons.phone_outlined),
-          ),
-          keyboardType: TextInputType.phone,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
-          validator: (v) {
-            if (v == null || v.trim().isEmpty) return 'Required';
-            if (v.trim().length < 10) return 'Enter 10-digit number';
-            return null;
-          },
-        ),
-        const SizedBox(height: 14),
-        TextFormField(
-          controller: _emailCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Email (optional)',
-            prefixIcon: Icon(Icons.email_outlined),
-          ),
-          keyboardType: TextInputType.emailAddress,
-        ),
-        const SizedBox(height: 14),
-        DropdownButtonFormField<String>(
-          value: _gender,
-          decoration: const InputDecoration(
-            labelText: 'Gender *',
-            prefixIcon: Icon(Icons.people_outline),
-          ),
-          items: _genders.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
-          onChanged: (v) => setState(() => _gender = v),
-          validator: (v) => v == null ? 'Required' : null,
-        ),
-        const SizedBox(height: 14),
-        DropdownButtonFormField<String>(
-          value: _district.isNotEmpty ? _district : null,
-          decoration: const InputDecoration(
-            labelText: 'District *',
-            prefixIcon: Icon(Icons.location_on_outlined),
-          ),
-          items: _keralaDistricts
-              .map((d) => DropdownMenuItem(value: d, child: Text(d)))
-              .toList(),
-          onChanged: (v) => setState(() => _district = v ?? ''),
-          validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-        ),
-      ],
-    );
+        onTap: () async {
+          final picked = await showDatePicker(
+            context: context,
+            initialDate: _dateOfBirth ?? DateTime(1990, 1, 1),
+            firstDate: DateTime(1950),
+            lastDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
+          );
+          if (picked != null) setState(() => _dateOfBirth = picked);
+        },
+        validator: (_) => _dateOfBirth == null ? 'Required' : null,
+      ),
+      const SizedBox(height: 14),
+      DropdownButtonFormField<String>(
+        decoration: const InputDecoration(labelText: 'Gender *', prefixIcon: Icon(Icons.wc)),
+        items: _genders.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+        onChanged: (v) => setState(() => _gender = v),
+        validator: (v) => v == null ? 'Required' : null,
+      ),
+      const SizedBox(height: 14),
+      DropdownButtonFormField<String>(
+        decoration: const InputDecoration(labelText: 'Marital Status *', prefixIcon: Icon(Icons.favorite_border)),
+        items: _maritalStatuses.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+        onChanged: (v) => setState(() => _maritalStatus = v),
+        validator: (v) => v == null ? 'Required' : null,
+      ),
+      const SizedBox(height: 14),
+      DropdownButtonFormField<String>(
+        decoration: const InputDecoration(labelText: 'Education *', prefixIcon: Icon(Icons.school)),
+        items: _educationOptions.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+        onChanged: (v) => setState(() => _educationalQualification = v),
+        validator: (v) => v == null ? 'Required' : null,
+      ),
+      const SizedBox(height: 14),
+      TextFormField(
+        controller: _addressCtrl, decoration: const InputDecoration(labelText: 'Full Address *', prefixIcon: Icon(Icons.home)),
+        maxLines: 3, textCapitalization: TextCapitalization.sentences,
+        validator: (v) => (v == null || v.trim().length < 10) ? 'Min 10 characters' : null,
+      ),
+      const SizedBox(height: 14),
+      _buildImageField('Profile Photo', _profilePicture, (f) => setState(() => _profilePicture = f)),
+    ]);
   }
 
   Widget _buildDocumentsStep() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        DropdownButtonFormField<String>(
-          value: _idProofType,
-          decoration: const InputDecoration(
-            labelText: 'ID Proof Type *',
-            prefixIcon: Icon(Icons.badge_outlined),
-          ),
-          items: _idTypes
-              .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-              .toList(),
-          onChanged: (v) => setState(() => _idProofType = v ?? 'Aadhar Card'),
-        ),
-        const SizedBox(height: 14),
-        TextFormField(
-          controller: _idNumberCtrl,
-          decoration: InputDecoration(
-            labelText: '$_idProofType Number *',
-            prefixIcon: const Icon(Icons.numbers),
-          ),
-          validator: (v) {
-            if (v == null || v.trim().isEmpty) return 'Required';
-            if (_idProofType == 'Aadhar Card' && v.trim().length != 12) {
-              return 'Aadhar must be 12 digits';
-            }
-            return null;
-          },
-        ),
-        const SizedBox(height: 24),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: CissThemeTokens.of(context).warning.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: CissThemeTokens.of(context).warning.withValues(alpha: 0.2),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.camera_alt_outlined,
-                  color: CissThemeTokens.of(context).warning, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Photo capture coming soon. For now, submit basic details and your supervisor will contact you.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: CissThemeTokens.of(context).inkMuted,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      DropdownButtonFormField<String>(
+        value: _idProofType,
+        decoration: const InputDecoration(labelText: 'ID Proof Type *', prefixIcon: Icon(Icons.badge)),
+        items: _idTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+        onChanged: (v) => setState(() => _idProofType = v ?? _idProofType),
+      ),
+      const SizedBox(height: 14),
+      TextFormField(
+        controller: _idNumberCtrl, decoration: const InputDecoration(labelText: 'ID Proof Number *', prefixIcon: Icon(Icons.tag)),
+        validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+      ),
+      const SizedBox(height: 14),
+      _buildImageField('ID Proof Front', _idFront, (f) => setState(() => _idFront = f)),
+      const SizedBox(height: 14),
+      _buildImageField('ID Proof Back', _idBack, (f) => setState(() => _idBack = f)),
+      const SizedBox(height: 14),
+      DropdownButtonFormField<String>(
+        value: _addressProofType,
+        decoration: const InputDecoration(labelText: 'Address Proof Type *', prefixIcon: Icon(Icons.map)),
+        items: _idTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+        onChanged: (v) => setState(() => _addressProofType = v ?? _addressProofType),
+      ),
+      const SizedBox(height: 14),
+      _buildImageField('Address Proof Front', _addressFront, (f) => setState(() => _addressFront = f)),
+      const SizedBox(height: 14),
+      _buildImageField('Address Proof Back', _addressBack, (f) => setState(() => _addressBack = f)),
+      const SizedBox(height: 14),
+      _buildImageField('Signature', _signature, (f) => setState(() => _signature = f)),
+    ]);
+  }
+
+  Widget _buildBankStep() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      TextFormField(
+        controller: _bankAccountCtrl, decoration: const InputDecoration(labelText: 'Bank Account Number', prefixIcon: Icon(Icons.account_balance), hintText: 'Optional'),
+        keyboardType: TextInputType.number, inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+      ),
+      const SizedBox(height: 14),
+      TextFormField(
+        controller: _ifscCtrl, decoration: const InputDecoration(labelText: 'IFSC Code', prefixIcon: Icon(Icons.tag), hintText: 'Optional'),
+        textCapitalization: TextCapitalization.characters,
+      ),
+      const SizedBox(height: 14),
+      TextFormField(
+        controller: _bankNameCtrl, decoration: const InputDecoration(labelText: 'Bank Name', prefixIcon: Icon(Icons.business), hintText: 'Optional'),
+        textCapitalization: TextCapitalization.words,
+      ),
+    ]);
   }
 
   Widget _buildReviewStep() {
     final tokens = CissThemeTokens.of(context);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _reviewRow(tokens, 'Name', '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}'),
+      _reviewRow(tokens, 'Phone', _phoneCtrl.text.trim()),
+      _reviewRow(tokens, 'Client', _clientName),
+      _reviewRow(tokens, 'District', _district),
+      _reviewRow(tokens, 'Gender', _gender ?? ''),
+      _reviewRow(tokens, 'DOB', _dateOfBirth != null ? DateFormat('dd-MM-yyyy').format(_dateOfBirth!) : ''),
+      _reviewRow(tokens, 'Documents', '$_idProofType / $_addressProofType'),
+      const SizedBox(height: 16),
+      Text(
+        'By submitting you confirm that all information provided is accurate.',
+        style: TextStyle(fontSize: 12, color: tokens.inkMuted, fontStyle: FontStyle.italic),
+        textAlign: TextAlign.center,
+      ),
+    ]);
+  }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _reviewField('First Name', _firstNameCtrl.text.trim()),
-        _reviewField('Last Name', _lastNameCtrl.text.trim()),
-        _reviewField('Phone', _phoneCtrl.text.trim()),
-        _reviewField('Email', _emailCtrl.text.trim().isEmpty ? '—' : _emailCtrl.text.trim()),
-        _reviewField('Gender', _gender ?? '—'),
-        _reviewField('District', _district),
-        const Divider(height: 24),
-        _reviewField('ID Type', _idProofType),
-        _reviewField('ID Number', _idNumberCtrl.text.trim()),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: tokens.success.withValues(alpha: 0.06),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: tokens.success.withValues(alpha: 0.2)),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.check_circle_outline, color: tokens.success, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Review your details above. Tap Submit to send your enrollment request.',
-                  style: TextStyle(fontSize: 12, color: tokens.inkMuted),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
+  Widget _reviewRow(CissThemeTokens tokens, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(width: 100, child: Text(label, style: TextStyle(fontSize: 13, color: tokens.inkMuted, fontWeight: FontWeight.w500))),
+        Expanded(child: Text(value, style: TextStyle(fontSize: 13, color: tokens.ink))),
+      ]),
     );
   }
 
-  Widget _reviewField(String label, String value) {
-    final tokens = CissThemeTokens.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(label,
-                style: TextStyle(fontSize: 13, color: tokens.inkMuted)),
+  Widget _buildImageField(String label, File? current, ValueChanged<File?> onPicked) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: TextStyle(fontSize: 13, color: CissThemeTokens.of(context).inkMuted)),
+      const SizedBox(height: 6),
+      Row(children: [
+        if (current != null)
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.file(current, width: 64, height: 64, fit: BoxFit.cover),
+            ),
           ),
-          Expanded(
-            child: Text(value,
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: tokens.ink)),
+        TextButton.icon(
+          onPressed: () => _pickImage((f) => onPicked(f), current),
+          icon: const Icon(Icons.photo_library, size: 18),
+          label: const Text('Gallery'),
+        ),
+        const SizedBox(width: 8),
+        TextButton.icon(
+          onPressed: () => _pickImage((f) => onPicked(f), current, camera: true),
+          icon: const Icon(Icons.camera_alt, size: 18),
+          label: const Text('Camera'),
+        ),
+        if (current != null)
+          IconButton(
+            icon: const Icon(Icons.close, size: 18),
+            onPressed: () => onPicked(null),
           ),
-        ],
-      ),
-    );
+      ]),
+      const SizedBox(height: 14),
+    ]);
   }
 }
