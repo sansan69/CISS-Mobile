@@ -244,7 +244,26 @@ class GuardMoreScreen extends ConsumerWidget {
         FilledButton(
           onPressed: () {
             Haptics.heavy();
-            ref.read(authControllerProvider).signOut();
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Sign out?'),
+                content: const Text('You will be signed out of your account.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      ref.read(authControllerProvider).signOut();
+                    },
+                    child: const Text('Sign out'),
+                  ),
+                ],
+              ),
+            );
           },
           style: FilledButton.styleFrom(
             backgroundColor: tokens.dangerSoft,

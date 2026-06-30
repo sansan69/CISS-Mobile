@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/theme/app_tokens.dart';
@@ -20,9 +21,24 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  final _secureStorage = const FlutterSecureStorage();
   bool _loading = false;
   bool _obscurePw = true;
+  bool _rememberEmail = true;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedEmail();
+  }
+
+  Future<void> _loadSavedEmail() async {
+    final saved = await _secureStorage.read(key: 'admin_remembered_email');
+    if (saved != null && saved.isNotEmpty) {
+      _emailCtrl.text = saved;
+    }
+  }
 
   @override
   void dispose() {
@@ -53,6 +69,16 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
 
       // Trigger session resolution then navigate
       ref.invalidate(authSessionProvider);
+
+      if (_rememberEmail) {
+        await _secureStorage.write(
+          key: 'admin_remembered_email',
+          value: _emailCtrl.text.trim(),
+        );
+      } else {
+        await _secureStorage.delete(key: 'admin_remembered_email');
+      }
+
       await Future.delayed(const Duration(milliseconds: 300));
 
       if (!mounted) return;
@@ -182,6 +208,30 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
                           (v == null || v.isEmpty) ? 'Required' : null,
                     ),
                     const SizedBox(height: 24),
+
+                    // Remember me
+                    Row(
+                      children: [
+                        SizedBox(
+                          height: 24,
+                          width: 24,
+                          child: Checkbox(
+                            value: _rememberEmail,
+                            onChanged: (v) =>
+                                setState(() => _rememberEmail = v ?? true),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        GestureDetector(
+                          onTap: () => setState(
+                              () => _rememberEmail = !_rememberEmail),
+                          child: Text('Remember email',
+                              style: TextStyle(
+                                  fontSize: 14, color: tokens.inkMuted)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
 
                     // Submit
                     SizedBox(

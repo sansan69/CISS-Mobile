@@ -441,6 +441,10 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
               lng: _site!.lng!,
               radiusMeters: _site!.geofenceRadiusMeters.toDouble(),
               employeeId: profile.employeeId,
+              employeeDocId: profile.id,
+              guardName: profile.fullName,
+              clientName: profile.clientName,
+              district: profile.district,
             );
           } else {
             debugPrint('Tracking skipped: site coordinates missing.');

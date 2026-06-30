@@ -351,7 +351,26 @@ class _ClientDashboardScreenState
                   child: OutlinedButton.icon(
                     onPressed: () {
                       Haptics.heavy();
-                      ref.read(authControllerProvider).signOut();
+                      showDialog(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Sign out?'),
+                          content: const Text('You will be signed out of your account.'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: const Text('Cancel'),
+                            ),
+                            FilledButton(
+                              onPressed: () {
+                                Navigator.of(ctx).pop();
+                                ref.read(authControllerProvider).signOut();
+                              },
+                              child: const Text('Sign out'),
+                            ),
+                          ],
+                        ),
+                      );
                     },
                     icon: const Icon(Icons.logout_rounded, size: 18),
                     label: const Text('Sign Out'),

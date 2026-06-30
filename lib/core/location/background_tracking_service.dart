@@ -50,6 +50,8 @@ class BackgroundTrackingService {
     required double lng,
     required double radiusMeters,
     required String employeeId,
+    String? employeeDocId,
+    String? guardName,
     String? clientName,
     String? district,
   }) async {
@@ -80,6 +82,8 @@ class BackgroundTrackingService {
       'lng': lng,
       'radius': radiusMeters,
       'employeeId': employeeId,
+      'employeeDocId': employeeDocId ?? employeeId,
+      'guardName': guardName ?? '',
       'clientName': clientName ?? '',
       'district': district ?? '',
     });
@@ -268,7 +272,7 @@ void onStart(ServiceInstance service) async {
             'accuracy': accuracy,
             'distanceFromSite': distance,
             'isOutOfZone': isOut,
-            'locationSource': locationSource,
+            'batteryLevel': null,
             'heartbeatCount': heartbeatCount,
             'timestamp': DateTime.now().toIso8601String(),
           }),
@@ -306,13 +310,15 @@ void onStart(ServiceInstance service) async {
       // ── Firestore live location update (with retry) ──────────────────────
       for (int attempt = 0; attempt < 3; attempt++) {
         try {
-          final employeeId = siteContext!['employeeId'] as String;
+          final employeeDocId = siteContext!['employeeDocId'] as String? ?? siteContext!['employeeId'] as String;
+          final employeeId = siteContext!['employeeId'] as String? ?? '';
           await FirebaseFirestore.instance
               .collection('guardLocations')
-              .doc(employeeId)
+              .doc(employeeDocId)
               .set({
+            'employeeDocId': employeeDocId,
             'employeeId': employeeId,
-            'guardName': siteContext!['guardName'] ?? '',
+            'guardName': siteContext!['guardName'] ?? employeeId,
             'siteId': siteContext!['siteId'],
             'siteName': siteContext!['siteName'],
             'clientName': siteContext!['clientName'] ?? '',
@@ -392,8 +398,8 @@ void onStart(ServiceInstance service) async {
         try {
           final traceRef = FirebaseFirestore.instance
               .collection('guardLocations')
-              .doc(siteContext!['employeeId'] as String)
-              .collection('movementTrace')
+              .doc(siteContext!['employeeDocId'] as String? ?? siteContext!['employeeId'] as String)
+              .collection('locationHistory')
               .doc();
           await traceRef.set({
             'lat': position.latitude,
