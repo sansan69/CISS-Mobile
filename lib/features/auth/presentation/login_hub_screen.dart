@@ -248,6 +248,17 @@ class _LoginHubScreenState extends State<LoginHubScreen>
                           ),
                         ),
                       ),
+                      const SizedBox(height: 6),
+                      GestureDetector(
+                        onTap: () => context.go('/region-select'),
+                        child: Text(
+                          'Change state',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: tokens.inkMuted,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),

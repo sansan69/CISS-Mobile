@@ -11,6 +11,7 @@ import '../../../core/models/auth_session.dart';
 import '../../../app/theme/theme_mode_controller.dart';
 import '../../../core/auth/biometric_service.dart';
 import '../../../core/brand.dart';
+import '../../../core/region/region_service.dart';
 import '../../../shared/widgets/auth/login_background.dart';
 import '../../field_officer/presentation/field_officer_shell.dart';
 import '../../guard/presentation/guard_shell.dart';
@@ -30,6 +31,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
   bool _isAuthenticating = false;
   bool _permissionsChecked = false;
   bool _bioTriggered = false;
+  bool _regionChecked = false;
   AuthSession? _lastSession;
 
   Future<void> _checkBiometrics(bool enabled) async {
@@ -134,6 +136,17 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
           _lastSession = session;
 
           if (session == null) {
+            if (!_regionChecked) {
+              _regionChecked = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                if (!mounted) return;
+                final saved = await ref.read(regionServiceProvider).getSavedRegion();
+                if (!mounted) return;
+                if (saved == null) {
+                  context.go('/region-select');
+                }
+              });
+            }
             return const LoginHubScreen();
           }
 

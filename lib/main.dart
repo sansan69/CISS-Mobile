@@ -13,6 +13,7 @@ import 'core/offline/offline_queue.dart';
 import 'core/offline/draft_service.dart';
 import 'core/sync/providers.dart';
 import 'core/sync/refresh_controller.dart';
+import 'core/region/region_service.dart';
 import 'app/theme/theme_mode_controller.dart';
 import 'firebase_options.dart';
 
@@ -35,6 +36,19 @@ Future<void> main() async {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+
+    // If a region was previously selected, initialize the regional Firebase app
+    try {
+      final savedRegion = await container.read(regionServiceProvider).getSavedRegion();
+      if (savedRegion != null && savedRegion != 'KL') {
+        final config = await container.read(regionServiceProvider).fetchRegionConfig(savedRegion);
+        if (config != null) {
+          await container.read(regionServiceProvider).initRegionalFirebase(config);
+        }
+      }
+    } catch (e) {
+      debugPrint('Regional Firebase init error: $e');
+    }
 
     // Android 14+ (API 34): startForeground() hard-crashes if POST_NOTIFICATIONS
     // is not granted. Skip background service initialization here on Android — it
