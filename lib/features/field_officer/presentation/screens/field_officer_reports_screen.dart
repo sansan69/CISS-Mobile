@@ -2,7 +2,6 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:dio/dio.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -92,7 +91,7 @@ class _FieldOfficerReportsScreenState
   }
 
   void _openVisitDetail(VisitReportModel report) {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final uid = ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
     final isAdmin = false; // FO shell is field-officer only
     final isOwner = report.fieldOfficerName.isNotEmpty; // Owner if FO name matches current user (we check by uid when available)
     showModalBottomSheet(
@@ -109,7 +108,7 @@ class _FieldOfficerReportsScreenState
   }
 
   void _openTrainingDetail(TrainingReportModel report) {
-    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final uid = ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1139,7 +1138,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         final stampedBytes = await _stampPhoto(entry.bytes, folder == 'visitReports' ? 'Site Visit' : 'Training Session');
         final ext = 'png';
         final safeName = '${timestamp}_photo_${urls.length}.$ext';
-        final uid = FirebaseAuth.instance.currentUser?.uid ?? 'unknown';
+        final uid = ref.read(firebaseAuthProvider).currentUser?.uid ?? 'unknown';
         final path = 'foReports/$folder/$uid/$safeName';
         final dataUrl = await ref
             .read(mobileRepositoryProvider)
@@ -1224,7 +1223,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         'siteId': selected.siteId,
         'siteName': selected.siteName,
         'district': selected.district,
-        'fieldOfficerName': FirebaseAuth.instance.currentUser?.displayName ?? '',
+        'fieldOfficerName': ref.read(firebaseAuthProvider).currentUser?.displayName ?? '',
         'status': _reportStatus,
       };
 
@@ -1272,7 +1271,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
             try {
               final ext = entry.mimeType.split('/').last;
               final safeName = '${timestamp}_client_report.$ext';
-              final uid = FirebaseAuth.instance.currentUser?.uid ?? 'unknown';
+              final uid = ref.read(firebaseAuthProvider).currentUser?.uid ?? 'unknown';
               final path = 'foReports/trainingReportFiles/$uid/$safeName';
               final dataUrl = await ref
                   .read(mobileRepositoryProvider)

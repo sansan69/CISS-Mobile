@@ -467,7 +467,9 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         } else {
           BackgroundTrackingService.stop();
           // Mark OUT in Firestore
-          LiveLocationService().markOut(profile.employeeId);
+          await LiveLocationService().markOut(
+            profile.id.isNotEmpty ? profile.id : profile.employeeId,
+          );
         }
 
         if (mounted) {

@@ -18,12 +18,14 @@ import '../models/payroll_models.dart';
 import '../models/report_models.dart';
 import '../models/training_models.dart';
 import 'api_client.dart';
+import '../region/region_service.dart';
 
 class MobileRepository {
-  MobileRepository(this._apiClient, this._auth);
+  MobileRepository(this._apiClient, this._auth, this._regionService);
 
   final ApiClient _apiClient;
   final FirebaseAuth _auth;
+  final RegionService _regionService;
 
   ApiClient get apiClient => _apiClient;
   User? get currentUser => _auth.currentUser;
@@ -427,7 +429,7 @@ class MobileRepository {
     }
 
     try {
-      await FirebaseFirestore.instance
+      await _regionService.activeFirestore
           .collection('fcmTokens')
           .doc('${user.uid}_mobile')
           .set(<String, dynamic>{
@@ -449,7 +451,7 @@ class MobileRepository {
       return const <Map<String, dynamic>>[];
     }
 
-    final snapshot = await FirebaseFirestore.instance
+    final snapshot = await _regionService.activeFirestore
         .collection('notifications')
         .where('recipientUid', isEqualTo: user.uid)
         .orderBy('createdAt', descending: true)
@@ -468,7 +470,7 @@ class MobileRepository {
     }
 
     try {
-      final docRef = FirebaseFirestore.instance
+      final docRef = _regionService.activeFirestore
           .collection('notifications')
           .doc(notifId.trim());
       final snapshot = await docRef.get();
@@ -495,7 +497,8 @@ class MobileRepository {
     }
 
     try {
-      final snapshot = await FirebaseFirestore.instance
+      final firestore = _regionService.activeFirestore;
+      final snapshot = await firestore
           .collection('notifications')
           .where('recipientUid', isEqualTo: user.uid)
           .limit(50)
@@ -505,7 +508,7 @@ class MobileRepository {
         return true;
       }
 
-      final batch = FirebaseFirestore.instance.batch();
+      final batch = firestore.batch();
       for (final doc in snapshot.docs) {
         if (doc.data()['read'] == true) continue;
         batch.update(doc.reference, <String, dynamic>{
@@ -998,6 +1001,33 @@ class MobileRepository {
 
   Future<Map<String, dynamic>> fetchAdminDashboard() async {
     return _getJson('/api/admin/dashboard');
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAdminGuards() async {
+    final data = await _getJson(
+      '/api/admin/employees',
+      queryParameters: const <String, dynamic>{'limit': 300},
+    );
+    final guards = data['employees'] as List<dynamic>? ?? const <dynamic>[];
+    return guards.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAdminAttendance() async {
+    final data = await _getJson(
+      '/api/admin/attendance',
+      queryParameters: const <String, dynamic>{'limit': 250},
+    );
+    final records = data['attendance'] as List<dynamic>? ?? const <dynamic>[];
+    return records.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<List<Map<String, dynamic>>> fetchAdminWorkOrders() async {
+    final data = await _getJson(
+      '/api/admin/work-orders',
+      queryParameters: const <String, dynamic>{'limit': 250},
+    );
+    final orders = data['workOrders'] as List<dynamic>? ?? const <dynamic>[];
+    return orders.whereType<Map<String, dynamic>>().toList();
   }
 
   // ── Field Officer endpoints ──────────────────────────────────────────

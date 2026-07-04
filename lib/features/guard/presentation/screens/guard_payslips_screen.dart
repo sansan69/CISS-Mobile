@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../../core/models/payroll_models.dart';
-import '../../../../../core/network/api_config.dart';
 import '../../../../../core/network/providers.dart';
+import '../../../../../core/region/region_service.dart';
 import '../../../../../shared/widgets/section_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
@@ -62,7 +62,7 @@ class GuardPayslipsScreen extends ConsumerWidget {
                 chip: const StatusChip(label: 'PDF', tone: StatusChipTone.info),
                 onTap: () async {
                   final launchUri = Uri.parse(
-                    '${ApiConfig.baseUrl.replaceAll(RegExp(r'/$'), '')}/api/guard/payslips/${payslip.id}/payslip',
+                    '${RegionService.instance.activeApiUrl.replaceAll(RegExp(r'/$'), '')}/api/guard/payslips/${payslip.id}/payslip',
                   );
                   if (await canLaunchUrl(launchUri)) {
                     await launchUrl(

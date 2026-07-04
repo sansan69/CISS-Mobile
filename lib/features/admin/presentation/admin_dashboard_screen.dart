@@ -1,20 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/network/providers.dart';
-import '../../../core/models/app_role.dart';
+import '../../../core/region/region_service.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/state_block.dart';
 import '../../../shared/widgets/screen_scaffold.dart';
 import '../../../core/haptics.dart';
 
-/// Admin mobile dashboard — real-time stats + quick links to web.
-///
-/// Full admin features (payroll, settings, training CRUD, employee management)
-/// are on the web dashboard at cisskerala.site. This screen gives at-a-glance
-/// stats and quick access to key web sections.
+/// Admin mobile dashboard — real-time stats and operational shortcuts.
 class AdminDashboardScreen extends ConsumerStatefulWidget {
   const AdminDashboardScreen({super.key});
 
@@ -210,12 +207,11 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                 _LinkTile(
                   icon: Icons.open_in_browser_rounded,
                   title: 'Open Web Dashboard',
-                  subtitle: 'Full admin panel at cisskerala.site',
+                  subtitle: 'Open the active region admin panel',
                   color: tokens.primary,
                   onTap: () {
                     Haptics.light();
-                    // Opens externally — handled by url_launcher in guard/FO
-                    // For admin, we show a web link as the primary action
+                    _openDashboard();
                   },
                 ),
                 Divider(height: 1, color: tokens.border.withValues(alpha: 0.3)),
@@ -224,6 +220,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   title: 'Employees Directory',
                   subtitle: 'Manage guard profiles and assignments',
                   color: tokens.success,
+                  onTap: () {
+                    Haptics.light();
+                    ref.read(adminTabIndexProvider.notifier).state = 1;
+                  },
                 ),
                 Divider(height: 1, color: tokens.border.withValues(alpha: 0.3)),
                 _LinkTile(
@@ -231,6 +231,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   title: 'Attendance Logs',
                   subtitle: 'View all check-in/out records',
                   color: tokens.accent,
+                  onTap: () {
+                    Haptics.light();
+                    ref.read(adminTabIndexProvider.notifier).state = 2;
+                  },
                 ),
                 Divider(height: 1, color: tokens.border.withValues(alpha: 0.3)),
                 _LinkTile(
@@ -238,6 +242,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                   title: 'Work Orders',
                   subtitle: 'Deployment and staffing management',
                   color: tokens.warning,
+                  onTap: () {
+                    Haptics.light();
+                    ref.read(adminTabIndexProvider.notifier).state = 3;
+                  },
                 ),
               ],
             ),
@@ -283,6 +291,13 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _openDashboard() async {
+    final rawBase = RegionService.instance.activeApiUrl;
+    final base = rawBase.endsWith('/') ? rawBase.substring(0, rawBase.length - 1) : rawBase;
+    final uri = Uri.parse('$base/dashboard');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 }
 

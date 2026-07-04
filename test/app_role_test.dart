@@ -15,8 +15,14 @@ void main() {
       expect(appRoleFromWire('field officer'), AppRole.fieldOfficer);
     });
 
+    test('accepts admin and client role values', () {
+      expect(appRoleFromWire('admin'), AppRole.admin);
+      expect(appRoleFromWire('super-admin'), AppRole.admin);
+      expect(appRoleFromWire('client'), AppRole.client);
+    });
+
     test('rejects unsupported roles', () {
-      expect(appRoleFromWire('admin'), isNull);
+      expect(appRoleFromWire('manager'), isNull);
       expect(appRoleFromWire(null), isNull);
     });
   });

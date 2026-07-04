@@ -28,9 +28,14 @@ class _RegionSelectorScreenState extends ConsumerState<RegionSelectorScreen> {
     });
 
     try {
-      // Fetch full config and initialize Firebase
-      await ref.read(regionServiceProvider).initRegionalFirebase(region);
-      await ref.read(regionServiceProvider).saveRegionPreference(region.code);
+      final service = ref.read(regionServiceProvider);
+      final fullConfig = await service.fetchRegionConfig(region.code);
+      if (fullConfig == null) {
+        throw Exception('Region configuration is not available yet.');
+      }
+
+      await service.initRegionalFirebase(fullConfig);
+      await service.saveRegionPreference(fullConfig.code, region: fullConfig);
 
       if (!mounted) return;
       Haptics.heavy();

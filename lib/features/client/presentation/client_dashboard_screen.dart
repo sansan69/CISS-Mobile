@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/network/providers.dart';
+import '../../../core/region/region_service.dart';
 import '../../../core/haptics.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../../shared/widgets/glass_card.dart';
@@ -67,6 +68,8 @@ class _ClientDashboardScreenState
 
     final session = sessionAsync.valueOrNull;
     final clientName = session?.clientName ?? session?.displayName ?? 'Client';
+    final dashboardHost =
+        Uri.tryParse(RegionService.instance.activeApiUrl)?.host ?? 'Active region';
 
     if (_loading) {
       return Scaffold(
@@ -279,8 +282,12 @@ class _ClientDashboardScreenState
                   child: InkWell(
                     onTap: () {
                       Haptics.medium();
+                      final rawBase = RegionService.instance.activeApiUrl;
+                      final base = rawBase.endsWith('/')
+                          ? rawBase.substring(0, rawBase.length - 1)
+                          : rawBase;
                       launchUrl(
-                        Uri.parse('https://cisskerala.site/dashboard'),
+                        Uri.parse('$base/dashboard'),
                         mode: LaunchMode.externalApplication,
                       );
                     },
@@ -318,7 +325,7 @@ class _ClientDashboardScreenState
                                   ),
                                 ),
                                 Text(
-                                  'cisskerala.site',
+                                  dashboardHost,
                                   style: TextStyle(
                                     fontSize: 13,
                                     color: tokens.inkMuted,

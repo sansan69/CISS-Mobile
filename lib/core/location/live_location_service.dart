@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../region/region_service.dart';
+
 // Firestore collection: guardLocations/{employeeDocId}
 // Document ID is the employeeDocId (Firestore doc ID, no slashes).
 // Shared real-time layer for Flutter FO app + Next.js admin/client dashboards.
@@ -95,7 +97,7 @@ class GuardLocationData {
 
 class LiveLocationService {
   LiveLocationService([FirebaseFirestore? firestore])
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+      : _firestore = firestore ?? RegionService.instance.activeFirestore;
 
   final FirebaseFirestore _firestore;
 

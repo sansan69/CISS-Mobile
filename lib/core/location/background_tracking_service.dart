@@ -11,6 +11,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../region/region_service.dart';
+
 /// Background location tracking service optimized for CISS guard duty.
 ///
 /// Handles all site types including buildings, offices, yards, godowns,
@@ -74,6 +76,7 @@ class BackgroundTrackingService {
     }
 
     final service = FlutterBackgroundService();
+    final activeRegion = RegionService.instance.activeRegion;
     service.startService();
     service.invoke('set_site_context', {
       'siteId': siteId,
@@ -86,6 +89,9 @@ class BackgroundTrackingService {
       'guardName': guardName ?? '',
       'clientName': clientName ?? '',
       'district': district ?? '',
+      'regionCode': activeRegion?.code ?? 'KL',
+      'apiUrl': activeRegion?.apiUrl ?? 'https://cisskerala.site',
+      if (activeRegion != null) 'regionConfig': activeRegion.toJson(),
     });
   }
 
@@ -107,6 +113,8 @@ void onStart(ServiceInstance service) async {
   }
 
   Map<String, dynamic>? siteContext;
+  FirebaseAuth activeAuth = FirebaseAuth.instance;
+  FirebaseFirestore activeFirestore = FirebaseFirestore.instance;
   bool isInside = true; // Assume inside until first check proves otherwise
   DateTime? lastOutsideAt;
   int heartbeatCount = 0;
@@ -116,6 +124,10 @@ void onStart(ServiceInstance service) async {
       siteContext = event;
       isInside = true;
       heartbeatCount = 0;
+      _configureBackgroundRegion(event).then((instances) {
+        activeAuth = instances.$1;
+        activeFirestore = instances.$2;
+      });
     });
 
     service.on('stopService').listen((_) {
@@ -249,12 +261,13 @@ void onStart(ServiceInstance service) async {
       }
 
       // ── Heartbeat upload ──────────────────────────────────────────────────
-      final baseUrl = const String.fromEnvironment(
-        'CISS_API_BASE_URL',
-        defaultValue: 'https://cisskerala.site',
-      );
+      final baseUrl = (siteContext?['apiUrl'] as String?) ??
+          const String.fromEnvironment(
+            'CISS_API_BASE_URL',
+            defaultValue: 'https://cisskerala.site',
+          );
 
-      final user = FirebaseAuth.instance.currentUser;
+      final user = activeAuth.currentUser;
       String? token = await user?.getIdToken(false);
 
       try {
@@ -312,7 +325,7 @@ void onStart(ServiceInstance service) async {
         try {
           final employeeDocId = siteContext!['employeeDocId'] as String? ?? siteContext!['employeeId'] as String;
           final employeeId = siteContext!['employeeId'] as String? ?? '';
-          await FirebaseFirestore.instance
+          await activeFirestore
               .collection('guardLocations')
               .doc(employeeDocId)
               .set({
@@ -396,7 +409,7 @@ void onStart(ServiceInstance service) async {
       // Store movement trace in Firestore subcollection (with retry)
       for (int attempt = 0; attempt < 3; attempt++) {
         try {
-          final traceRef = FirebaseFirestore.instance
+          final traceRef = activeFirestore
               .collection('guardLocations')
               .doc(siteContext!['employeeDocId'] as String? ?? siteContext!['employeeId'] as String)
               .collection('locationHistory')
@@ -424,6 +437,44 @@ void onStart(ServiceInstance service) async {
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+Future<(FirebaseAuth, FirebaseFirestore)> _configureBackgroundRegion(
+  Map<String, dynamic>? context,
+) async {
+  final code = context?['regionCode'] as String?;
+  final rawConfig = context?['regionConfig'];
+  if (code == null || code == 'KL' || rawConfig is! Map) {
+    return (FirebaseAuth.instance, FirebaseFirestore.instance);
+  }
+
+  try {
+    final region = RegionInfo.fromJson(Map<String, dynamic>.from(rawConfig));
+    final appName = 'region_${region.code}';
+    FirebaseApp app;
+    try {
+      app = Firebase.app(appName);
+    } catch (_) {
+      final options = region.androidConfig?.toFirebaseOptions() ??
+          region.webConfig?.toFirebaseOptions();
+      if (options == null) {
+        return (FirebaseAuth.instance, FirebaseFirestore.instance);
+      }
+      app = await Firebase.initializeApp(name: appName, options: options);
+    }
+    return (
+      FirebaseAuth.instanceFor(app: app),
+      FirebaseFirestore.instanceFor(app: app),
+    );
+  } catch (error) {
+    debugPrint('Background region init failed: $error');
+    return (FirebaseAuth.instance, FirebaseFirestore.instance);
+  }
+}
+
+Future<FirebaseAuth> _authForSiteContext(Map<String, dynamic> siteContext) async {
+  final instances = await _configureBackgroundRegion(siteContext);
+  return instances.$1;
+}
 
 void _updateNotification(
   ServiceInstance service,
@@ -454,12 +505,13 @@ Future<void> _sendGeofenceEvent({
   required double? accuracy,
   required String locationSource,
 }) async {
-  final baseUrl = const String.fromEnvironment(
-    'CISS_API_BASE_URL',
-    defaultValue: 'https://cisskerala.site',
-  );
+  final baseUrl = (siteContext['apiUrl'] as String?) ??
+      const String.fromEnvironment(
+        'CISS_API_BASE_URL',
+        defaultValue: 'https://cisskerala.site',
+      );
 
-  final user = FirebaseAuth.instance.currentUser;
+  final user = (await _authForSiteContext(siteContext)).currentUser;
   String? token = await user?.getIdToken(false);
 
   try {

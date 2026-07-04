@@ -3,10 +3,10 @@ import 'package:dio/dio.dart';
 import 'api_config.dart';
 
 class ApiClient {
-  ApiClient({required this.authTokenProvider})
+  ApiClient({required this.authTokenProvider, String? baseUrl})
     : dio = Dio(
         BaseOptions(
-          baseUrl: ApiConfig.baseUrl,
+          baseUrl: baseUrl ?? ApiConfig.baseUrl,
           connectTimeout: const Duration(seconds: 30),
           receiveTimeout: const Duration(seconds: 40),
           headers: const <String, String>{'Content-Type': 'application/json'},

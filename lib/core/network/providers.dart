@@ -3,16 +3,19 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import 'api_client.dart';
 import 'mobile_repository.dart';
+import '../region/region_service.dart';
 
 final Provider<FirebaseAuth> firebaseAuthProvider = Provider<FirebaseAuth>((
   Ref ref,
 ) {
-  return FirebaseAuth.instance;
+  return ref.read(regionServiceProvider).activeAuth;
 });
 
 final Provider<ApiClient> apiClientProvider = Provider<ApiClient>((Ref ref) {
   final auth = ref.read(firebaseAuthProvider);
+  final regionService = ref.read(regionServiceProvider);
   return ApiClient(
+    baseUrl: regionService.activeApiUrl,
     authTokenProvider: () async {
       final user = auth.currentUser;
       if (user == null) return null;
@@ -37,5 +40,6 @@ final Provider<MobileRepository> mobileRepositoryProvider =
       return MobileRepository(
         ref.read(apiClientProvider),
         ref.read(firebaseAuthProvider),
+        ref.read(regionServiceProvider),
       );
     });

@@ -9,7 +9,7 @@ import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/haptics.dart';
-import '../../../core/network/api_config.dart';
+import '../../../core/region/region_service.dart';
 
 class GuardEnrollmentScreen extends StatefulWidget {
   const GuardEnrollmentScreen({super.key});
@@ -91,7 +91,7 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final path = 'enrollments/$phone/$folder/${timestamp}_$folder.$ext';
 
-    final uri = Uri.parse('${ApiConfig.baseUrl}/api/public/enroll/upload');
+    final uri = Uri.parse('${RegionService.instance.activeApiUrl}/api/public/enroll/upload');
     final request = http.MultipartRequest('POST', uri);
     request.fields['path'] = path;
     request.files.add(await http.MultipartFile.fromPath('file', file.path));
@@ -149,7 +149,7 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
         'termsAccepted': true,
       };
 
-      final uri = Uri.parse('${ApiConfig.baseUrl}/api/employees/enroll');
+      final uri = Uri.parse('${RegionService.instance.activeApiUrl}/api/employees/enroll');
       final response = await http.post(
         uri,
         headers: {'Content-Type': 'application/json'},

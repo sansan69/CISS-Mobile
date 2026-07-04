@@ -44,6 +44,7 @@ Future<void> main() async {
         final config = await container.read(regionServiceProvider).fetchRegionConfig(savedRegion);
         if (config != null) {
           await container.read(regionServiceProvider).initRegionalFirebase(config);
+          await container.read(regionServiceProvider).saveRegionPreference(savedRegion, region: config);
         }
       }
     } catch (e) {
