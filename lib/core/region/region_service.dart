@@ -139,9 +139,14 @@ class RegionService {
       }
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       final list = (data['regions'] as List<dynamic>?) ?? <dynamic>[];
-      return list
-          .map((r) => RegionInfo.fromJson(r as Map<String, dynamic>))
-          .toList();
+      final regions =
+          list
+              .map((r) => RegionInfo.fromJson(r as Map<String, dynamic>))
+              .where(
+                (region) => region.code.isNotEmpty && region.name.isNotEmpty,
+              )
+              .toList();
+      return regions.isNotEmpty ? regions : [await _keralaFallback()];
     } catch (e) {
       debugPrint('RegionService: fetchAvailableRegions error: $e');
       return [await _keralaFallback()];
