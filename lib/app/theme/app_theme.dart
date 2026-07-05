@@ -4,9 +4,10 @@ import 'package:flutter/services.dart';
 import 'app_tokens.dart';
 
 ThemeData buildCissTheme(Brightness brightness) {
-  final tokens = brightness == Brightness.dark
-      ? CissThemeTokens.dark()
-      : CissThemeTokens.light();
+  final tokens =
+      brightness == Brightness.dark
+          ? CissThemeTokens.dark()
+          : CissThemeTokens.light();
 
   final isDark = brightness == Brightness.dark;
 
@@ -36,25 +37,23 @@ ThemeData buildCissTheme(Brightness brightness) {
     displayColor: tokens.ink,
   );
 
-  final headerStyle = TextStyle(
-    fontWeight: FontWeight.w700,
-    color: tokens.ink,
-  );
+  final headerStyle = TextStyle(fontWeight: FontWeight.w700, color: tokens.ink);
 
   // Transparent status bar + nav bar for edge-to-edge
-  final systemOverlayStyle = isDark
-      ? SystemUiOverlayStyle.light.copyWith(
-          statusBarColor: Colors.transparent,
-          systemNavigationBarColor: Colors.transparent,
-          systemNavigationBarDividerColor: Colors.transparent,
-          systemNavigationBarIconBrightness: Brightness.light,
-        )
-      : SystemUiOverlayStyle.dark.copyWith(
-          statusBarColor: Colors.transparent,
-          systemNavigationBarColor: Colors.transparent,
-          systemNavigationBarDividerColor: Colors.transparent,
-          systemNavigationBarIconBrightness: Brightness.dark,
-        );
+  final systemOverlayStyle =
+      isDark
+          ? SystemUiOverlayStyle.light.copyWith(
+            statusBarColor: Colors.transparent,
+            systemNavigationBarColor: Colors.transparent,
+            systemNavigationBarDividerColor: Colors.transparent,
+            systemNavigationBarIconBrightness: Brightness.light,
+          )
+          : SystemUiOverlayStyle.dark.copyWith(
+            statusBarColor: Colors.transparent,
+            systemNavigationBarColor: Colors.transparent,
+            systemNavigationBarDividerColor: Colors.transparent,
+            systemNavigationBarIconBrightness: Brightness.dark,
+          );
 
   return ThemeData(
     useMaterial3: true,
@@ -93,16 +92,9 @@ ThemeData buildCissTheme(Brightness brightness) {
 
     // Typography — proper M3 type scale wiring
     textTheme: baseTextTheme.copyWith(
-      headlineMedium: headerStyle.copyWith(
-        fontSize: 28,
-        letterSpacing: -0.5,
-      ),
-      headlineSmall: headerStyle.copyWith(
-        fontSize: 24,
-      ),
-      titleLarge: headerStyle.copyWith(
-        fontSize: 22,
-      ),
+      headlineMedium: headerStyle.copyWith(fontSize: 28, letterSpacing: 0),
+      headlineSmall: headerStyle.copyWith(fontSize: 24),
+      titleLarge: headerStyle.copyWith(fontSize: 22),
       titleMedium: baseTextTheme.titleMedium?.copyWith(
         fontWeight: FontWeight.w600,
         letterSpacing: 0.1,
@@ -155,9 +147,7 @@ ThemeData buildCissTheme(Brightness brightness) {
         borderSide: BorderSide(color: tokens.danger, width: 2),
       ),
       labelStyle: TextStyle(color: tokens.inkMuted),
-      hintStyle: TextStyle(
-        color: tokens.inkMuted.withValues(alpha: 0.7),
-      ),
+      hintStyle: TextStyle(color: tokens.inkMuted.withValues(alpha: 0.7)),
       prefixIconColor: WidgetStateColor.resolveWith((states) {
         if (states.contains(WidgetState.focused)) return tokens.primary;
         return tokens.inkMuted;
@@ -237,16 +227,18 @@ ThemeData buildCissTheme(Brightness brightness) {
     // NavigationBar — M3 bottom nav (replaces custom BrandedNavigationBar)
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: tokens.surface,
-      elevation: 8,
-      shadowColor: tokens.ink.withValues(alpha: 0.1),
-      surfaceTintColor: tokens.primary,
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
       indicatorColor: tokens.primarySoft,
-      indicatorShape: const StadiumBorder(),
+      indicatorShape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
       iconTheme: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
-          return IconThemeData(color: tokens.primaryStrong, size: 24);
+          return IconThemeData(color: tokens.primaryStrong, size: 22);
         }
-        return IconThemeData(color: tokens.inkMuted, size: 24);
+        return IconThemeData(color: tokens.inkMuted, size: 22);
       }),
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.selected)) {
@@ -254,13 +246,14 @@ ThemeData buildCissTheme(Brightness brightness) {
             fontSize: 11,
             fontWeight: FontWeight.w700,
             color: tokens.primaryStrong,
-            letterSpacing: 0.3,
+            letterSpacing: 0,
           );
         }
         return TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w500,
           color: tokens.inkMuted,
+          letterSpacing: 0,
         );
       }),
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
@@ -297,7 +290,8 @@ ThemeData buildCissTheme(Brightness brightness) {
       ),
       elevation: 6,
       showCloseIcon: true,
-      closeIconColor: isDark ? tokens.inkMuted : tokens.canvas.withValues(alpha: 0.7),
+      closeIconColor:
+          isDark ? tokens.inkMuted : tokens.canvas.withValues(alpha: 0.7),
     ),
 
     // Dialog — M3 rounded dialog
@@ -308,10 +302,7 @@ ThemeData buildCissTheme(Brightness brightness) {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.lg),
       ),
-      titleTextStyle: headerStyle.copyWith(
-        fontSize: 20,
-        color: tokens.ink,
-      ),
+      titleTextStyle: headerStyle.copyWith(fontSize: 20, color: tokens.ink),
       contentTextStyle: baseTextTheme.bodyMedium?.copyWith(
         color: tokens.inkMuted,
         height: 1.5,

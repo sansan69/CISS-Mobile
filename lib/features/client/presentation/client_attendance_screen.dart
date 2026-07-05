@@ -5,12 +5,11 @@ import '../../../app/theme/app_tokens.dart';
 import '../../../core/network/providers.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../../core/location/live_location_service.dart';
-import '../../../shared/widgets/glass_card.dart';
-import '../../../shared/widgets/screen_scaffold.dart';
+import '../../../shared/utils/initials.dart';
+import '../../../shared/widgets/modern_card.dart';
 import '../../../shared/widgets/state_block.dart';
 import '../../../shared/widgets/status_chip.dart';
 
-/// Client attendance screen — shows today's guard attendance with live location.
 class ClientAttendanceScreen extends ConsumerStatefulWidget {
   const ClientAttendanceScreen({super.key});
 
@@ -24,6 +23,9 @@ class _ClientAttendanceScreenState
   List<Map<String, dynamic>>? _records;
   bool _loading = true;
   String? _error;
+  String _selectedDateFilter = 'Today';
+
+  static const _dateFilters = ['Today', 'Yesterday', 'This Week'];
 
   late final LiveLocationService _liveLocationService;
 
@@ -94,26 +96,21 @@ class _ClientAttendanceScreenState
 
     final records = _records ?? const <Map<String, dynamic>>[];
 
-    return ScreenScaffold(
-      title: 'Live Attendance',
-      subtitle: 'Today\'s on-duty guards',
-      onRefresh: _fetchAttendance,
-      children: <Widget>[
-        // Live location stream
-        StreamBuilder<List<GuardLocationData>>(
+    return Scaffold(
+      backgroundColor: tokens.canvas,
+      body: SafeArea(
+        child: StreamBuilder<List<GuardLocationData>>(
           stream: _liveLocationService.streamActiveLocations(),
           builder: (context, locSnap) {
             final locations = locSnap.data ?? const <GuardLocationData>[];
             final liveCount = locations.length;
 
-            // Live dot indicator
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                // Live indicator pill
-                Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                  child: Row(
+            return RefreshIndicator(
+              onRefresh: _fetchAttendance,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+                children: <Widget>[
+                  Row(
                     children: <Widget>[
                       Container(
                         width: 10,
@@ -141,151 +138,168 @@ class _ClientAttendanceScreenState
                       ),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 12),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _dateFilters.map((filter) {
+                        final isSelected = filter == _selectedDateFilter;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: FilterChip(
+                            label: Text(filter),
+                            selected: isSelected,
+                            onSelected: (_) {
+                              setState(() => _selectedDateFilter = filter);
+                            },
+                            selectedColor: tokens.primarySoft,
+                            checkmarkColor: tokens.primary,
+                            labelStyle: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: isSelected ? tokens.primary : tokens.inkMuted,
+                            ),
+                            side: BorderSide(
+                              color:
+                                  isSelected ? tokens.primary : tokens.border,
+                            ),
+                            backgroundColor: tokens.surface,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  if (records.isEmpty)
+                    const StateBlock(
+                      icon: Icons.fact_check_rounded,
+                      title: 'No attendance records',
+                      message:
+                          'Attendance data for today will appear here as guards check in.',
+                    )
+                  else
+                    ...records.map((record) {
+                      final guardName =
+                          (record['guardName'] as String?) ??
+                              (record['fullName'] as String?) ??
+                              'Guard';
+                      final siteName =
+                          (record['siteName'] as String?) ?? '';
+                      final checkIn =
+                          (record['checkIn'] as String?) ??
+                              (record['checkInTime'] as String?) ??
+                              '';
+                      final status =
+                          (record['status'] as String?) ?? 'Out';
+                      final employeeId =
+                          (record['employeeId'] as String?) ?? '';
+                      final isIn = status == 'In';
 
-                if (records.isEmpty)
-                  const StateBlock(
-                    icon: Icons.fact_check_rounded,
-                    title: 'No attendance records',
-                    message:
-                        'Attendance data for today will appear here as guards check in.',
-                  )
-                else
-                  ...records.map((record) {
-                    final guardName =
-                        (record['guardName'] as String?) ??
-                            (record['fullName'] as String?) ??
-                            'Guard';
-                    final siteName =
-                        (record['siteName'] as String?) ?? '';
-                    final checkIn =
-                        (record['checkIn'] as String?) ??
-                            (record['checkInTime'] as String?) ??
-                            '';
-                    final status =
-                        (record['status'] as String?) ?? 'Out';
-                    final employeeId =
-                        (record['employeeId'] as String?) ?? '';
-                    final isIn = status == 'In';
+                      final loc = locations
+                          .cast<GuardLocationData?>()
+                          .firstWhere(
+                            (l) => l?.employeeId == employeeId,
+                            orElse: () => null,
+                          );
 
-                    // Look up live location for this guard
-                    final loc = locations.cast<GuardLocationData?>().firstWhere(
-                      (l) => l?.employeeId == employeeId,
-                      orElse: () => null,
-                    );
-
-                    return GlassCard(
-                      child: Padding(
-                        padding:
-                            const EdgeInsets.all(AppSpacing.lg),
-                        child: Row(
-                          children: <Widget>[
-                            // Avatar
-                            CircleAvatar(
-                              radius: 22,
-                              backgroundColor: isIn
-                                  ? tokens.successSoft
-                                  : tokens.surfaceMuted,
-                              child: Text(
-                                _initials(guardName),
-                                style: TextStyle(
-                                  color: isIn
-                                      ? tokens.success
-                                      : tokens.inkMuted,
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 14,
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: ModernCard(
+                          child: Row(
+                            children: <Widget>[
+                              CircleAvatar(
+                                radius: 22,
+                                backgroundColor: isIn
+                                    ? tokens.successSoft
+                                    : tokens.surfaceMuted,
+                                child: Text(
+                                  initials(guardName, fallback: 'G'),
+                                  style: TextStyle(
+                                    color: isIn
+                                        ? tokens.success
+                                        : tokens.inkMuted,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 14,
+                                  ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(
-                                width: AppSpacing.md),
-                            // Name, site, check-in time
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Text(
-                                    guardName,
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                      color: tokens.ink,
-                                    ),
-                                    maxLines: 1,
-                                    overflow:
-                                        TextOverflow.ellipsis,
-                                  ),
-                                  if (siteName.isNotEmpty) ...[
-                                    const SizedBox(height: 2),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: <Widget>[
                                     Text(
-                                      siteName,
+                                      guardName,
                                       style: TextStyle(
-                                        fontSize: 13,
-                                        color: tokens.inkMuted,
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        color: tokens.ink,
                                       ),
                                       maxLines: 1,
-                                      overflow:
-                                          TextOverflow.ellipsis,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
+                                    if (siteName.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        siteName,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: tokens.inkMuted,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                    if (checkIn.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Check-in: $checkIn',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: tokens.inkMuted,
+                                        ),
+                                      ),
+                                    ],
                                   ],
-                                  if (checkIn.isNotEmpty) ...[
-                                    const SizedBox(height: 2),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Column(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.center,
+                                children: <Widget>[
+                                  StatusChip(
+                                    label: isIn ? 'In' : 'Out',
+                                    tone: isIn
+                                        ? StatusChipTone.success
+                                        : StatusChipTone.neutral,
+                                  ),
+                                  if (loc != null) ...[
+                                    const SizedBox(height: 4),
                                     Text(
-                                      'Check-in: $checkIn',
+                                      '● LIVE',
                                       style: TextStyle(
-                                        fontSize: 12,
-                                        color: tokens.inkMuted,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: tokens.success,
+                                        letterSpacing: 1,
                                       ),
                                     ),
                                   ],
                                 ],
                               ),
-                            ),
-                            const SizedBox(
-                                width: AppSpacing.sm),
-                            // Status + live dot
-                            Column(
-                              mainAxisAlignment:
-                                  MainAxisAlignment.center,
-                              children: <Widget>[
-                                StatusChip(
-                                  label: isIn ? 'In' : 'Out',
-                                  tone: isIn
-                                      ? StatusChipTone.success
-                                      : StatusChipTone.neutral,
-                                ),
-                                if (loc != null) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '● LIVE',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700,
-                                      color: tokens.success,
-                                      letterSpacing: 1,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                    );
-                  }),
-              ],
+                      );
+                    }),
+                ],
+              ),
             );
           },
         ),
-      ],
+      ),
     );
-  }
-
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
-    final initials = parts.map((p) => p[0]).take(2).join().toUpperCase();
-    if (initials.isNotEmpty) return initials;
-    return 'G';
   }
 }

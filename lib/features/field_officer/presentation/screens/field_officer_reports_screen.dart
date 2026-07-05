@@ -15,7 +15,7 @@ import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/offline/draft_service.dart';
 import '../../../../../shared/widgets/brand_banner.dart';
-import '../../../../../shared/widgets/glass_card.dart';
+import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
@@ -456,9 +456,8 @@ class _VisitBriefingCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
       margin: const EdgeInsets.only(bottom: 12),
-      child: GlassCard(
+      child: ModernCard(
         padding: const EdgeInsets.all(16),
-        accentColor: isSynced ? tokens.success : tokens.warning,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -595,9 +594,8 @@ class _TrainingBriefingCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
       margin: const EdgeInsets.only(bottom: 12),
-      child: GlassCard(
+      child: ModernCard(
         padding: const EdgeInsets.all(16),
-        accentColor: tokens.accent,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1438,7 +1436,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                               onPressed: _loading ? null : _confirmSubmit,
                               style: FilledButton.styleFrom(minimumSize: const Size(140, 48)),
                               child: _loading
-                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                  ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: tokens.surface))
                                   : const Text('SUBMIT'),
                             ),
                           ),
@@ -1453,12 +1451,12 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                           minimumSize: const Size(140, 48),
                         ),
                         child: _loading
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.white,
+                                  color: tokens.surface,
                                 ),
                               )
                             : Text(_reportStatus == 'draft' ? 'SAVE DRAFT' : 'SUBMIT REPORT'),
@@ -1949,10 +1947,11 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
   }
 
   Widget _buildPreviewRow(String label, String value) {
+    final tokens = CissThemeTokens.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label.toUpperCase(), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey[600])),
+        Text(label.toUpperCase(), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: tokens.inkMuted)),
         const SizedBox(height: 2),
         Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
       ],

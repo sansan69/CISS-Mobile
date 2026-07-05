@@ -9,7 +9,7 @@ import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/models/report_models.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../shared/widgets/brand_banner.dart';
-import '../../../../../shared/widgets/glass_card.dart';
+import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
@@ -210,13 +210,10 @@ class _WorkOrderCard extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: GlassCard(
+      child: ModernCard(
         padding: EdgeInsets.zero,
-        accentColor: accent,
-        child: InkWell(
-          onTap: () => _openAssignSheet(context, ref),
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          child: Padding(
+        onTap: () => _openAssignSheet(context, ref),
+        child: Padding(
             padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -311,7 +308,6 @@ class _WorkOrderCard extends ConsumerWidget {
               ],
             ),
           ),
-        ),
       ),
     );
   }
@@ -654,12 +650,12 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
                           minimumSize: const Size(140, 48),
                         ),
                         child: _saving
-                            ? const SizedBox(
+                            ? SizedBox(
                                 width: 20,
                                 height: 20,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  color: Colors.white,
+                                  color: tokens.surface,
                                 ),
                               )
                             : const Text('COMMIT ASSIGNMENT'),

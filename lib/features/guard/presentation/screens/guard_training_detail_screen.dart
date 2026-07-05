@@ -7,6 +7,7 @@ import '../../../../../core/models/training_models.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../widgets/guard_portal_widgets.dart';
+import 'guard_training_quiz_screen.dart';
 
 class GuardTrainingDetailScreen extends ConsumerWidget {
   const GuardTrainingDetailScreen({super.key, required this.assignment});
@@ -125,6 +126,43 @@ class GuardTrainingDetailScreen extends ConsumerWidget {
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: tokens.inkMuted,
                 height: 1.35,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        GuardFormCard(
+          children: <Widget>[
+            Text(
+              'Assessment',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                color: tokens.ink,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Complete the quiz to verify your understanding of this training module.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: tokens.inkMuted,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => GuardTrainingQuizScreen(
+                        assignmentId: assignment.id,
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.quiz_rounded),
+                label: const Text('Start Quiz'),
               ),
             ),
           ],

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../app/theme/app_tokens.dart';
+import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/security_settings_card.dart';
@@ -120,14 +121,15 @@ class _ProfileAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
     final url = photoUrl;
     return CircleAvatar(
       radius: 25,
-      backgroundColor: Colors.white.withValues(alpha: 0.16),
+      backgroundColor: tokens.surface.withValues(alpha: 0.16),
       backgroundImage: url == null || url.isEmpty ? null : NetworkImage(url),
       child:
           url == null || url.isEmpty
-              ? const Icon(Icons.person_rounded, color: Colors.white)
+              ? Icon(Icons.person_rounded, color: tokens.surface)
               : null,
     );
   }
@@ -141,13 +143,7 @@ class _InfoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: tokens.border),
-      ),
+    return ModernCard(
       child: Column(
         children:
             rows

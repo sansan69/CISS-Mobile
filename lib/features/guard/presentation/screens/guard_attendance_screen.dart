@@ -18,7 +18,7 @@ import '../../../../../core/location/background_tracking_service.dart';
 import '../../../../../core/location/live_location_service.dart';
 import '../../../../../core/fcm/providers.dart';
 import '../../../../../shared/widgets/camera_capture_screen.dart';
-import '../../../../../shared/widgets/section_card.dart';
+import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
@@ -587,10 +587,22 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                 message: 'Fetching employee details...',
               ),
           error:
-              (Object error, StackTrace stackTrace) => SectionCard(
-                title: 'Profile error',
-                subtitle: guardErrorMessage(error),
-                icon: Icons.error_outline_rounded,
+              (Object error, StackTrace stackTrace) => ModernCard(
+                child: Row(
+                  children: <Widget>[
+                    Icon(Icons.error_outline_rounded, color: tokens.danger, size: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text('Profile error', style: AppTypography.bodyStrong(context)),
+                          Text(guardErrorMessage(error), style: AppTypography.micro(context).copyWith(color: tokens.inkMuted)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
           data: (profile) {
             return sitesAsync.when(
@@ -601,10 +613,22 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                     message: 'Fetching duty centers...',
                   ),
               error:
-                  (Object error, StackTrace stackTrace) => SectionCard(
-                    title: 'Site error',
-                    subtitle: guardErrorMessage(error),
-                    icon: Icons.error_outline_rounded,
+                  (Object error, StackTrace stackTrace) => ModernCard(
+                    child: Row(
+                      children: <Widget>[
+                        Icon(Icons.error_outline_rounded, color: tokens.danger, size: 24),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text('Site error', style: AppTypography.bodyStrong(context)),
+                              Text(guardErrorMessage(error), style: AppTypography.micro(context).copyWith(color: tokens.inkMuted)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
               data: (sites) {
                 final guardDist = profile.district.trim().toLowerCase();
@@ -881,14 +905,14 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                         const SizedBox(height: 16),
                       ],
                     ),
-                    SectionCard(
-                      title: 'Selected Site Details',
+                    GuardRecordCard(
+                      title: _site == null ? 'Select a site' : _site!.siteName,
                       subtitle:
                           _site == null
                               ? 'Select a site to load duty points and shifts.'
-                              : '${_site!.siteName} • ${_site!.district} • ${_site!.dutyPoints.length} duty points',
+                              : '${_site!.district} • ${_site!.dutyPoints.length} duty points',
                       icon: Icons.location_on_rounded,
-                      trailing: StatusChip(
+                      chip: StatusChip(
                         label: _site == null ? 'Pending' : 'Ready',
                         tone:
                             _site == null
@@ -1000,10 +1024,31 @@ class _AttendanceHistorySection extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionCard(
-          title: 'Attendance Log',
-          subtitle: 'Your check-in and check-out history',
-          icon: Icons.history_rounded,
+        ModernCard(
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: tokens.primarySoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.history_rounded, color: tokens.primaryStrong, size: 22),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text('Attendance Log', style: AppTypography.bodyStrong(context)),
+                    Text('Your check-in and check-out history',
+                        style: AppTypography.micro(context).copyWith(color: tokens.inkMuted)),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 12),
         historyAsync.when(
@@ -1271,7 +1316,7 @@ class _AttendanceHistorySection extends ConsumerWidget {
             fontSize: 14,
             fontWeight: FontWeight.w700,
             color: tokens.ink,
-            letterSpacing: -0.2,
+            letterSpacing: 0,
           ),
         ),
         const SizedBox(width: 8),

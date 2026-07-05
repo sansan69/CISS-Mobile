@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/location/live_location_service.dart';
+import '../../../../../shared/widgets/modern_card.dart';
 
 class FieldOfficerGuardDetailScreen extends StatefulWidget {
   const FieldOfficerGuardDetailScreen({
@@ -194,22 +195,7 @@ class _FieldOfficerGuardDetailScreenState
             ),
 
           // Info card
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: tokens.surface,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(AppRadius.lg),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, -2),
-                ),
-              ],
-            ),
+          ModernCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -389,7 +375,7 @@ class _GuardMarker extends StatelessWidget {
           decoration: BoxDecoration(
             color: color,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2.5),
+            border: Border.all(color: tokens.surface, width: 2.5),
             boxShadow: [
               BoxShadow(
                 color: color.withValues(alpha: 0.4),
@@ -398,7 +384,7 @@ class _GuardMarker extends StatelessWidget {
               ),
             ],
           ),
-          child: const Icon(Icons.person, color: Colors.white, size: 14),
+          child: Icon(Icons.person, color: tokens.surface, size: 14),
         ),
         Container(
           width: 2,

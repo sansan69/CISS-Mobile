@@ -6,11 +6,12 @@ import '../../../app/theme/app_tokens.dart';
 import '../../../core/haptics.dart';
 import '../../../core/network/providers.dart';
 import '../../auth/application/auth_controller.dart';
-import '../../../shared/widgets/branded_navigation_bar.dart';
+import '../../../shared/widgets/account_menu_button.dart';
+import '../../../shared/widgets/role_header.dart';
 import 'admin_dashboard_screen.dart';
 import 'admin_guards_screen.dart';
-import 'admin_attendance_screen.dart';
 import 'admin_orders_screen.dart';
+import 'admin_more_screen.dart';
 
 class AdminShell extends ConsumerStatefulWidget {
   const AdminShell({super.key});
@@ -22,28 +23,28 @@ class AdminShell extends ConsumerStatefulWidget {
 class _AdminShellState extends ConsumerState<AdminShell> {
   static const List<_AdminTab> _tabs = <_AdminTab>[
     _AdminTab(
-      label: 'Dashboard',
+      label: 'Home',
       icon: Icons.dashboard_outlined,
       activeIcon: Icons.dashboard_rounded,
       screen: AdminDashboardScreen(),
     ),
     _AdminTab(
-      label: 'Guards',
+      label: 'Workforce',
       icon: Icons.groups_2_outlined,
       activeIcon: Icons.groups_2_rounded,
       screen: AdminGuardsScreen(),
     ),
     _AdminTab(
-      label: 'Attendance',
-      icon: Icons.fact_check_outlined,
-      activeIcon: Icons.fact_check_rounded,
-      screen: AdminAttendanceScreen(),
-    ),
-    _AdminTab(
-      label: 'Orders',
+      label: 'Operations',
       icon: Icons.assignment_turned_in_outlined,
       activeIcon: Icons.assignment_turned_in_rounded,
       screen: AdminOrdersScreen(),
+    ),
+    _AdminTab(
+      label: 'More',
+      icon: Icons.more_horiz_outlined,
+      activeIcon: Icons.more_horiz_rounded,
+      screen: AdminMoreScreen(),
     ),
   ];
 
@@ -59,22 +60,21 @@ class _AdminShellState extends ConsumerState<AdminShell> {
         if (didPop) return;
         final bool? shouldExit = await showDialog<bool>(
           context: context,
-          builder: (BuildContext ctx) => AlertDialog(
-            title: const Text('Exit CISS Admin?'),
-            content: const Text(
-              'Are you sure you want to close the app?',
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Stay'),
+          builder:
+              (BuildContext ctx) => AlertDialog(
+                title: const Text('Exit CISS Admin?'),
+                content: const Text('Are you sure you want to close the app?'),
+                actions: <Widget>[
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Stay'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Exit'),
+                  ),
+                ],
               ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Exit'),
-              ),
-            ],
-          ),
         );
         if (shouldExit == true && context.mounted) {
           SystemNavigator.pop();
@@ -86,13 +86,12 @@ class _AdminShellState extends ConsumerState<AdminShell> {
           bottom: false,
           child: Column(
             children: <Widget>[
-              // Header with admin name
-              _AdminHeader(
-                adminName:
-                    session?.displayName ?? 'Admin',
-                tokens: tokens,
+              RoleHeader(
+                name: session?.displayName ?? 'Admin',
+                role: 'Admin portal',
+                icon: Icons.admin_panel_settings_rounded,
+                trailing: const AccountMenuButton(),
               ),
-              // Indexed stack for tab content
               Expanded(
                 child: IndexedStack(
                   index: index,
@@ -102,94 +101,95 @@ class _AdminShellState extends ConsumerState<AdminShell> {
             ],
           ),
         ),
-        bottomNavigationBar: BrandedNavigationBar(
-          selectedIndex: index,
-          onSelected: (int i) {
-            Haptics.selection();
-            ref.read(adminTabIndexProvider.notifier).state = i;
-          },
-          items: _tabs
-              .map(
-                (_AdminTab tab) => BrandedNavigationItem(
-                  label: tab.label,
-                  icon: tab.icon,
-                  activeIcon: tab.activeIcon,
-                ),
-              )
-              .toList(),
-        ),
+        bottomNavigationBar: _buildNavBar(tokens, index),
       ),
     );
   }
-}
 
-class _AdminHeader extends StatelessWidget {
-  const _AdminHeader({
-    required this.adminName,
-    required this.tokens,
-  });
+  Widget _buildNavBar(CissThemeTokens tokens, int selectedIndex) {
+    final bottomInset = MediaQuery.of(context).padding.bottom;
 
-  final String adminName;
-  final CissThemeTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: tokens.surface,
-        border: Border(
-          bottom: BorderSide(color: tokens.border),
+        border: Border(top: BorderSide(color: tokens.border)),
+        boxShadow: AppShadows.subtle,
+      ),
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomInset > 0 ? bottomInset : 6),
+        child: SizedBox(
+          height: 64,
+          child: Row(
+            children: _tabs.asMap().entries.map((entry) {
+              final i = entry.key;
+              final tab = entry.value;
+              final isActive = i == selectedIndex;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    Haptics.selection();
+                    ref.read(adminTabIndexProvider.notifier).state = i;
+                  },
+                  behavior: HitTestBehavior.opaque,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              isActive ? tokens.primarySoft : Colors.transparent,
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.pill),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Icon(
+                              isActive ? tab.activeIcon : tab.icon,
+                              size: 20,
+                              color: isActive
+                                  ? tokens.primaryStrong
+                                  : tokens.inkMuted,
+                            ),
+                            if (isActive) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                tab.label,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: tokens.primaryStrong,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      if (!isActive)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            tab.label,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: tokens.inkMuted,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
         ),
-      ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: 40,
-            height: 40,
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: tokens.primarySoft,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.admin_panel_settings_rounded,
-              color: Color(0xFF1A56DB),
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Text(
-                  adminName,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: tokens.ink,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  'Admin Portal',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: tokens.inkMuted,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

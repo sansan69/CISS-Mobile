@@ -11,7 +11,7 @@ import '../../../../../core/sync/providers.dart';
 import '../../../../../shared/widgets/camera_capture_screen.dart';
 import '../../../../../shared/widgets/portal_primitives.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
-import '../../../../../shared/widgets/section_card.dart';
+import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../widgets/guard_portal_widgets.dart';
 
@@ -272,16 +272,32 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                     'Check in to your duty first. Patrol and hourly proof only open while you are on active duty.',
               )
             else ...<Widget>[
-              SectionCard(
-                title: activeDuty.siteName,
-                subtitle:
-                    '${activeDuty.district} • ${activeDuty.dutyPointName ?? 'Duty point'} • ${activeDuty.shiftLabel ?? 'Shift'}',
-                icon: Icons.place_rounded,
-                trailing: Text(
-                  activeDuty.activeSinceLabel ?? '',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: tokens.inkMuted),
+              ModernCard(
+                child: Row(
+                  children: <Widget>[
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: tokens.primarySoft,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.place_rounded, color: tokens.primaryStrong, size: 22),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(activeDuty.siteName, style: AppTypography.bodyStrong(context)),
+                          Text(
+                            '${activeDuty.district} • ${activeDuty.dutyPointName ?? 'Duty point'} • ${activeDuty.shiftLabel ?? 'Shift'}',
+                            style: AppTypography.micro(context).copyWith(color: tokens.inkMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
               PortalSurfaceCard(

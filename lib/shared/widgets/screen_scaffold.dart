@@ -40,9 +40,8 @@ class ScreenScaffold extends StatelessWidget {
   final Future<void> Function()? onRefresh;
   final ScrollController? scrollController;
 
-  // Toolbar heights: base = company label + title; extended = + subtitle
-  static const double _toolbarBase = 68.0;
-  static const double _toolbarWithSub = 80.0;
+  static const double _toolbarBase = 72.0;
+  static const double _toolbarWithSub = 84.0;
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +57,7 @@ class ScreenScaffold extends StatelessWidget {
         AppSpacing.md,
         AppSpacing.md,
         AppSpacing.md,
-        AppSpacing.xxl + MediaQuery.of(context).padding.bottom,
+        AppSpacing.xl + MediaQuery.of(context).padding.bottom,
       ),
       itemBuilder: (BuildContext context, int index) => children[index],
       separatorBuilder: (_, _) => const SizedBox(height: 12),
@@ -70,45 +69,41 @@ class ScreenScaffold extends StatelessWidget {
         preferredSize: Size.fromHeight(toolbarHeight),
         child: AppBar(
           automaticallyImplyLeading: false,
-          leading: showBackButton
-              ? IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-                  onPressed: onBack ?? () => Navigator.of(context).pop(),
-                  style: IconButton.styleFrom(
-                    foregroundColor: tokens.ink,
-                  ),
-                )
-              : null,
+          leading:
+              showBackButton
+                  ? IconButton(
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 18,
+                    ),
+                    onPressed: onBack ?? () => Navigator.of(context).pop(),
+                    style: IconButton.styleFrom(foregroundColor: tokens.ink),
+                  )
+                  : null,
           titleSpacing: 0,
           toolbarHeight: toolbarHeight,
           title: Padding(
-            padding: EdgeInsets.fromLTRB(
-              showBackButton ? 4 : 16,
-              6,
-              8,
-              6,
-            ),
+            padding: EdgeInsets.fromLTRB(showBackButton ? 4 : 16, 8, 8, 8),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: <Widget>[
-                // Brand logo — consistent size and placement everywhere
                 Container(
-                  width: 40,
-                  height: 40,
-                  padding: const EdgeInsets.all(6),
+                  width: 44,
+                  height: 44,
+                  padding: const EdgeInsets.all(7),
                   decoration: BoxDecoration(
                     color: tokens.primarySoft,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    border: Border.all(color: tokens.border),
                   ),
                   child: Image.asset(kCompanyLogoAsset, fit: BoxFit.contain),
                 ),
-                const SizedBox(width: 11),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      // Company name — always visible brand mark
                       Text(
                         kCompanyName.toUpperCase(),
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -118,12 +113,13 @@ class ScreenScaffold extends StatelessWidget {
                           height: 1,
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      // Screen title
+                      const SizedBox(height: 4),
                       Text(
                         title,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
                           fontSize: subtitle == null ? 17 : 15,
                           height: 1.1,
                         ),
@@ -136,10 +132,8 @@ class ScreenScaffold extends StatelessWidget {
                           subtitle!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: tokens.inkMuted,
-                            height: 1.2,
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(color: tokens.inkMuted, height: 1.2),
                         ),
                       ],
                     ],
@@ -148,27 +142,32 @@ class ScreenScaffold extends StatelessWidget {
               ],
             ),
           ),
-          actions: <Widget>[
-            ...actions,
-            const SizedBox(width: AppSpacing.xs),
-          ],
+          actions: <Widget>[...actions, const SizedBox(width: AppSpacing.xs)],
           bottom: PreferredSize(
             preferredSize: const Size.fromHeight(1),
-            child: Container(height: 1, color: tokens.border),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: tokens.surface,
+                border: Border(bottom: BorderSide(color: tokens.border)),
+                boxShadow: AppShadows.subtle,
+              ),
+              child: const SizedBox(height: 1),
+            ),
           ),
         ),
       ),
-      body: onRefresh != null
-          ? RefreshIndicator(
-              onRefresh: () async {
-                Haptics.medium();
-                await onRefresh!();
-              },
-              color: tokens.primary,
-              backgroundColor: tokens.surface,
-              child: body,
-            )
-          : body,
+      body:
+          onRefresh != null
+              ? RefreshIndicator(
+                onRefresh: () async {
+                  Haptics.medium();
+                  await onRefresh!();
+                },
+                color: tokens.primary,
+                backgroundColor: tokens.surface,
+                child: body,
+              )
+              : body,
     );
   }
 }

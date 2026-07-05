@@ -38,100 +38,97 @@ class BrandBanner extends StatelessWidget {
       value: (isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
           .copyWith(statusBarColor: Colors.transparent),
       child: Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: AppSpacing.md,
-      ),
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        border: Border(
-          bottom: BorderSide(color: tokens.border),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          AppSpacing.sm,
+          AppSpacing.md,
+          AppSpacing.sm,
         ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: <Widget>[
-          // Back button
-          if (showBackButton) ...<Widget>[
-            IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
-              onPressed: onBack ?? () => Navigator.of(context).pop(),
-              style: IconButton.styleFrom(
-                foregroundColor: tokens.ink,
+        decoration: BoxDecoration(
+          color: tokens.surface,
+          border: Border(bottom: BorderSide(color: tokens.border)),
+          boxShadow: AppShadows.subtle,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            // Back button
+            if (showBackButton) ...<Widget>[
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                onPressed: onBack ?? () => Navigator.of(context).pop(),
+                style: IconButton.styleFrom(foregroundColor: tokens.ink),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
               ),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(
-                minWidth: 36,
-                minHeight: 36,
+              const SizedBox(width: 4),
+            ],
+
+            // Brand logo
+            Container(
+              width: 44,
+              height: 44,
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: tokens.primarySoft,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                border: Border.all(color: tokens.border),
               ),
+              child: Image.asset(kCompanyLogoAsset, fit: BoxFit.contain),
             ),
-            const SizedBox(width: 4),
-          ],
+            const SizedBox(width: AppSpacing.sm),
 
-          // Brand logo
-          Container(
-            width: 40,
-            height: 40,
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: tokens.primarySoft,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Image.asset(kCompanyLogoAsset, fit: BoxFit.contain),
-          ),
-          const SizedBox(width: 11),
-
-          // Title block
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                // Company name — always visible
-                Text(
-                  kCompanyName.toUpperCase(),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: tokens.primaryStrong,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.3,
-                        height: 1,
-                      ),
-                ),
-                const SizedBox(height: 2),
-                // Screen title
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                        height: 1.1,
-                      ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (subtitle != null && subtitle!.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: 1),
+            // Title block
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  // Company name — always visible
                   Text(
-                    subtitle!,
+                    kCompanyName.toUpperCase(),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: tokens.primaryStrong,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.3,
+                      height: 1,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  // Screen title
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                      height: 1.1,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: tokens.inkMuted,
-                          height: 1.2,
-                        ),
                   ),
+                  if (subtitle != null && subtitle!.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: tokens.inkMuted,
+                        height: 1.2,
+                      ),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
-          ),
 
-          // Trailing widget
-          if (trailing != null) ...<Widget>[
-            const SizedBox(width: 8),
-            trailing!,
+            // Trailing widget
+            if (trailing != null) ...<Widget>[
+              const SizedBox(width: 8),
+              trailing!,
+            ],
           ],
-        ],
-      ),
+        ),
       ),
     );
   }

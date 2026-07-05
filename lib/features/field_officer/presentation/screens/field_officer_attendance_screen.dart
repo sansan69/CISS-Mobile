@@ -7,7 +7,7 @@ import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/network/ciss_error.dart';
 import '../../../auth/application/auth_controller.dart';
-import '../../../../../shared/widgets/glass_card.dart';
+import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/portal_primitives.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
@@ -595,9 +595,8 @@ class _FieldOfficerGuardAttendanceScreenState
             );
           },
           borderRadius: BorderRadius.circular(AppRadius.lg),
-          child: GlassCard(
+          child: ModernCard(
             padding: const EdgeInsets.all(12),
-            accentColor: glow,
             child: Row(
               children: [
                 CircleAvatar(
@@ -748,9 +747,8 @@ class _LiveGuardRow extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(AppRadius.lg),
-          child: GlassCard(
+          child: ModernCard(
             padding: const EdgeInsets.all(12),
-            accentColor: glow,
             child: Row(
               children: [
                 Stack(
@@ -851,7 +849,7 @@ class _LiveDot extends StatelessWidget {
       decoration: BoxDecoration(
         color: color,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2),
+        border: Border.all(color: tokens.surface, width: 2),
         boxShadow: hasLive && !isStale
             ? [
                 BoxShadow(

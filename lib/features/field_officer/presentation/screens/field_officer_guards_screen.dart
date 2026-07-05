@@ -4,8 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/network/providers.dart';
-import '../../../../../shared/widgets/metric_tile.dart';
-import '../../../../../shared/widgets/screen_scaffold.dart';
+import '../../../../../shared/widgets/metric_card.dart';
+import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import 'field_officer_guard_detail_screen.dart';
@@ -59,74 +59,86 @@ class _FieldOfficerGuardsScreenState
       ),
       data: (guards) {
         final filtered = _filter(guards);
-        final districts = guards
-            .map((guard) => guard.district)
-            .where((district) => district.trim().isNotEmpty)
-            .toSet()
-            .length;
-        final clients = guards
-            .map((guard) => guard.clientName)
-            .where((client) => client.trim().isNotEmpty)
-            .toSet()
-            .length;
+        final tokens = CissThemeTokens.of(context);
 
-        return ScreenScaffold(
-          title: 'Guards',
-          subtitle: 'District guard directory',
-          actions: <Widget>[
-            IconButton(
-              onPressed: () => ref.invalidate(fieldOfficerGuardsProvider),
-              icon: const Icon(Icons.refresh_rounded),
-            ),
-          ],
-          onRefresh: () async => ref.invalidate(fieldOfficerGuardsProvider),
-          children: <Widget>[
-            Row(
+        return Scaffold(
+          backgroundColor: tokens.canvas,
+          body: RefreshIndicator(
+            onRefresh: () async =>
+                ref.invalidate(fieldOfficerGuardsProvider),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.xxl),
               children: <Widget>[
-                Expanded(
-                  child: MetricTile(
-                    label: 'Visible',
-                    value: guards.length.toString(),
-                    helper: 'Active guards',
-                    icon: Icons.groups_2_rounded,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: <Widget>[
+                    Expanded(
+                      child: Text(
+                        'Guards',
+                        style: AppTypography.display(context).copyWith(fontSize: 22),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => ref.invalidate(fieldOfficerGuardsProvider),
+                      icon: Icon(Icons.refresh_rounded, color: tokens.inkMuted, size: 20),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: <Widget>[
+                        MetricCard(
+                          label: 'Visible',
+                          value: guards.length.toString(),
+                          color: tokens.primary,
+                          width: 140,
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        MetricCard(
+                          label: 'Districts',
+                          value: '${guards.map((g) => g.district).where((d) => d.trim().isNotEmpty).toSet().length}',
+                          color: tokens.accent,
+                          width: 140,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: MetricTile(
-                    label: 'Districts',
-                    value: districts.toString(),
-                    helper: '$clients client${clients == 1 ? '' : 's'}',
-                    icon: Icons.map_rounded,
+                const SizedBox(height: AppSpacing.md),
+                TextField(
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _query = value),
+                  decoration: InputDecoration(
+                    labelText: 'Search guards',
+                    hintText: 'Name, employee ID, client, district, phone',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    filled: true,
+                    fillColor: tokens.surface,
                   ),
                 ),
+                const SizedBox(height: AppSpacing.md),
+                if (guards.isEmpty)
+                  const StateBlock(
+                    icon: Icons.person_off_rounded,
+                    title: 'No guards found',
+                    message:
+                        'Guards assigned to your districts will appear here once available.',
+                  )
+                else if (filtered.isEmpty)
+                  const StateBlock(
+                    icon: Icons.search_off_rounded,
+                    title: 'No matching guards',
+                    message: 'Try a different name, ID, client, or district.',
+                  )
+                else
+                  ...filtered.map(_GuardDirectoryRow.new),
               ],
             ),
-            TextField(
-              controller: _searchController,
-              onChanged: (value) => setState(() => _query = value),
-              decoration: const InputDecoration(
-                labelText: 'Search guards',
-                hintText: 'Name, employee ID, client, district, phone',
-                prefixIcon: Icon(Icons.search_rounded),
-              ),
-            ),
-            if (guards.isEmpty)
-              const StateBlock(
-                icon: Icons.person_off_rounded,
-                title: 'No guards found',
-                message:
-                    'Guards assigned to your districts will appear here once available.',
-              )
-            else if (filtered.isEmpty)
-              const StateBlock(
-                icon: Icons.search_off_rounded,
-                title: 'No matching guards',
-                message: 'Try a different name, ID, client, or district.',
-              )
-            else
-              ...filtered.map(_GuardDirectoryRow.new),
-          ],
+          ),
         );
       },
     );
@@ -167,25 +179,19 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
     final guard = widget.guard;
     final imageUrl = guard.profilePhotoUrl;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => FieldOfficerGuardDetailScreen(
-              employeeId: guard.employeeId,
-              guardName: guard.fullName,
-              siteName: guard.clientName,
+    return ModernCard(
+        padding: EdgeInsets.zero,
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => FieldOfficerGuardDetailScreen(
+                employeeId: guard.employeeId,
+                guardName: guard.fullName,
+                siteName: guard.clientName,
+              ),
             ),
-          ),
-        );
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: tokens.surface,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: tokens.border),
-        ),
+          );
+        },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -305,8 +311,7 @@ class _GuardDirectoryRowState extends State<_GuardDirectoryRow> {
             ],
           ],
         ),
-      ),
-    );
+      );
   }
 
   String _initials(String name, String fallback) {

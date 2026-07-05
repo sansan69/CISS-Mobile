@@ -14,8 +14,7 @@ class BrandedNavigationItem {
   final IconData activeIcon;
 }
 
-/// M3 NavigationBar wrapper with brand-aware theming.
-/// Uses compact labels and proper icon sizing for 3-6 destinations.
+/// Brand-aware bottom navigation used across all role shells.
 class BrandedNavigationBar extends StatelessWidget {
   const BrandedNavigationBar({
     super.key,
@@ -31,49 +30,64 @@ class BrandedNavigationBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    return NavigationBarTheme(
-      data: NavigationBarThemeData(
-        height: 64,
-        labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              color: tokens.primaryStrong,
-              height: 1.0,
-              letterSpacing: -0.3,
-            );
-          }
-          return TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-            color: tokens.inkMuted,
-            height: 1.0,
-            letterSpacing: -0.3,
-          );
-        }),
-        indicatorShape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-        ),
-        indicatorColor: tokens.primarySoft,
-        backgroundColor: tokens.surface,
-        surfaceTintColor: tokens.primary,
-        shadowColor: Colors.transparent,
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        border: Border(top: BorderSide(color: tokens.border)),
+        boxShadow: AppShadows.subtle,
       ),
-      child: NavigationBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: onSelected,
-        animationDuration: const Duration(milliseconds: 200),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: items
-            .map(
-              (BrandedNavigationItem item) => NavigationDestination(
-                icon: Icon(item.icon, size: 20, color: tokens.inkMuted),
-                selectedIcon: Icon(item.activeIcon, size: 20, color: tokens.primaryStrong),
-                label: item.label,
-              ),
-            )
-            .toList(),
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottomInset > 0 ? bottomInset : 6),
+        child: NavigationBarTheme(
+          data: NavigationBarThemeData(
+            height: 64,
+            labelTextStyle: WidgetStateProperty.resolveWith((states) {
+              if (states.contains(WidgetState.selected)) {
+                return TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: tokens.primaryStrong,
+                  height: 1.0,
+                  letterSpacing: 0,
+                );
+              }
+              return TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: tokens.inkMuted,
+                height: 1.0,
+                letterSpacing: 0,
+              );
+            }),
+            indicatorShape: const StadiumBorder(),
+            indicatorColor: tokens.primarySoft,
+            backgroundColor: tokens.surface,
+            surfaceTintColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+          ),
+          child: NavigationBar(
+            selectedIndex: selectedIndex,
+            onDestinationSelected: onSelected,
+            animationDuration: const Duration(milliseconds: 180),
+            labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+            destinations:
+                items
+                    .map(
+                      (BrandedNavigationItem item) => NavigationDestination(
+                        icon: Icon(item.icon, size: 20, color: tokens.inkMuted),
+                        selectedIcon: Icon(
+                          item.activeIcon,
+                          size: 20,
+                          color: tokens.primaryStrong,
+                        ),
+                        label: item.label,
+                      ),
+                    )
+                    .toList(),
+          ),
+        ),
       ),
     );
   }

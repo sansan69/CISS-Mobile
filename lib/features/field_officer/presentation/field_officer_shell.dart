@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/cache/preload_controller.dart';
 import '../../../core/haptics.dart';
 import '../../auth/application/auth_controller.dart';
 import '../field_officer_tab_provider.dart';
-import '../../../shared/widgets/brand_banner.dart';
-import '../../../shared/widgets/glass_card.dart';
-import '../../../shared/widgets/branded_navigation_bar.dart';
+import '../../../shared/widgets/modern_card.dart';
+import '../../../shared/widgets/modern_hero.dart';
 import '../../../shared/widgets/theme_mode_selector.dart';
 import '../../../shared/widgets/security_settings_card.dart';
 import '../../../shared/widgets/sync_status_badge.dart';
@@ -33,28 +31,16 @@ class FieldOfficerShell extends ConsumerStatefulWidget {
 class _FieldOfficerShellState extends ConsumerState<FieldOfficerShell> {
   static const List<_FieldOfficerTab> _tabs = <_FieldOfficerTab>[
     _FieldOfficerTab(
-      label: 'Dashboard',
-      icon: Icons.dashboard_outlined,
-      activeIcon: Icons.dashboard_rounded,
+      label: 'Home',
+      icon: Icons.home_outlined,
+      activeIcon: Icons.home_rounded,
       screen: FieldOfficerDashboardScreen(),
     ),
     _FieldOfficerTab(
-      label: 'Orders',
-      icon: Icons.assignment_turned_in_outlined,
-      activeIcon: Icons.assignment_turned_in_rounded,
-      screen: FieldOfficerWorkOrdersScreen(),
-    ),
-    _FieldOfficerTab(
-      label: 'Guards',
-      icon: Icons.groups_2_outlined,
-      activeIcon: Icons.groups_2_rounded,
-      screen: FieldOfficerGuardsScreen(),
-    ),
-    _FieldOfficerTab(
-      label: 'Attendance',
-      icon: Icons.fact_check_outlined,
-      activeIcon: Icons.fact_check_rounded,
-      screen: FieldOfficerGuardAttendanceScreen(),
+      label: 'Duties',
+      icon: Icons.assignment_outlined,
+      activeIcon: Icons.assignment_rounded,
+      screen: _FieldOfficerDutiesHolder(),
     ),
     _FieldOfficerTab(
       label: 'Reports',
@@ -79,15 +65,77 @@ class _FieldOfficerShellState extends ConsumerState<FieldOfficerShell> {
     });
   }
 
+  Widget _buildPillNav(BuildContext context, int index, WidgetRef ref) {
+    final tokens = CissThemeTokens.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        border: Border(top: BorderSide(color: tokens.border)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Container(
+          height: 56,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          decoration: BoxDecoration(
+            color: tokens.surfaceMuted,
+            borderRadius: BorderRadius.circular(28),
+          ),
+          child: Row(
+            children: List.generate(_tabs.length, (i) {
+              final tab = _tabs[i];
+              final isSelected = i == index;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    Haptics.selection();
+                    ref.read(fieldOfficerTabIndexProvider.notifier).state = i;
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isSelected ? tokens.primary : Colors.transparent,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: <Widget>[
+                        Icon(
+                          isSelected ? tab.activeIcon : tab.icon,
+                          size: 20,
+                          color: isSelected ? Colors.white : tokens.inkMuted,
+                        ),
+                        if (isSelected) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            tab.label,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final index = ref.watch(fieldOfficerTabIndexProvider);
 
     // Keep all FO data providers alive so tab switching is instant.
     ref.watch(fieldOfficerDashboardProvider);
-    ref.watch(fieldOfficerWorkOrdersProvider);
-    ref.watch(fieldOfficerGuardsProvider);
-    ref.watch(fieldOfficerGuardAttendanceProvider);
     ref.watch(fieldOfficerVisitReportsProvider);
     ref.watch(fieldOfficerTrainingReportsProvider);
 
@@ -126,22 +174,7 @@ class _FieldOfficerShellState extends ConsumerState<FieldOfficerShell> {
           children: _tabs.map((t) => t.screen).toList(),
         ),
         ),
-        bottomNavigationBar: BrandedNavigationBar(
-          selectedIndex: index,
-          onSelected: (int i) {
-            Haptics.selection();
-            ref.read(fieldOfficerTabIndexProvider.notifier).state = i;
-          },
-          items: _tabs
-              .map(
-                (_FieldOfficerTab tab) => BrandedNavigationItem(
-                  label: tab.label,
-                  icon: tab.icon,
-                  activeIcon: tab.activeIcon,
-                ),
-              )
-              .toList(),
-        ),
+        bottomNavigationBar: _buildPillNav(context, index, ref),
       ),
     );
   }
@@ -161,6 +194,107 @@ class _FieldOfficerTab {
   final Widget screen;
 }
 
+class _FieldOfficerDutiesHolder extends ConsumerWidget {
+  const _FieldOfficerDutiesHolder();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = CissThemeTokens.of(context);
+    final index = ref.watch(fieldOfficerDutiesSubIndexProvider);
+
+    // Keep duties sub-tab providers alive
+    ref.watch(fieldOfficerWorkOrdersProvider);
+    ref.watch(fieldOfficerGuardsProvider);
+    ref.watch(fieldOfficerGuardAttendanceProvider);
+
+    return Column(
+      children: <Widget>[
+        Container(
+          color: tokens.surface,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: Row(
+            children: <Widget>[
+              _DutiesSubTab(
+                label: 'Order',
+                isSelected: index == 0,
+                onTap: () =>
+                    ref.read(fieldOfficerDutiesSubIndexProvider.notifier).state =
+                        0,
+              ),
+              const SizedBox(width: 8),
+              _DutiesSubTab(
+                label: 'Guard',
+                isSelected: index == 1,
+                onTap: () =>
+                    ref.read(fieldOfficerDutiesSubIndexProvider.notifier).state =
+                        1,
+              ),
+              const SizedBox(width: 8),
+              _DutiesSubTab(
+                label: 'Attendance',
+                isSelected: index == 2,
+                onTap: () =>
+                    ref.read(fieldOfficerDutiesSubIndexProvider.notifier).state =
+                        2,
+              ),
+            ],
+          ),
+        ),
+        Container(
+          height: 1,
+          color: tokens.border,
+        ),
+        Expanded(
+          child: IndexedStack(
+            index: index,
+            children: const <Widget>[
+              FieldOfficerWorkOrdersScreen(),
+              FieldOfficerGuardsScreen(),
+              FieldOfficerGuardAttendanceScreen(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _DutiesSubTab extends StatelessWidget {
+  const _DutiesSubTab({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? tokens.primary : tokens.surfaceMuted,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+        ),
+        child: Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1,
+            color: isSelected ? Colors.white : tokens.inkMuted,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class FieldOfficerMoreScreen extends ConsumerWidget {
   const FieldOfficerMoreScreen({super.key});
 
@@ -175,9 +309,10 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
         child: ListView(
         padding: const EdgeInsets.fromLTRB(0, 0, 0, 32),
         children: [
-          BrandBanner(
-            title: 'Vault',
-            subtitle: 'Secure tools and system settings',
+          ModernHero(
+            eyebrow: 'Vault',
+            title: 'Settings & Tools',
+            subtitle: 'Secure system preferences and tools',
             trailing: const SyncStatusBadge(),
           ),
 
@@ -265,8 +400,8 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                 ),
 
                 const SizedBox(height: 40),
-                GlassCard(
-                  accentColor: tokens.danger,
+          ModernCard(
+                  borderColor: tokens.danger.withValues(alpha: 0.3),
                   child: Column(
                     children: [
                       Row(
@@ -380,13 +515,17 @@ class _ToolTile extends StatelessWidget {
     final tokens = CissThemeTokens.of(context);
 
     return Material(
-      color: Colors.transparent,
+      color: tokens.surface,
+      borderRadius: BorderRadius.circular(AppRadius.md),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: GlassCard(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
           padding: const EdgeInsets.all(16),
-          accentColor: color,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: tokens.border),
+          ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -404,7 +543,7 @@ class _ToolTile extends StatelessWidget {
             ],
           ),
         ),
-        ),
+      ),
     );
   }
 }
@@ -416,7 +555,8 @@ class _NotificationTile extends ConsumerWidget {
     final unreadAsync = ref.watch(NotificationService.unreadCountProvider);
     final count = unreadAsync.valueOrNull ?? 0;
 
-    return GlassCard(
+    return ModernCard(
+      padding: EdgeInsets.zero,
       child: ListTile(
         leading: Icon(Icons.notifications_outlined, color: tokens.primary),
         title: Text('Notifications', style: TextStyle(fontWeight: FontWeight.w700)),

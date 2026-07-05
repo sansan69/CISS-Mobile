@@ -4,12 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/network/providers.dart';
 import '../../auth/application/auth_controller.dart';
-import '../../../shared/widgets/glass_card.dart';
-import '../../../shared/widgets/screen_scaffold.dart';
+import '../../../shared/utils/initials.dart';
+import '../../../shared/widgets/modern_card.dart';
 import '../../../shared/widgets/state_block.dart';
 import '../../../shared/widgets/status_chip.dart';
+import 'client_guard_detail_screen.dart';
 
-/// Client guards screen — shows all guards assigned to this client.
 class ClientGuardsScreen extends ConsumerStatefulWidget {
   const ClientGuardsScreen({super.key});
 
@@ -22,6 +22,7 @@ class _ClientGuardsScreenState extends ConsumerState<ClientGuardsScreen> {
   List<Map<String, dynamic>>? _guards;
   bool _loading = true;
   String? _error;
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -58,6 +59,21 @@ class _ClientGuardsScreenState extends ConsumerState<ClientGuardsScreen> {
     }
   }
 
+  List<Map<String, dynamic>> get _filteredGuards {
+    final guards = _guards ?? const <Map<String, dynamic>>[];
+    if (_searchQuery.isEmpty) return guards;
+    return guards.where((g) {
+      final name =
+          (g['fullName'] as String?) ?? (g['name'] as String?) ?? '';
+      final empId = g['employeeId']?.toString() ?? '';
+      final site = g['siteName']?.toString() ?? '';
+      final q = _searchQuery.toLowerCase();
+      return name.toLowerCase().contains(q) ||
+          empId.toLowerCase().contains(q) ||
+          site.toLowerCase().contains(q);
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
@@ -87,98 +103,146 @@ class _ClientGuardsScreenState extends ConsumerState<ClientGuardsScreen> {
       );
     }
 
-    final guards = _guards ?? const <Map<String, dynamic>>[];
+    final filtered = _filteredGuards;
 
-    return ScreenScaffold(
-      title: 'Guards',
-      subtitle: 'Your security personnel',
-      onRefresh: _fetchGuards,
-      children: <Widget>[
-        if (guards.isEmpty)
-          const StateBlock(
-            icon: Icons.person_off_rounded,
-            title: 'No guards assigned',
-            message:
-                'Guards assigned to your sites will appear here once deployed.',
-          )
-        else
-          ...guards.map((guard) {
-            final name =
-                (guard['fullName'] as String?) ?? (guard['name'] as String?) ?? 'Guard';
-            final phone =
-                (guard['phoneNumber'] as String?) ?? (guard['phone'] as String?) ?? '';
-            final status =
-                (guard['status'] as String?) ?? 'active';
-            final isActive = status.toLowerCase() == 'active';
+    return Scaffold(
+      backgroundColor: tokens.canvas,
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _fetchGuards,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+            children: <Widget>[
+              TextField(
+                onChanged: (v) => setState(() => _searchQuery = v),
+                decoration: InputDecoration(
+                  hintText: 'Search guards...',
+                  hintStyle: TextStyle(color: tokens.inkMuted, fontSize: 14),
+                  prefixIcon:
+                      Icon(Icons.search_rounded, color: tokens.inkMuted, size: 20),
+                  filled: true,
+                  fillColor: tokens.surface,
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: tokens.border),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: tokens.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: tokens.primary, width: 1.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (filtered.isEmpty)
+                const StateBlock(
+                  icon: Icons.person_off_rounded,
+                  title: 'No guards found',
+                  message:
+                      'Guards assigned to your sites will appear here once deployed.',
+                )
+              else
+                ...filtered.map((guard) {
+                  final name =
+                      (guard['fullName'] as String?) ??
+                          (guard['name'] as String?) ??
+                          'Guard';
+                  final employeeId =
+                      guard['employeeId']?.toString() ?? '';
+                  final site =
+                      guard['siteName']?.toString() ?? '';
+                  final status =
+                      guard['status']?.toString() ?? 'active';
+                  final isActive = status.toLowerCase() == 'active';
 
-            return GlassCard(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Row(
-                  children: <Widget>[
-                    // Avatar with initial
-                    CircleAvatar(
-                      radius: 24,
-                      backgroundColor: tokens.primarySoft,
-                      child: Text(
-                        _initials(name),
-                        style: TextStyle(
-                          color: tokens.primaryStrong,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    // Name and phone
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            name,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: tokens.ink,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (phone.isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Text(
-                              phone,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: tokens.inkMuted,
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: ModernCard(
+                      onTap: () {
+                        final empId = guard['employeeId']?.toString();
+                        if (empId != null && empId.isNotEmpty) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ClientGuardDetailScreen(
+                                employeeId: empId,
                               ),
                             ),
-                          ],
+                          );
+                        }
+                      },
+                      child: Row(
+                        children: <Widget>[
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundColor: tokens.primarySoft,
+                            child: Text(
+                              initials(name, fallback: 'G'),
+                              style: TextStyle(
+                                color: tokens.primaryStrong,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  name,
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: tokens.ink,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (employeeId.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'ID: $employeeId',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: tokens.inkMuted,
+                                    ),
+                                  ),
+                                ],
+                                if (site.isNotEmpty)
+                                  Text(
+                                    site,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: tokens.inkMuted,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          StatusChip(
+                            label: isActive ? 'Active' : 'Inactive',
+                            tone: isActive
+                                ? StatusChipTone.success
+                                : StatusChipTone.neutral,
+                          ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    // Status chip
-                    StatusChip(
-                      label: isActive ? 'Active' : 'Inactive',
-                      tone: isActive
-                          ? StatusChipTone.success
-                          : StatusChipTone.neutral,
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }),
-      ],
+                  );
+                }),
+            ],
+          ),
+        ),
+      ),
     );
-  }
-
-  String _initials(String name) {
-    final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
-    final initials = parts.map((p) => p[0]).take(2).join().toUpperCase();
-    if (initials.isNotEmpty) return initials;
-    return 'G';
   }
 }

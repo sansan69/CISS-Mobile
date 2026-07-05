@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import '../models/app_role.dart';
+import '../models/admin_models.dart';
 import '../models/attendance_models.dart';
 import '../models/auth_session.dart';
 import '../models/guard_pin_status.dart';
@@ -185,6 +186,23 @@ class MobileRepository {
       final response = await _apiClient.dio.post<dynamic>(
         path,
         data: body,
+        options: Options(headers: await _authHeaders()),
+      );
+      final data = response.data;
+      if (data is! Map) {
+        throw Exception('Unexpected response format from server');
+      }
+      return Map<String, dynamic>.from(data);
+    } catch (error) {
+      if (_isOfflineDioError(error)) rethrow;
+      throw Exception(_extractApiError(error));
+    }
+  }
+
+  Future<Map<String, dynamic>> _deleteJson(String path) async {
+    try {
+      final response = await _apiClient.dio.delete<dynamic>(
+        path,
         options: Options(headers: await _authHeaders()),
       );
       final data = response.data;
@@ -914,6 +932,26 @@ class MobileRepository {
     });
   }
 
+  Future<Map<String, dynamic>> fetchQuiz(String assignmentId) async {
+    return _getJson('/api/guard/training/quiz/$assignmentId');
+  }
+
+  Future<Map<String, dynamic>> submitQuiz({
+    required String assignmentId,
+    required String bankId,
+    required String startedAt,
+    required List<Map<String, dynamic>> answers,
+  }) async {
+    return _postJson(
+      '/api/guard/training/quiz/$assignmentId/submit',
+      <String, dynamic>{
+        'bankId': bankId,
+        'startedAt': startedAt,
+        'answers': answers,
+      },
+    );
+  }
+
   Future<List<EvaluationModel>> fetchEvaluations() async {
     final data = await _getJson('/api/guard/evaluations');
     final evaluations =
@@ -1012,6 +1050,15 @@ class MobileRepository {
     return orders.whereType<Map<String, dynamic>>().toList();
   }
 
+  Future<Map<String, dynamic>> fetchClientPatrolActivities(
+    String clientId,
+  ) async {
+    return _getJson(
+      '/api/client/patrol-activities',
+      queryParameters: <String, dynamic>{'clientId': clientId},
+    );
+  }
+
   // ── Admin endpoints ──────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> fetchAdminDashboard() async {
@@ -1043,6 +1090,334 @@ class MobileRepository {
     );
     final orders = data['workOrders'] as List<dynamic>? ?? const <dynamic>[];
     return orders.whereType<Map<String, dynamic>>().toList();
+  }
+
+  // ── Admin Employee Management ────────────────────────────────────────
+
+  Future<List<EmployeeModel>> fetchAdminEmployees({
+    String? clientId,
+    String? status,
+    int limit = 300,
+  }) async {
+    final params = <String, dynamic>{'limit': limit};
+    if (clientId != null && clientId.isNotEmpty) params['clientId'] = clientId;
+    if (status != null && status.isNotEmpty) params['status'] = status;
+    final data = await _getJson(
+      '/api/admin/employees',
+      queryParameters: params,
+    );
+    final list = data['employees'] as List<dynamic>? ?? const <dynamic>[];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(EmployeeModel.fromJson)
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> updateEmployeeStatus({
+    required String employeeId,
+    required String status,
+  }) async {
+    return _patchJson(
+      '/api/admin/employees/$employeeId',
+      <String, dynamic>{'status': status},
+    );
+  }
+
+  // ── Admin Training Modules ───────────────────────────────────────────
+
+  Future<List<TrainingModuleModel>> fetchTrainingModules() async {
+    final data = await _getJson('/api/admin/training/modules');
+    final list = data['modules'] as List<dynamic>? ?? const <dynamic>[];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(TrainingModuleModel.fromJson)
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> createTrainingModule(
+    Map<String, dynamic> payload,
+  ) async {
+    return _postJson('/api/admin/training/modules', payload);
+  }
+
+  Future<Map<String, dynamic>> updateTrainingModule({
+    required String moduleId,
+    required Map<String, dynamic> payload,
+  }) async {
+    return _patchJson('/api/admin/training/modules/$moduleId', payload);
+  }
+
+  Future<Map<String, dynamic>> deleteTrainingModule(String moduleId) async {
+    return _deleteJson('/api/admin/training/modules/$moduleId');
+  }
+
+  // ── Admin Question Banks ─────────────────────────────────────────────
+
+  Future<List<QuestionBankModel>> fetchQuestionBanks({
+    String? moduleId,
+  }) async {
+    final data = await _getJson(
+      '/api/admin/training/banks',
+      queryParameters: moduleId != null && moduleId.isNotEmpty
+          ? <String, dynamic>{'moduleId': moduleId}
+          : null,
+    );
+    final list = data['banks'] as List<dynamic>? ?? const <dynamic>[];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(QuestionBankModel.fromJson)
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> createQuestionBank(
+    Map<String, dynamic> payload,
+  ) async {
+    return _postJson('/api/admin/training/banks', payload);
+  }
+
+  Future<Map<String, dynamic>> updateQuestionBank({
+    required String bankId,
+    required Map<String, dynamic> payload,
+  }) async {
+    return _patchJson('/api/admin/training/banks/$bankId', payload);
+  }
+
+  Future<Map<String, dynamic>> deleteQuestionBank(String bankId) async {
+    return _deleteJson('/api/admin/training/banks/$bankId');
+  }
+
+  // ── Admin Training Assignments ───────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> fetchAdminTrainingAssignments({
+    String? employeeId,
+    String? moduleId,
+  }) async {
+    final params = <String, dynamic>{};
+    if (employeeId != null && employeeId.isNotEmpty) {
+      params['employeeId'] = employeeId;
+    }
+    if (moduleId != null && moduleId.isNotEmpty) {
+      params['moduleId'] = moduleId;
+    }
+    final data = await _getJson(
+      '/api/admin/training/assignments',
+      queryParameters: params.isNotEmpty ? params : null,
+    );
+    final list = data['assignments'] as List<dynamic>? ?? const <dynamic>[];
+    return list.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<Map<String, dynamic>> createTrainingAssignment(
+    Map<String, dynamic> payload,
+  ) async {
+    return _postJson('/api/admin/training/assignments', payload);
+  }
+
+  // ── Admin Evaluations ────────────────────────────────────────────────
+
+  Future<List<EvaluationModel>> fetchAdminEvaluations({
+    String? period,
+    String? employeeId,
+  }) async {
+    final params = <String, dynamic>{};
+    if (period != null && period.isNotEmpty) params['period'] = period;
+    if (employeeId != null && employeeId.isNotEmpty) {
+      params['employeeId'] = employeeId;
+    }
+    final data = await _getJson(
+      '/api/admin/evaluations',
+      queryParameters: params.isNotEmpty ? params : null,
+    );
+    final list = data['evaluations'] as List<dynamic>? ?? const <dynamic>[];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(EvaluationModel.fromJson)
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> createEvaluation(
+    Map<String, dynamic> payload,
+  ) async {
+    return _postJson('/api/admin/evaluations', payload);
+  }
+
+  // ── Admin Leaderboard ────────────────────────────────────────────────
+
+  Future<List<LeaderboardEntryModel>> fetchLeaderboard({
+    String? district,
+    String? clientId,
+  }) async {
+    final params = <String, dynamic>{};
+    if (district != null && district.isNotEmpty) params['district'] = district;
+    if (clientId != null && clientId.isNotEmpty) params['clientId'] = clientId;
+    final data = await _getJson(
+      '/api/admin/leaderboard',
+      queryParameters: params.isNotEmpty ? params : null,
+    );
+    final list = data['scores'] as List<dynamic>? ?? const <dynamic>[];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(LeaderboardEntryModel.fromJson)
+        .toList();
+  }
+
+  // ── Admin Payroll ────────────────────────────────────────────────────
+
+  Future<List<PayrollCycleModel>> fetchPayrollCycles() async {
+    final data = await _getJson('/api/admin/payroll/cycles');
+    final list = data['cycles'] as List<dynamic>? ?? const <dynamic>[];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(PayrollCycleModel.fromJson)
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> fetchPayrollCycleDetail(String cycleId) async {
+    return _getJson('/api/admin/payroll/cycles/$cycleId');
+  }
+
+  Future<Map<String, dynamic>> createPayrollCycle(
+    Map<String, dynamic> payload,
+  ) async {
+    return _postJson('/api/admin/payroll/cycles', payload);
+  }
+
+  Future<Map<String, dynamic>> finalizePayrollCycle(String cycleId) async {
+    return _postJson(
+      '/api/admin/payroll/cycles/$cycleId/finalize',
+      <String, dynamic>{},
+    );
+  }
+
+  Future<Map<String, dynamic>> deletePayrollCycle(String cycleId) async {
+    return _deleteJson('/api/admin/payroll/cycles/$cycleId');
+  }
+
+  // ── Admin Clients ────────────────────────────────────────────────────
+
+  Future<List<ClientModel>> fetchAdminClients() async {
+    final data = await _getJson('/api/admin/clients');
+    final list = data['clients'] as List<dynamic>? ?? const <dynamic>[];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(ClientModel.fromJson)
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> createClient(
+    Map<String, dynamic> payload,
+  ) async {
+    return _postJson('/api/admin/clients', payload);
+  }
+
+  Future<Map<String, dynamic>> updateClient({
+    required String clientId,
+    required Map<String, dynamic> payload,
+  }) async {
+    return _patchJson('/api/admin/clients/$clientId', payload);
+  }
+
+  Future<Map<String, dynamic>> deleteClient(String clientId) async {
+    return _deleteJson('/api/admin/clients/$clientId');
+  }
+
+  // ── Admin Field Officers ─────────────────────────────────────────────
+
+  Future<List<FieldOfficerModel>> fetchAdminFieldOfficers() async {
+    final data = await _getJson('/api/admin/field-officers');
+    final list = data['fieldOfficers'] as List<dynamic>? ?? const <dynamic>[];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(FieldOfficerModel.fromJson)
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> createFieldOfficer(
+    Map<String, dynamic> payload,
+  ) async {
+    return _postJson('/api/admin/field-officers', payload);
+  }
+
+  Future<Map<String, dynamic>> updateFieldOfficer({
+    required String officerId,
+    required Map<String, dynamic> payload,
+  }) async {
+    return _patchJson('/api/admin/field-officers/$officerId', payload);
+  }
+
+  Future<Map<String, dynamic>> deleteFieldOfficer(String officerId) async {
+    return _deleteJson('/api/admin/field-officers/$officerId');
+  }
+
+  // ── Admin Notifications ──────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> sendAdminNotification({
+    required String title,
+    required String body,
+    String role = 'all',
+    String? district,
+    Map<String, dynamic>? data,
+  }) async {
+    return _postJson('/api/admin/notifications/send', <String, dynamic>{
+      'title': title,
+      'body': body,
+      'role': role,
+      if (district != null && district.trim().isNotEmpty)
+        'district': district.trim(),
+      if (data != null && data.isNotEmpty) 'data': data,
+    });
+  }
+
+  // ── Admin Attendance Reports ─────────────────────────────────────────
+
+  Future<List<AttendanceReportModel>> fetchAttendanceReport({
+    String? month,
+    String? clientId,
+    String? district,
+  }) async {
+    final params = <String, dynamic>{};
+    if (month != null && month.isNotEmpty) params['month'] = month;
+    if (clientId != null && clientId.isNotEmpty) params['clientId'] = clientId;
+    if (district != null && district.isNotEmpty) params['district'] = district;
+    final data = await _getJson(
+      '/api/admin/reports/attendance',
+      queryParameters: params.isNotEmpty ? params : null,
+    );
+    final list = data['reports'] as List<dynamic>? ?? const <dynamic>[];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(AttendanceReportModel.fromJson)
+        .toList();
+  }
+
+  // ── Admin Visit Reports ──────────────────────────────────────────────
+
+  Future<List<VisitReportModel>> fetchAdminVisitReports() async {
+    final data = await _getJson('/api/admin/visit-reports');
+    final list = data['reports'] as List<dynamic>? ?? const <dynamic>[];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(VisitReportModel.fromJson)
+        .toList();
+  }
+
+  // ── Admin Training Reports ───────────────────────────────────────────
+
+  Future<List<TrainingReportModel>> fetchAdminTrainingReports() async {
+    final data = await _getJson('/api/admin/training-reports');
+    final list = data['reports'] as List<dynamic>? ?? const <dynamic>[];
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(TrainingReportModel.fromJson)
+        .toList();
+  }
+
+  // ── Admin Patrol Activities ──────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> fetchAdminPatrolActivities() async {
+    final data = await _getJson('/api/admin/patrol-activities');
+    final list = data['activities'] as List<dynamic>? ?? const <dynamic>[];
+    return list.whereType<Map<String, dynamic>>().toList();
   }
 
   // ── Field Officer endpoints ──────────────────────────────────────────
@@ -1261,5 +1636,162 @@ class MobileRepository {
 
   Future<String> encodeFileToDataUrl(List<int> bytes, String mimeType) async {
     return 'data:$mimeType;base64,${base64Encode(bytes)}';
+  }
+
+  // ── Admin Employee CRUD ───────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> enrollGuard(Map<String, dynamic> payload) async {
+    return _postJson('/api/employees/enroll', payload);
+  }
+
+  Future<Map<String, dynamic>> updateEmployee({
+    required String employeeId,
+    required Map<String, dynamic> payload,
+  }) async {
+    return _patchJson('/api/admin/employees/$employeeId', payload);
+  }
+
+  Future<Map<String, dynamic>> deleteEmployee(String employeeId) async {
+    return _deleteJson('/api/admin/employees/$employeeId');
+  }
+
+  Future<Map<String, dynamic>> fetchEmployeeDetail(String employeeId) async {
+    return _getJson('/api/admin/employees/$employeeId');
+  }
+
+  // ── Admin Sites ───────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> fetchAdminSites({
+    String? clientId,
+  }) async {
+    final params = <String, dynamic>{};
+    if (clientId != null && clientId.isNotEmpty) params['clientId'] = clientId;
+    final data = await _getJson(
+      '/api/admin/sites',
+      queryParameters: params.isNotEmpty ? params : null,
+    );
+    final list = data['sites'] as List<dynamic>? ?? const <dynamic>[];
+    return list.whereType<Map<String, dynamic>>().toList();
+  }
+
+  Future<Map<String, dynamic>> createSite(Map<String, dynamic> payload) async {
+    return _postJson('/api/admin/sites', payload);
+  }
+
+  Future<Map<String, dynamic>> updateSite({
+    required String siteId,
+    required Map<String, dynamic> payload,
+  }) async {
+    return _patchJson('/api/admin/sites/$siteId', payload);
+  }
+
+  Future<Map<String, dynamic>> deleteSite(String siteId) async {
+    return _deleteJson('/api/admin/sites/$siteId');
+  }
+
+  // ── Admin Imports ─────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> importWorkOrdersPreview(
+    Map<String, dynamic> payload,
+  ) async {
+    return _postJson('/api/admin/work-orders/import/preview', payload);
+  }
+
+  Future<Map<String, dynamic>> commitWorkOrderImport(
+    Map<String, dynamic> payload,
+  ) async {
+    return _postJson('/api/admin/work-orders/import/commit', payload);
+  }
+
+  Future<Map<String, dynamic>> bulkImportEmployees(
+    Map<String, dynamic> payload,
+  ) async {
+    return _postJson('/api/admin/employees/bulk', payload);
+  }
+
+  // ── Admin QR ──────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> generateQR(String employeeId) async {
+    return _postJson(
+      '/api/admin/qr/generate',
+      <String, dynamic>{'employeeId': employeeId},
+    );
+  }
+
+  Future<Map<String, dynamic>> bulkGenerateQR() async {
+    return _postJson('/api/admin/qr/bulk-generate', <String, dynamic>{});
+  }
+
+  // ── Admin Data Export ─────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> exportData({
+    required String type,
+    required String format,
+    String? startDate,
+    String? endDate,
+    String? clientId,
+  }) async {
+    return _postJson('/api/admin/data-export', <String, dynamic>{
+      'type': type,
+      'format': format,
+      if (startDate != null) 'startDate': startDate,
+      if (endDate != null) 'endDate': endDate,
+      if (clientId != null) 'clientId': clientId,
+    });
+  }
+
+  // ── Admin Wage Config ─────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>> updateWageConfig({
+    required String clientId,
+    required Map<String, dynamic> payload,
+  }) async {
+    return _patchJson('/api/admin/clients/$clientId/wage-config', payload);
+  }
+
+  Future<Map<String, dynamic>> fetchWageConfig(String clientId) async {
+    return _getJson('/api/admin/clients/$clientId/wage-config');
+  }
+
+  // ── Admin Enrollment Config ───────────────────────────────────────────
+
+  Future<Map<String, dynamic>> fetchEnrollmentConfig() async {
+    return _getJson('/api/admin/enrollment-config');
+  }
+
+  Future<Map<String, dynamic>> updateEnrollmentConfig(
+    Map<String, dynamic> payload,
+  ) async {
+    return _patchJson('/api/admin/enrollment-config', payload);
+  }
+
+  // ── Admin Work Order Management ───────────────────────────────────────
+
+  Future<Map<String, dynamic>> renameWorkOrderExam({
+    required String exam,
+    required String newName,
+  }) async {
+    return _postJson(
+      '/api/admin/work-orders/rename-exam',
+      <String, dynamic>{'exam': exam, 'newName': newName},
+    );
+  }
+
+  Future<Map<String, dynamic>> bulkDeleteWorkOrders(Map<String, dynamic> payload) async {
+    return _deleteJson('/api/admin/work-orders/bulk-delete');
+  }
+
+  Future<Map<String, dynamic>> fetchWorkOrderDetail(String workOrderId) async {
+    return _getJson('/api/admin/work-orders/$workOrderId');
+  }
+
+  Future<void> updateWorkOrderAssignments({
+    required String workOrderId,
+    required List<Map<String, dynamic>> assignedGuards,
+  }) async {
+    await _patchJson(
+      '/api/admin/work-orders/$workOrderId',
+      <String, dynamic>{'assignedGuards': assignedGuards},
+    );
   }
 }

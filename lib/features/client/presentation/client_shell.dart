@@ -7,12 +7,14 @@ import '../../../core/cache/preload_controller.dart';
 import '../../../core/haptics.dart';
 import '../../../core/network/providers.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../../shared/widgets/account_menu_button.dart';
 import '../../../shared/widgets/branded_navigation_bar.dart';
+import '../../../shared/widgets/role_header.dart';
 import '../../../shared/widgets/sync_status_badge.dart';
 import 'client_dashboard_screen.dart';
 import 'client_guards_screen.dart';
 import 'client_attendance_screen.dart';
-import 'client_orders_screen.dart';
+import 'client_more_screen.dart';
 
 class ClientShell extends ConsumerStatefulWidget {
   const ClientShell({super.key});
@@ -24,9 +26,9 @@ class ClientShell extends ConsumerStatefulWidget {
 class _ClientShellState extends ConsumerState<ClientShell> {
   static const List<_ClientTab> _tabs = <_ClientTab>[
     _ClientTab(
-      label: 'Dashboard',
-      icon: Icons.dashboard_outlined,
-      activeIcon: Icons.dashboard_rounded,
+      label: 'Home',
+      icon: Icons.home_outlined,
+      activeIcon: Icons.home_rounded,
       screen: ClientDashboardScreen(),
     ),
     _ClientTab(
@@ -36,23 +38,22 @@ class _ClientShellState extends ConsumerState<ClientShell> {
       screen: ClientGuardsScreen(),
     ),
     _ClientTab(
-      label: 'Attendance',
+      label: 'Activity',
       icon: Icons.fact_check_outlined,
       activeIcon: Icons.fact_check_rounded,
       screen: ClientAttendanceScreen(),
     ),
     _ClientTab(
-      label: 'Orders',
-      icon: Icons.assignment_turned_in_outlined,
-      activeIcon: Icons.assignment_turned_in_rounded,
-      screen: ClientOrdersScreen(),
+      label: 'More',
+      icon: Icons.more_horiz_outlined,
+      activeIcon: Icons.more_horiz_rounded,
+      screen: ClientMoreScreen(),
     ),
   ];
 
   @override
   void initState() {
     super.initState();
-    // Preload client data eagerly after login.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(preloadControllerProvider).preloadAllClient();
     });
@@ -62,7 +63,7 @@ class _ClientShellState extends ConsumerState<ClientShell> {
   Widget build(BuildContext context) {
     final index = ref.watch(clientTabIndexProvider);
     final tokens = CissThemeTokens.of(context);
-    final session = ref.watch(authSessionProvider).value;
+    final session = ref.watch(authSessionProvider).valueOrNull;
 
     return PopScope(
       canPop: false,
@@ -70,38 +71,41 @@ class _ClientShellState extends ConsumerState<ClientShell> {
         if (didPop) return;
         final bool? shouldExit = await showDialog<bool>(
           context: context,
-          builder: (BuildContext ctx) => AlertDialog(
-            title: const Text('Exit CISS Client Portal?'),
-            content: const Text(
-              'Are you sure you want to close the app?',
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Stay'),
+          builder:
+              (BuildContext ctx) => AlertDialog(
+                title: const Text('Exit CISS Client Portal?'),
+                content: const Text('Are you sure you want to close the app?'),
+                actions: <Widget>[
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Stay'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Exit'),
+                  ),
+                ],
               ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Exit'),
-              ),
-            ],
-          ),
         );
         if (shouldExit == true && context.mounted) {
           SystemNavigator.pop();
         }
       },
       child: Scaffold(
+        backgroundColor: tokens.canvas,
         body: SafeArea(
           bottom: false,
           child: Column(
             children: <Widget>[
-              // Header with client name
-              _ClientHeader(
-                clientName: session?.clientName ?? session?.displayName ?? 'Client',
-                tokens: tokens,
+              RoleHeader(
+                name: session?.clientName ?? session?.displayName ?? 'Client',
+                role: 'Client portal',
+                icon: Icons.business_rounded,
+                trailing: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[SyncStatusBadge(), AccountMenuButton()],
+                ),
               ),
-              // Indexed stack for tab content
               Expanded(
                 child: IndexedStack(
                   index: index,
@@ -117,89 +121,17 @@ class _ClientShellState extends ConsumerState<ClientShell> {
             Haptics.selection();
             ref.read(clientTabIndexProvider.notifier).state = i;
           },
-          items: _tabs
-              .map(
-                (_ClientTab tab) => BrandedNavigationItem(
-                  label: tab.label,
-                  icon: tab.icon,
-                  activeIcon: tab.activeIcon,
-                ),
-              )
-              .toList(),
+          items:
+              _tabs
+                  .map(
+                    (_ClientTab tab) => BrandedNavigationItem(
+                      label: tab.label,
+                      icon: tab.icon,
+                      activeIcon: tab.activeIcon,
+                    ),
+                  )
+                  .toList(),
         ),
-      ),
-    );
-  }
-}
-
-class _ClientHeader extends StatelessWidget {
-  const _ClientHeader({
-    required this.clientName,
-    required this.tokens,
-  });
-
-  final String clientName;
-  final CissThemeTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        border: Border(
-          bottom: BorderSide(color: tokens.border),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      child: Row(
-        children: <Widget>[
-          Container(
-            width: 40,
-            height: 40,
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: tokens.primarySoft,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(
-              Icons.business_rounded,
-              color: Color(0xFF1A56DB),
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: <Widget>[
-                Text(
-                  clientName,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: tokens.ink,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  'Client Portal',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: tokens.inkMuted,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SyncStatusBadge(),
-        ],
       ),
     );
   }

@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_tokens.dart';
 import '../../../../shared/widgets/screen_scaffold.dart';
-import '../../../../shared/widgets/glass_card.dart';
+import '../../../../shared/widgets/modern_card.dart';
 import '../../../../shared/widgets/sync_status_badge.dart';
 import '../../../../core/sync/refresh_controller.dart';
 
@@ -19,7 +19,7 @@ class FieldOfficerIncidentsScreen extends ConsumerWidget {
       title: 'Incidents',
       subtitle: 'Recent guard-reported incidents',
       children: [
-        GlassCard(
+        ModernCard(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -56,7 +56,7 @@ class FieldOfficerSitesScreen extends ConsumerWidget {
       title: 'Sites',
       subtitle: 'Assigned sites in your district',
       children: [
-        GlassCard(
+        ModernCard(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -94,7 +94,7 @@ class FieldOfficerSyncLogsScreen extends ConsumerWidget {
       title: 'Sync & Connectivity',
       subtitle: 'Data sync status and diagnostics',
       children: [
-        GlassCard(
+        ModernCard(
           child: Padding(
             padding: const EdgeInsets.all(18),
             child: Column(
@@ -120,7 +120,7 @@ class FieldOfficerSyncLogsScreen extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 12),
-        GlassCard(
+        ModernCard(
           child: ListTile(
             leading: Icon(Icons.refresh_rounded, color: tokens.primary),
             title: Text('Force Sync Now',
@@ -179,7 +179,7 @@ class FieldOfficerSupportScreen extends ConsumerWidget {
       title: 'Support',
       subtitle: 'Help resources and contact',
       children: [
-        GlassCard(
+        ModernCard(
           child: Column(
             children: [
               ListTile(
