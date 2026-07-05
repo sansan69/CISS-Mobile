@@ -140,10 +140,11 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
               _regionChecked = true;
               WidgetsBinding.instance.addPostFrameCallback((_) async {
                 if (!mounted) return;
+                final router = GoRouter.of(context);
                 final saved = await ref.read(regionServiceProvider).getSavedRegion();
                 if (!mounted) return;
                 if (saved == null) {
-                  context.go('/region-select');
+                  router.go('/region-select');
                 }
               });
             }
@@ -212,7 +213,7 @@ class _AppLoadingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<CissThemeTokens>()!;
+    final tokens = CissThemeTokens.of(context);
 
     return Scaffold(
       backgroundColor: tokens.canvas,
@@ -290,7 +291,7 @@ class _BiometricLockScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<CissThemeTokens>()!;
+    final tokens = CissThemeTokens.of(context);
 
     return Scaffold(
       body: SecurityGridBackground(

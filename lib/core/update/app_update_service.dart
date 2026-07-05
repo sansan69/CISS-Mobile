@@ -1,10 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../region/region_service.dart';
 
@@ -72,10 +72,31 @@ class AppUpdateCheckResult {
       hasUpdate && currentVersionCode < update!.minimumSupportedVersionCode;
 }
 
+/// Result of an attempted in-app update installation.
+sealed class InstallResult {
+  const InstallResult();
+}
+
+class InstallSuccess extends InstallResult {
+  const InstallSuccess();
+}
+
+class InstallNeedsPermission extends InstallResult {
+  const InstallNeedsPermission();
+}
+
+class InstallFailed extends InstallResult {
+  const InstallFailed(this.message);
+  final String message;
+}
+
 class AppUpdateService {
   AppUpdateService(this._regionService);
 
   final RegionService _regionService;
+  static const MethodChannel _channel = MethodChannel(
+    'co.in.ciss.ciss_mobile/apk_installer',
+  );
 
   Future<AppUpdateCheckResult?> checkForAndroidUpdate() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
@@ -111,10 +132,46 @@ class AppUpdateService {
     }
   }
 
-  Future<bool> openUpdate(AndroidUpdateInfo update) async {
-    final uri = Uri.tryParse(update.apkUrl);
-    if (uri == null) return false;
-    return launchUrl(uri, mode: LaunchMode.externalApplication);
+  /// Check whether this device can install APKs from unknown sources.
+  Future<bool> canInstallApk() async {
+    try {
+      return await _channel.invokeMethod<bool>('canInstall') ?? false;
+    } catch (e) {
+      debugPrint('ApkInstaller.canInstall error: $e');
+      return false;
+    }
+  }
+
+  /// Open the system "Install unknown apps" settings page for this app.
+  Future<void> openInstallSettings() async {
+    try {
+      await _channel.invokeMethod('openInstallSettings');
+    } catch (e) {
+      debugPrint('ApkInstaller.openInstallSettings error: $e');
+    }
+  }
+
+  /// Install the APK at [localPath] via the Package Installer.
+  ///
+  /// Returns [InstallSuccess] if the intent was sent (user still needs to
+  /// confirm in the system dialog). Returns [InstallNeedsPermission] if the
+  /// user needs to grant "Install unknown apps" first. Returns [InstallFailed]
+  /// on any other error — caller should fall back to the browser download.
+  Future<InstallResult> installUpdate(String localPath) async {
+    try {
+      await _channel.invokeMethod('installApk', {'path': localPath});
+      return const InstallSuccess();
+    } on PlatformException catch (e) {
+      // MethodChannel errors
+      if (e.code == 'INSTALL_FAILED' &&
+          (e.message?.contains('Permission') == true ||
+           e.message?.contains('Unknown sources') == true)) {
+        return const InstallNeedsPermission();
+      }
+      return InstallFailed(e.message ?? 'Unknown install error');
+    } catch (e) {
+      return InstallFailed(e.toString());
+    }
   }
 }
 

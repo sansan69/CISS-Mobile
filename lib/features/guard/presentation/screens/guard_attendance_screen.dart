@@ -43,6 +43,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   String? _error;
   bool _busy = false;
   String? _photoPath;
+  String? _clientRequestId; // Stable across retries for idempotency
   Position? _position;
 
   @override
@@ -413,7 +414,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         'sourceCollection': _site!.sourceCollection,
         'photoCapturedAt': DateTime.now().toUtc().toIso8601String(),
         'deviceInfo': <String, dynamic>{'userAgent': 'flutter-mobile'},
-        'clientRequestId': _uuid.v4(),
+        'clientRequestId': _clientRequestId ??= _uuid.v4(),
       };
 
       try {
@@ -625,11 +626,47 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    SectionCard(
+                    GuardHeroPanel(
+                      eyebrow: 'Attendance',
                       title: profile.fullName,
                       subtitle:
                           '${profile.employeeId} • ${profile.clientName} • ${profile.district}',
                       icon: Icons.badge_rounded,
+                      accentColor:
+                          _status == 'In' ? tokens.success : tokens.warning,
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    GuardMetricStrip(
+                      items: <GuardMetricItem>[
+                        GuardMetricItem(
+                          label: 'Mode',
+                          value: _status == 'In' ? 'Check-in' : 'Check-out',
+                          icon:
+                              _status == 'In'
+                                  ? Icons.login_rounded
+                                  : Icons.logout_rounded,
+                          color:
+                              _status == 'In' ? tokens.success : tokens.warning,
+                        ),
+                        GuardMetricItem(
+                          label: 'GPS',
+                          value: _position == null ? 'Needed' : 'Ready',
+                          icon: Icons.my_location_rounded,
+                          color:
+                              _position == null
+                                  ? tokens.warning
+                                  : tokens.success,
+                        ),
+                        GuardMetricItem(
+                          label: 'Photo',
+                          value: _photoPath == null ? 'Needed' : 'Ready',
+                          icon: Icons.camera_alt_rounded,
+                          color:
+                              _photoPath == null
+                                  ? tokens.warning
+                                  : tokens.success,
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 14),
                     if (!isFiltered && sites.isNotEmpty)
@@ -971,21 +1008,23 @@ class _AttendanceHistorySection extends ConsumerWidget {
         const SizedBox(height: 12),
         historyAsync.when(
           loading: () => _buildLoadingSkeleton(tokens),
-          error: (error, _) => StateBlock(
-            icon: Icons.error_outline_rounded,
-            title: 'Could not load history',
-            message: error.toString().replaceFirst('Exception: ', ''),
-            action: FilledButton.tonal(
-              onPressed: () => ref.invalidate(attendanceHistoryProvider),
-              child: const Text('Retry'),
-            ),
-          ),
+          error:
+              (error, _) => StateBlock(
+                icon: Icons.error_outline_rounded,
+                title: 'Could not load history',
+                message: error.toString().replaceFirst('Exception: ', ''),
+                action: FilledButton.tonal(
+                  onPressed: () => ref.invalidate(attendanceHistoryProvider),
+                  child: const Text('Retry'),
+                ),
+              ),
           data: (records) {
             if (records.isEmpty) {
               return const StateBlock(
                 icon: Icons.history_toggle_off_rounded,
                 title: 'No attendance records yet',
-                message: 'Your check-in and check-out records will appear here.',
+                message:
+                    'Your check-in and check-out records will appear here.',
               );
             }
             return _buildAttendanceLog(records, tokens, context);
@@ -997,17 +1036,20 @@ class _AttendanceHistorySection extends ConsumerWidget {
 
   Widget _buildLoadingSkeleton(CissThemeTokens tokens) {
     return Column(
-      children: List.generate(5, (_) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Container(
-          height: 72,
-          decoration: BoxDecoration(
-            color: tokens.surface,
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            border: Border.all(color: tokens.border.withValues(alpha: 0.3)),
+      children: List.generate(
+        5,
+        (_) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: Container(
+            height: 72,
+            decoration: BoxDecoration(
+              color: tokens.surface,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(color: tokens.border.withValues(alpha: 0.3)),
+            ),
           ),
         ),
-      )),
+      ),
     );
   }
 
@@ -1030,12 +1072,13 @@ class _AttendanceHistorySection extends ConsumerWidget {
       } catch (_) {
         monthKey = record.dateLabel.isNotEmpty ? record.dateLabel : 'Unknown';
       }
-      grouped.putIfAbsent(monthKey, () => <AttendanceRecordModel>[]).add(record);
+      grouped
+          .putIfAbsent(monthKey, () => <AttendanceRecordModel>[])
+          .add(record);
     }
 
     // Sort month keys descending
-    final sortedMonths = grouped.keys.toList()
-      ..sort((a, b) => b.compareTo(a));
+    final sortedMonths = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
 
     final allWidgets = <Widget>[];
 
@@ -1060,9 +1103,13 @@ class _AttendanceHistorySection extends ConsumerWidget {
   }
 
   /// Summary statistics: total, present, absent, late
-  Widget _buildSummaryCard(List<AttendanceRecordModel> records, CissThemeTokens tokens) {
+  Widget _buildSummaryCard(
+    List<AttendanceRecordModel> records,
+    CissThemeTokens tokens,
+  ) {
     final total = records.length;
-    final presentCount = records.where((r) => r.status == 'In' || r.status == 'Present').length;
+    final presentCount =
+        records.where((r) => r.status == 'In' || r.status == 'Present').length;
     final absentCount = records.where((r) => r.status == 'Absent').length;
     final lateCount = records.where((r) => r.status == 'Late').length;
     // Check-out records are the OUT ones
@@ -1084,7 +1131,12 @@ class _AttendanceHistorySection extends ConsumerWidget {
               const SizedBox(width: 8),
               Text(
                 'SUMMARY',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: tokens.accent, letterSpacing: 1.2),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: tokens.accent,
+                  letterSpacing: 1.2,
+                ),
               ),
             ],
           ),
@@ -1093,7 +1145,12 @@ class _AttendanceHistorySection extends ConsumerWidget {
             children: [
               _buildStatItem('Total', '$total', tokens.accent, tokens),
               _buildStatDivider(tokens),
-              _buildStatItem('Present', '$presentCount', tokens.success, tokens),
+              _buildStatItem(
+                'Present',
+                '$presentCount',
+                tokens.success,
+                tokens,
+              ),
               _buildStatDivider(tokens),
               _buildStatItem('Out', '$outCount', tokens.warning, tokens),
               _buildStatDivider(tokens),
@@ -1104,11 +1161,19 @@ class _AttendanceHistorySection extends ConsumerWidget {
             const SizedBox(height: 10),
             Row(
               children: [
-                Icon(Icons.warning_amber_rounded, size: 14, color: tokens.warning),
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 14,
+                  color: tokens.warning,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   '$lateCount late check-in(s)',
-                  style: TextStyle(fontSize: 12, color: tokens.warning, fontWeight: FontWeight.w500),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: tokens.warning,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ],
             ),
@@ -1118,13 +1183,34 @@ class _AttendanceHistorySection extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatItem(String label, String value, Color color, CissThemeTokens tokens) {
+  Widget _buildStatItem(
+    String label,
+    String value,
+    Color color,
+    CissThemeTokens tokens,
+  ) {
     return Expanded(
       child: Column(
         children: [
-          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: color, height: 1.1)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: color,
+              height: 1.1,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(label, style: TextStyle(fontSize: 10, color: tokens.inkMuted, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: tokens.inkMuted,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
         ],
       ),
     );
@@ -1146,7 +1232,20 @@ class _AttendanceHistorySection extends ConsumerWidget {
       if (parts.length == 2) {
         final y = int.parse(parts[0]);
         final m = int.parse(parts[1]);
-        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const monthNames = [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
+        ];
         displayTitle = '${monthNames[m - 1]} $y';
       } else {
         displayTitle = monthKey;
@@ -1168,7 +1267,12 @@ class _AttendanceHistorySection extends ConsumerWidget {
         const SizedBox(width: 10),
         Text(
           displayTitle,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: tokens.ink, letterSpacing: -0.2),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: tokens.ink,
+            letterSpacing: -0.2,
+          ),
         ),
         const SizedBox(width: 8),
         Container(
@@ -1179,7 +1283,11 @@ class _AttendanceHistorySection extends ConsumerWidget {
           ),
           child: Text(
             '$count records',
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: tokens.accent),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: tokens.accent,
+            ),
           ),
         ),
       ],
@@ -1242,13 +1350,21 @@ class _AttendanceHistorySection extends ConsumerWidget {
               children: [
                 Text(
                   record.siteName.isNotEmpty ? record.siteName : 'Unknown Site',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: tokens.ink),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: tokens.ink,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 if (record.shiftLabel.isNotEmpty || record.time != null)
                   Row(
                     children: [
-                      Icon(Icons.access_time_rounded, size: 12, color: tokens.inkMuted),
+                      Icon(
+                        Icons.access_time_rounded,
+                        size: 12,
+                        color: tokens.inkMuted,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         [
@@ -1263,7 +1379,14 @@ class _AttendanceHistorySection extends ConsumerWidget {
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      Icon(Icons.pin_drop_rounded, size: 12, color: record.distanceMeters! > 200 ? tokens.danger : tokens.inkMuted),
+                      Icon(
+                        Icons.pin_drop_rounded,
+                        size: 12,
+                        color:
+                            record.distanceMeters! > 200
+                                ? tokens.danger
+                                : tokens.inkMuted,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         record.distanceMeters! < 1000
@@ -1271,7 +1394,10 @@ class _AttendanceHistorySection extends ConsumerWidget {
                             : '${(record.distanceMeters! / 1000).toStringAsFixed(1)} km from site',
                         style: TextStyle(
                           fontSize: 11,
-                          color: record.distanceMeters! > 200 ? tokens.danger : tokens.inkMuted,
+                          color:
+                              record.distanceMeters! > 200
+                                  ? tokens.danger
+                                  : tokens.inkMuted,
                         ),
                       ),
                     ],
@@ -1283,23 +1409,25 @@ class _AttendanceHistorySection extends ConsumerWidget {
           // Right side: photo thumbnail + status
           if (record.photoUrl != null && record.photoUrl!.isNotEmpty)
             GestureDetector(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => Scaffold(
-                    backgroundColor: Colors.black,
-                    appBar: AppBar(
-                      backgroundColor: Colors.black,
-                      foregroundColor: Colors.white,
-                      title: const Text('Photo'),
-                    ),
-                    body: Center(
-                      child: InteractiveViewer(
-                        child: Image.network(record.photoUrl!),
-                      ),
+              onTap:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder:
+                          (_) => Scaffold(
+                            backgroundColor: Colors.black,
+                            appBar: AppBar(
+                              backgroundColor: Colors.black,
+                              foregroundColor: Colors.white,
+                              title: const Text('Photo'),
+                            ),
+                            body: Center(
+                              child: InteractiveViewer(
+                                child: Image.network(record.photoUrl!),
+                              ),
+                            ),
+                          ),
                     ),
                   ),
-                ),
-              ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadius.sm),
                 child: Image.network(
@@ -1307,12 +1435,17 @@ class _AttendanceHistorySection extends ConsumerWidget {
                   width: 44,
                   height: 44,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    width: 44,
-                    height: 44,
-                    color: tokens.inkMuted.withValues(alpha: 0.1),
-                    child: Icon(Icons.photo_rounded, color: tokens.inkMuted, size: 18),
-                  ),
+                  errorBuilder:
+                      (_, __, ___) => Container(
+                        width: 44,
+                        height: 44,
+                        color: tokens.inkMuted.withValues(alpha: 0.1),
+                        child: Icon(
+                          Icons.photo_rounded,
+                          color: tokens.inkMuted,
+                          size: 18,
+                        ),
+                      ),
                 ),
               ),
             ),
@@ -1324,7 +1457,11 @@ class _AttendanceHistorySection extends ConsumerWidget {
   }
 
   /// Circular date badge showing day + weekday
-  Widget _buildDateBadge(AttendanceRecordModel record, Color accentColor, CissThemeTokens tokens) {
+  Widget _buildDateBadge(
+    AttendanceRecordModel record,
+    Color accentColor,
+    CissThemeTokens tokens,
+  ) {
     String dayStr = '--';
     String weekdayStr = '';
     try {
@@ -1355,12 +1492,21 @@ class _AttendanceHistorySection extends ConsumerWidget {
         children: [
           Text(
             dayStr,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: accentColor, height: 1),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: accentColor,
+              height: 1,
+            ),
           ),
           if (weekdayStr.isNotEmpty)
             Text(
               weekdayStr,
-              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: accentColor.withValues(alpha: 0.7)),
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: accentColor.withValues(alpha: 0.7),
+              ),
             ),
         ],
       ),

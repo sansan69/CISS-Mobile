@@ -91,9 +91,7 @@ class _FieldOfficerReportsScreenState
   }
 
   void _openVisitDetail(VisitReportModel report) {
-    final uid = ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
     final isAdmin = false; // FO shell is field-officer only
-    final isOwner = report.fieldOfficerName.isNotEmpty; // Owner if FO name matches current user (we check by uid when available)
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -101,14 +99,13 @@ class _FieldOfficerReportsScreenState
       builder: (_) => VisitReportDetailSheet(
         report: report,
         isAdmin: isAdmin,
-        isOwner: uid == report.fieldOfficerName || true, // Simplified — FO shell always owner
+        isOwner: true, // FO shell always owner
         onUpdated: _refresh,
       ),
     );
   }
 
   void _openTrainingDetail(TrainingReportModel report) {
-    final uid = ref.read(firebaseAuthProvider).currentUser?.uid ?? '';
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1190,13 +1187,6 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
       _showPreview = true;
       _error = null;
     });
-  }
-
-  String _buildPreviewGpsLine() {
-    if (_visitLocation == null) return '';
-    final lat = _visitLocation!['lat']!;
-    final lng = _visitLocation!['lng']!;
-    return 'GPS: ${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
   }
 
   Future<void> _confirmSubmit() async {

@@ -49,12 +49,45 @@ class GuardLocationData {
   final double? siteLng;
   final double? geofenceRadius;
 
+  /// Returns null if the document has no data (e.g. race during concurrent
+  /// delete). Callers must handle null.
+  static GuardLocationData? tryFromFirestore(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final d = doc.data();
+    if (d == null || !doc.exists) return null;
+    return _buildFromData(doc.id, d);
+  }
+
   factory GuardLocationData.fromFirestore(
     DocumentSnapshot<Map<String, dynamic>> doc,
   ) {
-    final d = doc.data()!;
+    final d = doc.data();
+    if (d == null) {
+      return GuardLocationData(
+        employeeDocId: doc.id,
+        employeeId: '',
+        guardName: '',
+        siteId: '',
+        siteName: '',
+        clientName: '',
+        district: '',
+        lat: 0,
+        lng: 0,
+        accuracy: 0,
+        isOutOfZone: false,
+        status: 'Out',
+        updatedAt: DateTime.now(),
+      );
+    }
+    return _buildFromData(doc.id, d);
+  }
+
+  static GuardLocationData _buildFromData(
+    String id, Map<String, dynamic> d,
+  ) {
     return GuardLocationData(
-      employeeDocId: doc.id,
+      employeeDocId: id,
       employeeId: (d['employeeId'] as String?) ?? '',
       guardName: (d['guardName'] as String?) ?? '',
       siteId: (d['siteId'] as String?) ?? '',
@@ -145,7 +178,10 @@ class LiveLocationService {
     }
 
     return query.snapshots().map((snap) =>
-        snap.docs.map((d) => GuardLocationData.fromFirestore(d)).toList());
+        snap.docs
+            .map((d) => GuardLocationData.tryFromFirestore(d))
+            .whereType<GuardLocationData>()
+            .toList());
   }
 
   /// Stream a single guard's location. Used by the guard detail screen.
@@ -154,8 +190,7 @@ class LiveLocationService {
         .collection(collection)
         .doc(employeeDocId)
         .snapshots()
-        .map((doc) =>
-            doc.exists ? GuardLocationData.fromFirestore(doc) : null);
+        .map((doc) => GuardLocationData.tryFromFirestore(doc));
   }
 
   /// One-shot fetch of all active locations. Used by Next.js dashboards

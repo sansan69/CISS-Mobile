@@ -8,7 +8,6 @@ import '../../../core/region/region_service.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/state_block.dart';
-import '../../../shared/widgets/screen_scaffold.dart';
 import '../../../core/haptics.dart';
 
 /// Admin mobile dashboard — real-time stats and operational shortcuts.

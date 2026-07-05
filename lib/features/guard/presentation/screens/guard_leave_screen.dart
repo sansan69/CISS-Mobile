@@ -7,7 +7,6 @@ import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/models/leave_models.dart';
 import '../../../../../core/sync/providers.dart';
-import '../../../../../shared/widgets/section_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
@@ -52,8 +51,12 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
       _message = null;
     });
 
-    final fromDateStr = _fromDate != null ? _apiFmt.format(_fromDate!) : _fromController.text.trim();
-    final toDateStr = _toDate != null ? _apiFmt.format(_toDate!) : _toController.text.trim();
+    final fromDateStr =
+        _fromDate != null
+            ? _apiFmt.format(_fromDate!)
+            : _fromController.text.trim();
+    final toDateStr =
+        _toDate != null ? _apiFmt.format(_toDate!) : _toController.text.trim();
 
     if (fromDateStr.isEmpty) {
       setState(() => _message = 'Please select a start date.');
@@ -106,13 +109,14 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
   Widget build(BuildContext context) {
     final dataAsync = ref.watch(guardLeaveProvider);
     return dataAsync.when(
-      loading: () =>
-          const GuardLoadingScaffold(label: 'Loading leave records...'),
-      error: (Object error, StackTrace stackTrace) => GuardErrorScaffold(
-        title: 'Could not load leave',
-        error: error,
-        onRetry: () => ref.invalidate(guardLeaveProvider),
-      ),
+      loading:
+          () => const GuardLoadingScaffold(label: 'Loading leave records...'),
+      error:
+          (Object error, StackTrace stackTrace) => GuardErrorScaffold(
+            title: 'Could not load leave',
+            error: error,
+            onRetry: () => ref.invalidate(guardLeaveProvider),
+          ),
       data: (data) {
         final tokens = CissThemeTokens.of(context);
         final requests =
@@ -143,12 +147,40 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
             ),
           ],
           children: <Widget>[
-            SectionCard(
-              title: 'Balance',
+            GuardHeroPanel(
+              eyebrow: 'Leave desk',
+              title: 'Request time off',
               subtitle:
                   'Casual ${casual['balance'] ?? 0} • Sick ${sick['balance'] ?? 0} • Earned ${earned['balance'] ?? 0}',
-              icon: Icons.calendar_month_rounded,
+              icon: Icons.event_available_rounded,
+              accentColor: tokens.success,
             ),
+            const SizedBox(height: AppSpacing.lg),
+            GuardMetricStrip(
+              items: <GuardMetricItem>[
+                GuardMetricItem(
+                  label: 'Casual',
+                  value: '${casual['balance'] ?? 0}',
+                  icon: Icons.beach_access_rounded,
+                  color: tokens.primary,
+                ),
+                GuardMetricItem(
+                  label: 'Sick',
+                  value: '${sick['balance'] ?? 0}',
+                  icon: Icons.local_hospital_rounded,
+                  color: tokens.warning,
+                ),
+                GuardMetricItem(
+                  label: 'Earned',
+                  value: '${earned['balance'] ?? 0}',
+                  icon: Icons.calendar_month_rounded,
+                  color: tokens.success,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            const _SectionLabel(title: 'New request'),
+            const SizedBox(height: AppSpacing.sm),
             GuardFormCard(
               children: <Widget>[
                 DropdownButtonFormField<String>(
@@ -171,8 +203,8 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
                       child: Text('Unpaid'),
                     ),
                   ],
-                  onChanged: (value) =>
-                      setState(() => _type = value ?? 'casual'),
+                  onChanged:
+                      (value) => setState(() => _type = value ?? 'casual'),
                   decoration: const InputDecoration(labelText: 'Leave Type'),
                 ),
                 const SizedBox(height: 12),
@@ -183,7 +215,9 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
                     final picked = await showDatePicker(
                       context: context,
                       initialDate: _fromDate ?? DateTime.now(),
-                      firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                      firstDate: DateTime.now().subtract(
+                        const Duration(days: 30),
+                      ),
                       lastDate: DateTime.now().add(const Duration(days: 365)),
                     );
                     if (picked != null) {
@@ -234,36 +268,41 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
                   Container(
                     padding: const EdgeInsets.all(AppSpacing.sm),
                     decoration: BoxDecoration(
-                      color: _message!.toLowerCase().contains('submitted')
-                          ? tokens.successSoft
-                          : tokens.dangerSoft,
+                      color:
+                          _message!.toLowerCase().contains('submitted')
+                              ? tokens.successSoft
+                              : tokens.dangerSoft,
                       borderRadius: BorderRadius.circular(AppRadius.sm),
                     ),
                     child: Text(
                       _message!,
                       style: TextStyle(
-                        color: _message!.toLowerCase().contains('submitted')
-                            ? tokens.success
-                            : tokens.danger,
+                        color:
+                            _message!.toLowerCase().contains('submitted')
+                                ? tokens.success
+                                : tokens.danger,
                       ),
                     ),
                   ),
                 const SizedBox(height: 12),
                 FilledButton(
                   onPressed: _loading ? null : _submitLeave,
-                  child: _loading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator.adaptive(
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Text('Submit Leave'),
+                  child:
+                      _loading
+                          ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator.adaptive(
+                              strokeWidth: 2,
+                            ),
+                          )
+                          : const Text('Submit Leave'),
                 ),
               ],
             ),
             const SizedBox(height: 4),
+            const _SectionLabel(title: 'Request history'),
+            const SizedBox(height: AppSpacing.sm),
             if (requests.isEmpty)
               const StateBlock(
                 icon: Icons.event_busy_rounded,
@@ -280,17 +319,36 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
                   icon: Icons.event_available_rounded,
                   chip: StatusChip(
                     label: request.status,
-                    tone: request.status.toLowerCase() == 'approved'
-                        ? StatusChipTone.success
-                        : request.status.toLowerCase() == 'rejected'
-                        ? StatusChipTone.danger
-                        : StatusChipTone.warning,
+                    tone:
+                        request.status.toLowerCase() == 'approved'
+                            ? StatusChipTone.success
+                            : request.status.toLowerCase() == 'rejected'
+                            ? StatusChipTone.danger
+                            : StatusChipTone.warning,
                   ),
                 ),
               ),
           ],
         );
       },
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    return Text(
+      title,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+        color: tokens.ink,
+        fontWeight: FontWeight.w800,
+      ),
     );
   }
 }

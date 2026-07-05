@@ -9,7 +9,6 @@ import '../../../../shared/widgets/glass_card.dart';
 import '../../../../shared/widgets/status_chip.dart';
 
 final _dateFmt = DateFormat('dd MMM yyyy');
-final _dateTimeFmt = DateFormat('dd MMM yyyy, hh:mm a');
 
 class VisitReportDetailSheet extends ConsumerStatefulWidget {
   const VisitReportDetailSheet({

@@ -12,7 +12,6 @@ import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/offline/draft_service.dart';
-import '../../../../../shared/widgets/section_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
@@ -39,10 +38,10 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
   SiteOptionModel? _selectedSite;
   final TextEditingController _descriptionController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
-  
+
   XFile? _photo;
   final ImagePicker _picker = ImagePicker();
-  
+
   String? _message;
   bool _loading = false;
 
@@ -132,7 +131,8 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
       try {
         List<String> photoUrls = [];
         if (photoDataUrl != null) {
-          final uploadPath = 'incidents/${profile.id}/ ${DateTime.now().millisecondsSinceEpoch}.jpg';
+          final uploadPath =
+              'incidents/${profile.id}/${DateTime.now().millisecondsSinceEpoch}.jpg';
           final uploadResult = await ref
               .read(mobileRepositoryProvider)
               .uploadAttendancePhoto(path: uploadPath, dataUrl: photoDataUrl);
@@ -161,18 +161,19 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                 uploadOrSubmitError.type == DioExceptionType.sendTimeout ||
                 uploadOrSubmitError.type == DioExceptionType.receiveTimeout ||
                 uploadOrSubmitError.type == DioExceptionType.connectionError)) {
-          
-          await ref.read(offlineQueueProvider).enqueue(
-            path: '/api/guard/incidents',
-            method: 'POST',
-            body: {
-              ...payload,
-              if (photoDataUrl != null) 'photoDataUrls': [photoDataUrl],
-            },
-          );
+          await ref
+              .read(offlineQueueProvider)
+              .enqueue(
+                path: '/api/guard/incidents',
+                method: 'POST',
+                body: {
+                  ...payload,
+                  if (photoDataUrl != null) 'photoDataUrls': [photoDataUrl],
+                },
+              );
 
           await ref.read(draftServiceProvider).clearDraft(_draftKey);
-          
+
           if (mounted) {
             setState(() {
               _photo = null;
@@ -203,72 +204,129 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
     final sitesAsync = ref.watch(attendanceSitesProvider);
 
     return profileAsync.when(
-      loading: () =>
-          const GuardLoadingScaffold(label: 'Loading guard profile...'),
-      error: (Object error, StackTrace stackTrace) => GuardErrorScaffold(
-        title: 'Could not load profile',
-        error: error,
-        onRetry: () => ref.invalidate(guardProfileProvider),
-      ),
+      loading:
+          () => const GuardLoadingScaffold(label: 'Loading guard profile...'),
+      error:
+          (Object error, StackTrace stackTrace) => GuardErrorScaffold(
+            title: 'Could not load profile',
+            error: error,
+            onRetry: () => ref.invalidate(guardProfileProvider),
+          ),
       data: (profile) {
         return incidentsAsync.when(
-          loading: () =>
-              const GuardLoadingScaffold(label: 'Loading incidents...'),
-          error: (Object error, StackTrace stackTrace) => GuardErrorScaffold(
-            title: 'Could not load incidents',
-            error: error,
-            onRetry: () => ref.invalidate(guardIncidentsProvider),
-          ),
+          loading:
+              () => const GuardLoadingScaffold(label: 'Loading incidents...'),
+          error:
+              (Object error, StackTrace stackTrace) => GuardErrorScaffold(
+                title: 'Could not load incidents',
+                error: error,
+                onRetry: () => ref.invalidate(guardIncidentsProvider),
+              ),
           data: (incidents) {
             final tokens = CissThemeTokens.of(context);
             return ScreenScaffold(
               title: 'Incidents',
               subtitle: 'Report and track incidents',
               onRefresh: () async => ref.invalidate(guardIncidentsProvider),
-          actions: <Widget>[
+              actions: <Widget>[
                 IconButton(
                   onPressed: () => ref.invalidate(guardIncidentsProvider),
                   icon: const Icon(Icons.refresh_rounded),
                 ),
               ],
               children: <Widget>[
-                SectionCard(
-                  title: 'Report Incident',
+                GuardHeroPanel(
+                  eyebrow: 'Incident desk',
+                  title: 'Report from field',
                   subtitle:
-                      'Capture category, severity, site, notes, and media.',
-                  icon: Icons.warning_amber_rounded,
+                      '${incidents.length} incident${incidents.length == 1 ? '' : 's'} recorded • ${profile.district}',
+                  icon: Icons.report_gmailerrorred_rounded,
+                  accentColor: tokens.danger,
                 ),
+                const SizedBox(height: AppSpacing.lg),
+                GuardMetricStrip(
+                  items: <GuardMetricItem>[
+                    GuardMetricItem(
+                      label: 'History',
+                      value: '${incidents.length}',
+                      icon: Icons.assignment_rounded,
+                      color: tokens.primary,
+                    ),
+                    GuardMetricItem(
+                      label: 'Severity',
+                      value: _severity.toUpperCase(),
+                      icon: Icons.priority_high_rounded,
+                      color: tokens.warning,
+                    ),
+                    GuardMetricItem(
+                      label: 'Photo',
+                      value: _photo == null ? 'No' : 'Ready',
+                      icon: Icons.add_a_photo_rounded,
+                      color: _photo == null ? tokens.inkMuted : tokens.success,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                const _SectionLabel(title: 'New incident'),
+                const SizedBox(height: AppSpacing.sm),
                 GuardFormCard(
                   children: <Widget>[
                     DropdownButtonFormField<String>(
                       value: _category,
-                      items: ['Safety', 'Security', 'Maintenance', 'Medical', 'Other']
-                          .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                          .toList(),
-                      onChanged: (v) => setState(() => _category = v ?? 'Other'),
+                      items:
+                          [
+                                'Safety',
+                                'Security',
+                                'Maintenance',
+                                'Medical',
+                                'Other',
+                              ]
+                              .map(
+                                (c) =>
+                                    DropdownMenuItem(value: c, child: Text(c)),
+                              )
+                              .toList(),
+                      onChanged:
+                          (v) => setState(() => _category = v ?? 'Other'),
                       decoration: const InputDecoration(labelText: 'Category'),
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
                       value: _severity,
-                      items: ['low', 'medium', 'high', 'critical']
-                          .map((s) => DropdownMenuItem(value: s, child: Text(s.toUpperCase())))
-                          .toList(),
-                      onChanged: (v) => setState(() => _severity = v ?? 'medium'),
+                      items:
+                          ['low', 'medium', 'high', 'critical']
+                              .map(
+                                (s) => DropdownMenuItem(
+                                  value: s,
+                                  child: Text(s.toUpperCase()),
+                                ),
+                              )
+                              .toList(),
+                      onChanged:
+                          (v) => setState(() => _severity = v ?? 'medium'),
                       decoration: const InputDecoration(labelText: 'Severity'),
                     ),
                     const SizedBox(height: 12),
                     sitesAsync.when(
                       loading: () => const LinearProgressIndicator(),
                       error: (err, stack) => const Text('Error loading sites'),
-                      data: (sites) => DropdownButtonFormField<SiteOptionModel>(
-                        value: _selectedSite,
-                        items: sites
-                            .map((s) => DropdownMenuItem(value: s, child: Text(s.siteName)))
-                            .toList(),
-                        onChanged: (v) => setState(() => _selectedSite = v),
-                        decoration: const InputDecoration(labelText: 'Site'),
-                      ),
+                      data:
+                          (sites) => DropdownButtonFormField<SiteOptionModel>(
+                            value: _selectedSite,
+                            items:
+                                sites
+                                    .map(
+                                      (s) => DropdownMenuItem(
+                                        value: s,
+                                        child: Text(s.siteName),
+                                      ),
+                                    )
+                                    .toList(),
+                            onChanged: (v) => setState(() => _selectedSite = v),
+                            decoration: const InputDecoration(
+                              labelText: 'Site',
+                            ),
+                          ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -300,38 +358,61 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                           borderRadius: BorderRadius.circular(AppRadius.md),
                           border: Border.all(color: tokens.border),
                         ),
-                        child: _photo != null
-                            ? Stack(
-                                children: [
-                                  Positioned.fill(
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(AppRadius.md),
-                                      child: Image.file(File(_photo!.path), fit: BoxFit.cover),
-                                    ),
-                                  ),
-                                  Positioned(
-                                    top: 4,
-                                    right: 4,
-                                    child: CircleAvatar(
-                                      radius: 14,
-                                      backgroundColor: tokens.inkMuted.withValues(alpha: 0.54),
-                                      child: IconButton(
-                                        padding: EdgeInsets.zero,
-                                        icon: Icon(Icons.close, size: 16, color: tokens.surface),
-                                        onPressed: () => setState(() => _photo = null),
+                        child:
+                            _photo != null
+                                ? Stack(
+                                  children: [
+                                    Positioned.fill(
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(
+                                          AppRadius.md,
+                                        ),
+                                        child: Image.file(
+                                          File(_photo!.path),
+                                          fit: BoxFit.cover,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              )
-                            : Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.add_a_photo_rounded, color: tokens.primary, size: 32),
-                                  const SizedBox(height: 8),
-                                  Text('Add incident photo', style: TextStyle(color: tokens.primary, fontWeight: FontWeight.w600)),
-                                ],
-                              ),
+                                    Positioned(
+                                      top: 4,
+                                      right: 4,
+                                      child: CircleAvatar(
+                                        radius: 14,
+                                        backgroundColor: tokens.inkMuted
+                                            .withValues(alpha: 0.54),
+                                        child: IconButton(
+                                          padding: EdgeInsets.zero,
+                                          icon: Icon(
+                                            Icons.close,
+                                            size: 16,
+                                            color: tokens.surface,
+                                          ),
+                                          onPressed:
+                                              () =>
+                                                  setState(() => _photo = null),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                                : Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.add_a_photo_rounded,
+                                      color: tokens.primary,
+                                      size: 32,
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Add incident photo',
+                                      style: TextStyle(
+                                        color: tokens.primary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -341,9 +422,9 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                         decoration: BoxDecoration(
                           color:
                               _message!.toLowerCase().contains('submitted') ||
-                                  _message!.toLowerCase().contains('queued')
-                              ? tokens.successSoft
-                              : tokens.dangerSoft,
+                                      _message!.toLowerCase().contains('queued')
+                                  ? tokens.successSoft
+                                  : tokens.dangerSoft,
                           borderRadius: BorderRadius.circular(AppRadius.sm),
                         ),
                         child: Text(
@@ -351,37 +432,34 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                           style: TextStyle(
                             color:
                                 _message!.toLowerCase().contains('submitted') ||
-                                    _message!.toLowerCase().contains('queued')
-                                ? tokens.success
-                                : tokens.danger,
+                                        _message!.toLowerCase().contains(
+                                          'queued',
+                                        )
+                                    ? tokens.success
+                                    : tokens.danger,
                           ),
                         ),
                       ),
                     const SizedBox(height: 12),
                     FilledButton(
-                      onPressed: _loading
-                          ? null
-                          : () => _submitIncident(profile),
-                      child: _loading
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator.adaptive(
-                                strokeWidth: 2,
-                              ),
-                            )
-                          : const Text('Submit Incident'),
+                      onPressed:
+                          _loading ? null : () => _submitIncident(profile),
+                      child:
+                          _loading
+                              ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator.adaptive(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                              : const Text('Submit Incident'),
                     ),
                   ],
                 ),
                 const SizedBox(height: 4),
-                SectionCard(
-                  title: 'Incident History',
-                  subtitle: incidents.isEmpty
-                      ? 'No incidents recorded yet.'
-                      : '${incidents.length} incident${incidents.length == 1 ? '' : 's'} found',
-                  icon: Icons.assignment_rounded,
-                ),
+                const _SectionLabel(title: 'Incident history'),
+                const SizedBox(height: AppSpacing.sm),
                 if (incidents.isEmpty)
                   const StateBlock(
                     icon: Icons.assignment_rounded,
@@ -397,9 +475,10 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                     icon: Icons.report_problem_rounded,
                     chip: StatusChip(
                       label: incident.status,
-                      tone: incident.status.toLowerCase() == 'closed'
-                          ? StatusChipTone.success
-                          : StatusChipTone.warning,
+                      tone:
+                          incident.status.toLowerCase() == 'closed'
+                              ? StatusChipTone.success
+                              : StatusChipTone.warning,
                     ),
                   ),
                 ),
@@ -408,6 +487,24 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
           },
         );
       },
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    return Text(
+      title,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+        color: tokens.ink,
+        fontWeight: FontWeight.w800,
+      ),
     );
   }
 }

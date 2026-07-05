@@ -32,7 +32,7 @@ android {
     defaultConfig {
         applicationId = "co.in.ciss.ciss_mobile"
         minSdk = 24
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

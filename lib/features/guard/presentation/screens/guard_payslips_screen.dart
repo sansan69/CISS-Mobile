@@ -5,7 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../../core/models/payroll_models.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/region/region_service.dart';
-import '../../../../../shared/widgets/section_card.dart';
+import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
@@ -21,14 +21,16 @@ class GuardPayslipsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = CissThemeTokens.of(context);
     final payslipsAsync = ref.watch(guardPayslipsProvider);
     return payslipsAsync.when(
       loading: () => const GuardLoadingScaffold(label: 'Loading payslips...'),
-      error: (Object error, StackTrace stackTrace) => GuardErrorScaffold(
-        title: 'Could not load payslips',
-        error: error,
-        onRetry: () => ref.invalidate(guardPayslipsProvider),
-      ),
+      error:
+          (Object error, StackTrace stackTrace) => GuardErrorScaffold(
+            title: 'Could not load payslips',
+            error: error,
+            onRetry: () => ref.invalidate(guardPayslipsProvider),
+          ),
       data: (payslips) {
         return ScreenScaffold(
           title: 'Payslips',
@@ -41,12 +43,41 @@ class GuardPayslipsScreen extends ConsumerWidget {
             ),
           ],
           children: <Widget>[
-            SectionCard(
-              title: 'Available Payslips',
+            GuardHeroPanel(
+              eyebrow: 'Payroll',
+              title:
+                  '${payslips.length} payslip${payslips.length == 1 ? '' : 's'}',
               subtitle:
-                  '${payslips.length} record${payslips.length == 1 ? '' : 's'} found',
-              icon: Icons.receipt_long_rounded,
+                  payslips.isEmpty
+                      ? 'Published monthly payslips will appear here.'
+                      : 'Tap any period to download the PDF.',
+              icon: Icons.account_balance_wallet_rounded,
+              accentColor: tokens.warning,
             ),
+            const SizedBox(height: AppSpacing.lg),
+            GuardMetricStrip(
+              items: <GuardMetricItem>[
+                GuardMetricItem(
+                  label: 'Records',
+                  value: '${payslips.length}',
+                  icon: Icons.receipt_long_rounded,
+                  color: tokens.primary,
+                ),
+                GuardMetricItem(
+                  label: 'Format',
+                  value: 'PDF',
+                  icon: Icons.picture_as_pdf_rounded,
+                  color: tokens.danger,
+                ),
+                GuardMetricItem(
+                  label: 'Action',
+                  value: 'Open',
+                  icon: Icons.open_in_new_rounded,
+                  color: tokens.accent,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
             if (payslips.isEmpty)
               const StateBlock(
                 icon: Icons.receipt_long_rounded,
@@ -71,7 +102,11 @@ class GuardPayslipsScreen extends ConsumerWidget {
                     );
                   } else if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Could not open payslip. Please install a PDF viewer.')),
+                      const SnackBar(
+                        content: Text(
+                          'Could not open payslip. Please install a PDF viewer.',
+                        ),
+                      ),
                     );
                   }
                 },

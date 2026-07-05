@@ -220,13 +220,28 @@ class MobileRepository {
   }
 
   bool _isOfflineDioError(Object error) {
-    return error is DioException &&
-        (error.type == DioExceptionType.connectionTimeout ||
-            error.type == DioExceptionType.sendTimeout ||
-            error.type == DioExceptionType.receiveTimeout ||
-            error.type == DioExceptionType.connectionError ||
-            error.type == DioExceptionType.unknown ||
-            error.type == DioExceptionType.badCertificate);
+    if (error is! DioException) return false;
+
+    // badCertificate = connection compromised, not simply offline
+    if (error.type == DioExceptionType.badCertificate) {
+      debugPrint('Connection compromised: bad certificate detected');
+      return false;
+    }
+
+    // Server errors (>= 500) — queue for retry rather than dropping the data
+    if (error.type == DioExceptionType.badResponse) {
+      final statusCode = error.response?.statusCode;
+      if (statusCode != null && statusCode >= 500) {
+        return true; // treat as queueable
+      }
+      return false;
+    }
+
+    return error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.receiveTimeout ||
+        error.type == DioExceptionType.connectionError ||
+        error.type == DioExceptionType.unknown;
   }
 
   Future<Map<String, String>> _authHeaders() async {

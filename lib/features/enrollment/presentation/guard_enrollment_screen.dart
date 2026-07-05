@@ -85,24 +85,99 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
     super.dispose();
   }
 
+  bool _hasFormData() {
+    return _firstNameCtrl.text.trim().isNotEmpty ||
+        _lastNameCtrl.text.trim().isNotEmpty ||
+        _phoneCtrl.text.trim().isNotEmpty ||
+        _emailCtrl.text.trim().isNotEmpty ||
+        _fatherNameCtrl.text.trim().isNotEmpty ||
+        _motherNameCtrl.text.trim().isNotEmpty ||
+        _addressCtrl.text.trim().isNotEmpty ||
+        _idNumberCtrl.text.trim().isNotEmpty ||
+        _bankAccountCtrl.text.trim().isNotEmpty ||
+        _ifscCtrl.text.trim().isNotEmpty ||
+        _bankNameCtrl.text.trim().isNotEmpty ||
+        _gender != null ||
+        _district.isNotEmpty ||
+        _maritalStatus != null ||
+        _dateOfBirth != null ||
+        _educationalQualification != null ||
+        _clientName.isNotEmpty ||
+        _profilePicture != null ||
+        _signature != null ||
+        _idFront != null ||
+        _idBack != null ||
+        _addressFront != null ||
+        _addressBack != null;
+  }
+
+  Future<bool> _onBackPressed() async {
+    if (!_hasFormData()) return true;
+    final result = await showDialog<bool>(
+      context: context,
+      builder:
+          (_) => AlertDialog(
+            title: const Text('Discard changes?'),
+            content: const Text(
+              'You have filled in some details. Leaving now will lose them.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Stay'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Discard'),
+              ),
+            ],
+          ),
+    );
+    return result ?? false;
+  }
+
   Future<String> _uploadFile(File file, String folder) async {
     final phone = _phoneCtrl.text.trim();
     final ext = file.path.split('.').last;
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final path = 'enrollments/$phone/$folder/${timestamp}_$folder.$ext';
 
-    final uri = Uri.parse('${RegionService.instance.activeApiUrl}/api/public/enroll/upload');
-    final request = http.MultipartRequest('POST', uri);
-    request.fields['path'] = path;
-    request.files.add(await http.MultipartFile.fromPath('file', file.path));
+    final uri = Uri.parse(
+      '${RegionService.instance.activeApiUrl}/api/public/enroll/upload',
+    );
 
-    final streamed = await request.send();
-    final response = await http.Response.fromStream(streamed);
-    if (response.statusCode != 200) {
-      throw Exception('Upload failed: ${response.body}');
+    // Upload with 30-second timeout and one retry on failure
+    const maxAttempts = 2;
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final client = http.Client();
+        try {
+          final request = http.MultipartRequest('POST', uri);
+          request.fields['path'] = path;
+          request.files.add(
+            await http.MultipartFile.fromPath('file', file.path),
+          );
+          final streamed = await request
+              .send()
+              .timeout(const Duration(seconds: 30));
+          final response = await http.Response.fromStream(streamed);
+          if (response.statusCode != 200) {
+            throw Exception(
+              'Upload failed (HTTP ${response.statusCode}): ${response.body}',
+            );
+          }
+          final data = jsonDecode(response.body) as Map<String, dynamic>;
+          return data['url'] as String;
+        } finally {
+          client.close();
+        }
+      } catch (e) {
+        if (attempt == maxAttempts) rethrow;
+        debugPrint('Upload attempt $attempt failed, retrying: $e');
+      }
     }
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    return data['url'] as String;
+
+    throw Exception('Upload failed after $maxAttempts attempts');
   }
 
   Future<void> _submit() async {
@@ -190,10 +265,15 @@ class _GuardEnrollmentScreenState extends State<GuardEnrollmentScreen> {
       backgroundColor: tokens.canvas,
       appBar: AppBar(
         title: const Text('Enroll as Guard'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () async {
+              if (_loading) return;
+              final navigator = Navigator.of(context);
+              final shouldPop = await _onBackPressed();
+              if (shouldPop && mounted) navigator.pop();
+            },
+          ),
       ),
       body: SafeArea(
         child: Form(

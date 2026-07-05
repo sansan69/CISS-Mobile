@@ -1,7 +1,5 @@
 import 'dart:io';
 
-import 'dart:io';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -46,6 +44,7 @@ class _PublicAttendanceScreenState
   List<SiteOptionModel> _sites = [];
   String _status = 'In';
   String? _photoPath;
+  String? _clientRequestId; // Stable across retries for idempotency
   Position? _position;
   bool _isSubmitting = false;
   String? _submitError;
@@ -191,10 +190,10 @@ class _PublicAttendanceScreenState
               ).round()
             : 0,
         'gpsAccuracyMeters': pos?.accuracy.round(),
-        'geofenceRadiusAtTime': _selectedSite!.geofenceRadiusMeters ?? 150,
+        'geofenceRadiusAtTime': _selectedSite!.geofenceRadiusMeters,
         'photoUrl': photoUrl,
         'photoCapturedAt': DateTime.now().toUtc().toIso8601String(),
-        'clientRequestId': _uuid.v4(),
+        'clientRequestId': _clientRequestId ??= _uuid.v4(),
         'reportedAtClient': DateTime.now().toUtc().toIso8601String(),
         'deviceInfo': {'userAgent': 'flutter-mobile-public'},
         'capturedAt': DateTime.now().toUtc().toIso8601String(),

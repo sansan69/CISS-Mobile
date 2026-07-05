@@ -7,9 +7,7 @@ import '../../../app/theme/app_tokens.dart';
 import '../../../core/auth/biometric_service.dart';
 import '../../../core/auth/saved_accounts_service.dart';
 import '../../../core/haptics.dart';
-import '../../../core/models/auth_session.dart';
 import '../../../core/network/ciss_error.dart';
-import '../../../core/network/providers.dart';
 import '../application/auth_controller.dart';
 
 class AdminLoginScreen extends ConsumerStatefulWidget {
@@ -31,7 +29,6 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
   bool _biometricAvailable = false;
   String? _error;
   List<SavedAccount> _savedAccounts = [];
-  bool _accountsLoaded = false;
 
   @override
   void initState() {
@@ -54,7 +51,6 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
     if (mounted) {
       setState(() {
         _savedAccounts = adminOrClient;
-        _accountsLoaded = true;
       });
     }
   }
@@ -113,7 +109,7 @@ class _AdminLoginScreenState extends ConsumerState<AdminLoginScreen> {
 
   Future<void> _doSignIn(String email, String password, String role) async {
     try {
-      final session = await ref
+      await ref
           .read(authControllerProvider)
           .signInAsAdminOrClient(
             email: email,

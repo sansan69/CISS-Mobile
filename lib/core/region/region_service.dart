@@ -110,8 +110,6 @@ class RegionFirebaseConfig {
 }
 
 class RegionService {
-  RegionService() : _secureStorage = const FlutterSecureStorage();
-
   static const String _savedRegionKey = 'ciss_selected_region';
   static const String _savedRegionConfigKey = 'ciss_selected_region_config';
   static const String _baseUrl = 'https://cisskerala.site';
@@ -360,7 +358,7 @@ final savedRegionProvider = FutureProvider<String?>((ref) async {
   return ref.read(regionServiceProvider).getSavedRegion();
 });
 
-final regionConfigProvider = FutureProvider.family<RegionInfo?, String>((
+final regionConfigProvider = FutureProvider.autoDispose.family<RegionInfo?, String>((
   ref,
   regionCode,
 ) async {

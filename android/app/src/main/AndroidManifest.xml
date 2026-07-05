@@ -30,9 +30,6 @@
     <!-- Notifications for duty alerts and geofence breaches -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- Activity recognition for movement detection (walking, still, in vehicle) -->
-    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
-
     <!-- Ignore battery optimizations so background tracking isn't killed -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -43,11 +40,15 @@
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <uses-permission android:name="android.permission.USE_FINGERPRINT" />
 
+    <!-- In-app APK update: install packages directly from the app -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
     <application
+        android:allowBackup="false"
         android:label="CISS Workforce"
         android:name=".CissMobileApplication"
         android:icon="@mipmap/ic_launcher"
-        android:usesCleartextTraffic="true">
+        android:networkSecurityConfig="@xml/network_security_config">
 
         <!-- Background Service -->
         <service
@@ -55,6 +56,18 @@
             android:foregroundServiceType="location"
             android:exported="true"
             tools:replace="android:exported" />
+
+        <!-- FileProvider for in-app APK installation -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"
+                tools:replace="android:resource" />
+        </provider>
 
         <activity
             android:name=".MainActivity"

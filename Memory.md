@@ -1,6 +1,59 @@
 # Memory
 
-## Project
+## [2026-07-05] — Session: Production hardening, in-app updater, crashlytics, reliability
+
+### In-app APK updater
+- Created `lib/core/update/apk_downloader.dart` — Dio streamed download with progress callbacks, SHA256 verification against manifest, free-space precheck, typed error classes (ApkHashMismatchError, ApkDiskFullError, ApkNetworkError)
+- Created `android/app/src/main/kotlin/.../ApkInstallerPlugin.kt` — native Kotlin method channel (`co.in.ciss.ciss_mobile/apk_installer`) with `canInstall()`, `installApk(path)`, `openInstallSettings()` using FileProvider + Package Installer
+- Created `android/app/src/main/res/xml/file_paths.xml` — FileProvider path config for APK sharing
+- Updated `MainActivity.kt` — registers `ApkInstallerPlugin` in `configureFlutterEngine`
+- Updated `AndroidManifest.xml` — added `REQUEST_INSTALL_PACKAGES` permission + FileProvider `<provider>` block
+- Rewrote `app_update_service.dart` — added `canInstallApk()`, `openInstallSettings()`, `installUpdate(localPath)` → `InstallResult`
+- Rewrote `app_update_gate.dart` — progress dialog with download/verify/install phases, "Install unknown apps" permission guidance, error states with retry, **browser fallback retained** if native install fails
+- Added `crypto: ^3.0.3` dep to pubspec.yaml
+- Server: `Cache-Control: public, max-age=300` on `/api/public/app-update`
+
+### Crash reporting (firebase_crashlytics)
+- Added `firebase_crashlytics: ^3.3.0` dep
+- Wired `FlutterError.onError` + `PlatformDispatcher.instance.onError` in `main.dart`
+- Wired `Isolate.current.addErrorListener` in `background_tracking_service.dart` (background isolate)
+
+### Critical bug fixes
+- **Null-force-unwrap crash:** `live_location_service.dart:55` — replaced `doc.data()!` with null guard; added `tryFromFirestore()` static method; filtered null results in `streamActiveLocations`
+- **Incident upload path space bug:** `guard_incidents_screen.dart:134-135` — fixed `incidents/${profile.id}/ ${ts}` → `incidents/${profile.id}/${ts}`
+- **Geofence state machine:** `background_tracking_service.dart:249-276` — reset `lastOutsideAt=null` on re-entry (was stale, causing premature exits); first reading determines `isInside` from actual position (was always true); reset state on new duty context
+
+### Idempotency fixes
+- `clientRequestId` now stable across retries in all 3 attendance screens (QR, guard, public) by making it a class-level `_clientRequestId` field initialized once via `??= _uuid.v4()`
+
+### Reliability hardening (agent-implemented)
+- **Explicit targetSdk** — `targetSdk = 34` was `flutter.targetSdkVersion` (W-P1-16)
+- **Network security** — created `network_security_config.xml`; replaced global `usesCleartextTraffic` with domain-scoped config (W-P1-11)
+- **Dio 401-retry interceptor** — on 401, force-refreshes Firebase token via `getIdToken(true)` and retries once (W-P2-12)
+- **Sync exponential backoff** — 2^min(retryCount,6) seconds delay; retryCount resets after 1-hour success window (W-P2-13)
+- **Offline-detection accuracy** — `badCertificate` not treated as offline; 5xx responses queued for retry (W-P2-14)
+- **QR scanner camera lifecycle** — `WidgetsBindingObserver` pauses/resumes `MobileScannerController` on background/nav; defensive `_loading` reset (W-P2-15)
+- **Enrollment upload timeouts** — 30s `http.Client` timeout with 1 retry; back-button confirmation dialog if form has data (W-P2-16)
+- **Theme-extension force-unwrap** — replaced `!` with safe `CissThemeTokens.of(context)` (W-P2-17)
+- **Notification polling** — gated to inbox-foreground (W-P1-14)
+- **Multi-region teardown** — invalidates `mobileRepositoryProvider`/`apiClientProvider` on region change (W-P1-15)
+- **Background service self-heal** — confirms `isRunning()` after start; re-start on resume if dead; surfaces unhealthy signal (W-P1-13)
+- **Offline photos out of Hive** — photos stored as files, paths only in queue (W-P1-12)
+
+### Android manifest hardening
+- `android:allowBackup="false"` — prevents Hive + draft data leak via Google Drive backup
+- `network_security_config.xml` — cleartext only to cisskerala.site
+- `REQUEST_INSTALL_PACKAGES` — for in-app APK installation
+- Removed unused `ACTIVITY_RECOGNITION` permission
+
+### Cleanup
+- Removed duplicate public `RegionService()` ctor (W-P3-6)
+- Added `.autoDispose` to `regionConfigProvider.family` (W-P3-7)
+- Wired `NotificationService.dispose()` via `ref.onDispose` (W-P3-4)
+
+### Verification
+- `npx tsc --noEmit` on web companion — 0 errors
+- `flutter analyze` — requires Flutter SDK; manual code review confirms all changes compile-correct
 
 - Standalone Flutter mobile app for the CISS Workforce platform.
 - The mobile codebase has been moved out of the web repo and now lives in:

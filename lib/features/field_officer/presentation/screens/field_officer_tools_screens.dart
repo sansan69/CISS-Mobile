@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../app/theme/app_tokens.dart';
 import '../../../../shared/widgets/screen_scaffold.dart';
-import '../../../../shared/widgets/state_block.dart';
 import '../../../../shared/widgets/glass_card.dart';
 import '../../../../shared/widgets/sync_status_badge.dart';
 import '../../../../core/sync/refresh_controller.dart';

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' as foundation;
@@ -15,6 +16,11 @@ class SyncService {
   final _connectivity = Connectivity();
   StreamSubscription<List<ConnectivityResult>>? _subscription;
   bool _isSyncing = false;
+
+  /// Tracks the last time any request succeeded — used to decay retry counts
+  /// after a quiet period (1 hour without failure).
+  DateTime? _lastSuccessTime;
+  static const Duration _successWindow = Duration(hours: 1);
 
   void start() {
     _subscription?.cancel();
@@ -53,8 +59,40 @@ class SyncService {
           continue;
         }
 
-        final success = await _processRequest(request);
+        // ── Retry-count decay ─────────────────────────────────────────────
+        // If the last successful sync was more than 1 hour ago, reset the
+        // retry count so we start from a clean state instead of compounding.
+        var adjustedRetryCount = request.retryCount;
+        if (adjustedRetryCount > 0 &&
+            (_lastSuccessTime == null ||
+                DateTime.now().difference(_lastSuccessTime!) > _successWindow)) {
+          adjustedRetryCount = 0;
+          await _queue.updateRequest(
+            request.copyWith(retryCount: 0),
+          );
+          foundation.debugPrint(
+            'Reset retryCount for request ${request.id} after success window.',
+          );
+        }
+
+        // ── Exponential backoff ───────────────────────────────────────────
+        // 2 ^ min(retryCount, 6) seconds, capped at ~64 seconds.
+        if (adjustedRetryCount > 0) {
+          final delaySec = math.pow(2, math.min(adjustedRetryCount, 6)).toInt();
+          foundation.debugPrint(
+            'Backing off ${delaySec}s before retrying request ${request.id} '
+            '(retry #$adjustedRetryCount).',
+          );
+          await Future<void>.delayed(Duration(seconds: delaySec));
+        }
+
+        // Use the potentially-decayed request (retryCount may have been reset)
+        final processRequest = adjustedRetryCount == request.retryCount
+            ? request
+            : request.copyWith(retryCount: adjustedRetryCount);
+        final success = await _processRequest(processRequest);
         if (success) {
+          _lastSuccessTime = DateTime.now();
           try {
             await _queue.removeRequest(request.id);
           } catch (removeError) {

@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/training_models.dart';
 import '../../../../../core/network/providers.dart';
-import '../../../../../shared/widgets/state_block.dart';
-import '../../../../../shared/widgets/section_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
+import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
-import '../../../../../shared/widgets/glass_card.dart';
-import '../../../../../app/theme/app_tokens.dart';
 import '../widgets/guard_portal_widgets.dart';
 import 'guard_training_detail_screen.dart';
 
@@ -36,29 +34,36 @@ class GuardTrainingScreen extends ConsumerWidget {
     final assignmentsAsync = ref.watch(guardTrainingProvider);
 
     return assignmentsAsync.when(
-      loading: () =>
-          const GuardLoadingScaffold(label: 'Loading training modules...'),
-      error: (Object error, StackTrace stackTrace) => GuardErrorScaffold(
-        title: 'Could not load training',
-        error: error,
-        onRetry: () => ref.invalidate(guardTrainingProvider),
-      ),
+      loading:
+          () =>
+              const GuardLoadingScaffold(label: 'Loading training modules...'),
+      error:
+          (Object error, StackTrace stackTrace) => GuardErrorScaffold(
+            title: 'Could not load training',
+            error: error,
+            onRetry: () => ref.invalidate(guardTrainingProvider),
+          ),
       data: (assignments) {
-        final completed = assignments
-            .where((a) => a.status.toLowerCase().contains('complete') ||
-                a.status.toLowerCase().contains('viewed') ||
-                a.status.toLowerCase().contains('acknowledged'))
-            .toList();
-        final pending = assignments
-            .where((a) => !completed.contains(a))
-            .toList();
-        final progress = assignments.isEmpty
-            ? 0.0
-            : completed.length / assignments.length;
+        final completed =
+            assignments
+                .where(
+                  (assignment) =>
+                      assignment.status.toLowerCase().contains('complete') ||
+                      assignment.status.toLowerCase().contains('viewed') ||
+                      assignment.status.toLowerCase().contains('acknowledged'),
+                )
+                .toList();
+        final pending =
+            assignments
+                .where((assignment) => !completed.contains(assignment))
+                .toList();
+        final progress =
+            assignments.isEmpty ? 0.0 : completed.length / assignments.length;
+        final percentage = (progress * 100).round();
 
         return ScreenScaffold(
           title: 'Training',
-          subtitle: '${completed.length} of ${assignments.length} modules completed',
+          subtitle: '${completed.length} of ${assignments.length} completed',
           onRefresh: () async => ref.invalidate(guardTrainingProvider),
           actions: <Widget>[
             IconButton(
@@ -67,37 +72,45 @@ class GuardTrainingScreen extends ConsumerWidget {
             ),
           ],
           children: <Widget>[
-            // ── Progress Card ──
-            _buildProgressCard(tokens, progress, completed.length, assignments.length),
-            const SizedBox(height: 16),
-
-            // ── Pending Modules Section ──
-            if (pending.isNotEmpty) ...[
-              SectionCard(
-                title: 'Pending',
-                subtitle: '${pending.length} module${pending.length == 1 ? '' : 's'} awaiting acknowledgment',
-                icon: Icons.pending_actions_rounded,
-              ),
-              ...pending.map((assignment) => _buildTrainingCard(
-                context, ref, assignment, tokens, isCompleted: false,
-              )),
-              const SizedBox(height: 8),
-            ],
-
-            // ── Completed Modules Section ──
-            if (completed.isNotEmpty) ...[
-              SectionCard(
-                title: 'Completed',
-                subtitle: '${completed.length} module${completed.length == 1 ? '' : 's'} acknowledged',
-                icon: Icons.check_circle_outline_rounded,
-              ),
-              ...completed.map((assignment) => _buildTrainingCard(
-                context, ref, assignment, tokens, isCompleted: true,
-              )),
-              const SizedBox(height: 8),
-            ],
-
-            // ── Empty State ──
+            GuardHeroPanel(
+              eyebrow: 'Training centre',
+              title:
+                  assignments.isEmpty
+                      ? 'No modules assigned'
+                      : '$percentage% complete',
+              subtitle:
+                  assignments.isEmpty
+                      ? 'New briefings and quizzes will appear here.'
+                      : '${pending.length} pending • ${completed.length} completed',
+              icon: Icons.school_rounded,
+              accentColor: tokens.accent,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            GuardMetricStrip(
+              items: <GuardMetricItem>[
+                GuardMetricItem(
+                  label: 'Total',
+                  value: '${assignments.length}',
+                  icon: Icons.library_books_rounded,
+                  color: tokens.primary,
+                ),
+                GuardMetricItem(
+                  label: 'Pending',
+                  value: '${pending.length}',
+                  icon: Icons.pending_actions_rounded,
+                  color: tokens.warning,
+                ),
+                GuardMetricItem(
+                  label: 'Done',
+                  value: '${completed.length}',
+                  icon: Icons.check_circle_rounded,
+                  color: tokens.success,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            _ProgressCard(progress: progress, percentage: percentage),
+            const SizedBox(height: AppSpacing.lg),
             if (assignments.isEmpty)
               const StateBlock(
                 icon: Icons.school_rounded,
@@ -105,236 +118,148 @@ class GuardTrainingScreen extends ConsumerWidget {
                 message:
                     'New training modules and briefings will appear here when assigned by the office.',
               ),
-
-            // ── Evaluations Section ──
-            SectionCard(
-              title: 'Evaluations',
-              subtitle:
-                  'Scores and quiz attempts are available from the Evaluations tab.',
-              icon: Icons.quiz_rounded,
-            ),
+            if (pending.isNotEmpty) ...<Widget>[
+              const _ListHeader(title: 'Pending modules'),
+              const SizedBox(height: AppSpacing.sm),
+              ...pending.map(
+                (assignment) => _TrainingRecordCard(
+                  assignment: assignment,
+                  isCompleted: false,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+            ],
+            if (completed.isNotEmpty) ...<Widget>[
+              const _ListHeader(title: 'Completed modules'),
+              const SizedBox(height: AppSpacing.sm),
+              ...completed.map(
+                (assignment) => _TrainingRecordCard(
+                  assignment: assignment,
+                  isCompleted: true,
+                ),
+              ),
+            ],
+            const SizedBox(height: AppSpacing.xxl),
           ],
         );
       },
     );
   }
+}
 
-  Widget _buildProgressCard(
-    CissThemeTokens tokens,
-    double progress,
-    int completed,
-    int total,
-  ) {
-    final percentage = (progress * 100).round();
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            tokens.accent.withValues(alpha: 0.06),
-            tokens.accent.withValues(alpha: 0.02),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: tokens.accent.withValues(alpha: 0.12)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Icon(Icons.trending_up_rounded, color: tokens.accent, size: 24),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'TRAINING PROGRESS',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: tokens.accent,
-                        letterSpacing: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      total == 0
-                          ? 'No modules assigned'
-                          : percentage == 100
-                              ? '🎉 All modules completed!'
-                              : '$percentage% complete',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: tokens.inkMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Text(
-                '$completed/$total',
-                style: TextStyle(
-                  fontSize: 20,
+class _ProgressCard extends StatelessWidget {
+  const _ProgressCard({required this.progress, required this.percentage});
+
+  final double progress;
+  final int percentage;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    return GuardFormCard(
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Icon(Icons.trending_up_rounded, color: tokens.accent),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                percentage == 100
+                    ? 'All modules completed'
+                    : '$percentage% complete',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: tokens.ink,
                   fontWeight: FontWeight.w800,
-                  color: tokens.accent,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 8,
-              backgroundColor: tokens.accent.withValues(alpha: 0.1),
-              valueColor: AlwaysStoppedAnimation(tokens.accent),
             ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: LinearProgressIndicator(
+            value: progress,
+            minHeight: 9,
+            backgroundColor: tokens.accent.withValues(alpha: 0.12),
+            valueColor: AlwaysStoppedAnimation<Color>(tokens.accent),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
+}
 
-  Widget _buildTrainingCard(
-    BuildContext context,
-    WidgetRef ref,
-    TrainingAssignmentModel assignment,
-    CissThemeTokens tokens, {
-    required bool isCompleted,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => GuardTrainingDetailScreen(assignment: assignment),
-                    ),
-                  );
+class _TrainingRecordCard extends ConsumerWidget {
+  const _TrainingRecordCard({
+    required this.assignment,
+    required this.isCompleted,
+  });
+
+  final TrainingAssignmentModel assignment;
+  final bool isCompleted;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final statusLabel = isCompleted ? 'Completed' : assignment.status;
+    final due =
+        assignment.dueLabel.isNotEmpty
+            ? _formatDueLabel(assignment.dueLabel)
+            : 'No due date';
+
+    return GuardRecordCard(
+      title: assignment.title,
+      subtitle: '${assignment.contentType ?? 'Training'} • $due',
+      icon: isCompleted ? Icons.check_circle_rounded : Icons.assignment_rounded,
+      chip: StatusChip(
+        label: statusLabel,
+        tone: isCompleted ? StatusChipTone.success : StatusChipTone.info,
+      ),
+      trailing:
+          isCompleted
+              ? null
+              : IconButton(
+                tooltip: 'Acknowledge',
+                icon: const Icon(Icons.done_rounded),
+                onPressed: () async {
+                  try {
+                    await ref
+                        .read(mobileRepositoryProvider)
+                        .acknowledgeTraining(assignment.id);
+                    ref.invalidate(guardTrainingProvider);
+                  } catch (error) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text('Error: $error')));
+                    }
+                  }
                 },
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          child: GlassCard(
-            padding: const EdgeInsets.all(14),
-            accentColor: isCompleted ? tokens.success : tokens.accent,
-            child: Row(
-              children: [
-                // Left icon
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: (isCompleted ? tokens.success : tokens.accent)
-                        .withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  child: Icon(
-                    isCompleted ? Icons.check_circle_rounded : Icons.assignment_rounded,
-                    color: isCompleted ? tokens.success : tokens.accent,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                // Center info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        assignment.title,
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: tokens.ink,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Icon(Icons.calendar_today_rounded,
-                              size: 11, color: tokens.inkMuted),
-                          const SizedBox(width: 4),
-                          Text(
-                            assignment.dueLabel.isNotEmpty
-                                ? _formatDueLabel(assignment.dueLabel)
-                                : 'No date',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: tokens.inkMuted,
-                            ),
-                          ),
-                          if (assignment.contentType != null) ...[
-                            const SizedBox(width: 8),
-                            Icon(Icons.insert_drive_file_rounded,
-                                size: 11, color: tokens.inkMuted),
-                            const SizedBox(width: 4),
-                            Text(
-                              assignment.contentType!,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: tokens.inkMuted,
-                              ),
-                            ),
-                          ],
-                          if (assignment.contentUrl != null && assignment.contentUrl!.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            Icon(Icons.open_in_new_rounded,
-                                size: 11, color: tokens.accent),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                // Right: status chip + acknowledge button
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    StatusChip(
-                      label: isCompleted ? 'Completed' : assignment.status,
-                      tone: isCompleted ? StatusChipTone.success : StatusChipTone.info,
-                    ),
-                    if (!isCompleted) ...[
-                      const SizedBox(height: 6),
-                      SizedBox(
-                        height: 30,
-                        child: FilledButton.tonalIcon(
-                          onPressed: () async {
-                            try {
-                              await ref
-                                  .read(mobileRepositoryProvider)
-                                  .acknowledgeTraining(assignment.id);
-                              ref.invalidate(guardTrainingProvider);
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Error: $e')),
-                                );
-                              }
-                            }
-                          },
-                          icon: const Icon(Icons.check_rounded, size: 14),
-                          label: const Text('Acknowledge', style: TextStyle(fontSize: 11)),
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            minimumSize: Size.zero,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
+              ),
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => GuardTrainingDetailScreen(assignment: assignment),
           ),
-        ),
+        );
+      },
+    );
+  }
+}
+
+class _ListHeader extends StatelessWidget {
+  const _ListHeader({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    return Text(
+      title,
+      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+        color: tokens.ink,
+        fontWeight: FontWeight.w800,
       ),
     );
   }

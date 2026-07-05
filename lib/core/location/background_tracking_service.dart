@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -7,6 +8,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -106,6 +108,19 @@ class BackgroundTrackingService {
 void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
 
+  // Catch isolate-level errors and forward to Crashlytics
+  Isolate.current.addErrorListener(
+    RawReceivePort((dynamic errorAndStack) {
+      if (errorAndStack is List && errorAndStack.length == 2) {
+        FirebaseCrashlytics.instance.recordError(
+          errorAndStack[0],
+          errorAndStack[1] as StackTrace?,
+          fatal: true,
+        );
+      }
+    }).sendPort,
+  );
+
   try {
     await Firebase.initializeApp();
   } catch (e) {
@@ -116,6 +131,7 @@ void onStart(ServiceInstance service) async {
   FirebaseAuth activeAuth = FirebaseAuth.instance;
   FirebaseFirestore activeFirestore = FirebaseFirestore.instance;
   bool isInside = true; // Assume inside until first check proves otherwise
+  bool firstReading = true;
   DateTime? lastOutsideAt;
   int heartbeatCount = 0;
 
@@ -123,6 +139,8 @@ void onStart(ServiceInstance service) async {
     service.on('set_site_context').listen((event) {
       siteContext = event;
       isInside = true;
+      firstReading = true;
+      lastOutsideAt = null;
       heartbeatCount = 0;
       _configureBackgroundRegion(event).then((instances) {
         activeAuth = instances.$1;
@@ -232,9 +250,16 @@ void onStart(ServiceInstance service) async {
       final isOut = distance > effectiveRadius;
 
       // ── State machine for entry/exit detection ───────────────────────────
-      if (!isOut && !isInside) {
-        // Guard re-entered site
+      // First reading: set isInside based on actual position, not assumption
+      // (must happen every heartbeat cycle, not just on init)
+      if (firstReading) {
+        firstReading = false;
+        isInside = !isOut;
+        lastOutsideAt = isOut ? DateTime.now() : null;
+      } else if (!isOut && !isInside) {
+        // Guard re-entered site — reset exit counter
         isInside = true;
+        lastOutsideAt = null;
         _sendGeofenceEvent(
           siteContext: siteContext!,
           eventType: 'enter',
@@ -244,10 +269,11 @@ void onStart(ServiceInstance service) async {
           locationSource: locationSource,
         );
       } else if (isOut && isInside) {
-        // Guard left site — require 2 consecutive outs to avoid GPS glitches
+        // Guard may have left — require 2 consecutive outs to avoid GPS glitches
         if (lastOutsideAt != null &&
             DateTime.now().difference(lastOutsideAt!).inMinutes < 6) {
           isInside = false;
+          lastOutsideAt = null;
           _sendGeofenceEvent(
             siteContext: siteContext!,
             eventType: 'exit',
@@ -256,8 +282,10 @@ void onStart(ServiceInstance service) async {
             accuracy: accuracy,
             locationSource: locationSource,
           );
+        } else {
+          // First consecutive out — start the 6-minute window
+          lastOutsideAt = DateTime.now();
         }
-        lastOutsideAt = DateTime.now();
       }
 
       // ── Heartbeat upload ──────────────────────────────────────────────────

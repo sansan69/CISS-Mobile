@@ -9,8 +9,8 @@ import '../../auth/application/auth_controller.dart';
 import '../guard_tab_provider.dart';
 import '../../../shared/widgets/branded_navigation_bar.dart';
 import '../../../shared/widgets/screen_scaffold.dart';
-import '../../../shared/widgets/section_card.dart';
 import '../../../core/fcm/notification_service.dart';
+import '../../../shared/widgets/status_chip.dart';
 import '../../../shared/widgets/theme_mode_selector.dart';
 import '../../shared/notification_inbox_screen.dart';
 import 'screens/guard_attendance_screen.dart';
@@ -22,6 +22,7 @@ import 'screens/guard_payslips_screen.dart';
 import 'screens/guard_patrol_screen.dart';
 import 'screens/guard_profile_screen.dart';
 import 'screens/guard_training_screen.dart';
+import 'widgets/guard_portal_widgets.dart';
 
 class GuardShell extends ConsumerStatefulWidget {
   const GuardShell({super.key});
@@ -95,22 +96,21 @@ class _GuardShellState extends ConsumerState<GuardShell> {
         if (didPop) return;
         final bool? shouldExit = await showDialog<bool>(
           context: context,
-          builder: (BuildContext ctx) => AlertDialog(
-            title: const Text('Exit CISS Workforce?'),
-            content: const Text(
-              'Are you sure you want to close the app?',
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Stay'),
+          builder:
+              (BuildContext ctx) => AlertDialog(
+                title: const Text('Exit CISS Workforce?'),
+                content: const Text('Are you sure you want to close the app?'),
+                actions: <Widget>[
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Stay'),
+                  ),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text('Exit'),
+                  ),
+                ],
               ),
-              FilledButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Exit'),
-              ),
-            ],
-          ),
         );
         if (shouldExit == true && context.mounted) {
           SystemNavigator.pop();
@@ -120,9 +120,9 @@ class _GuardShellState extends ConsumerState<GuardShell> {
         body: SafeArea(
           bottom: false, // NavigationBar handles bottom inset
           child: IndexedStack(
-          index: index,
-          children: _tabs.map((t) => t.screen).toList(),
-        ),
+            index: index,
+            children: _tabs.map((t) => t.screen).toList(),
+          ),
         ),
         bottomNavigationBar: BrandedNavigationBar(
           selectedIndex: index,
@@ -130,15 +130,16 @@ class _GuardShellState extends ConsumerState<GuardShell> {
             Haptics.selection();
             ref.read(guardTabIndexProvider.notifier).state = i;
           },
-          items: _tabs
-              .map(
-                (_GuardTab tab) => BrandedNavigationItem(
-                  label: tab.label,
-                  icon: tab.icon,
-                  activeIcon: tab.activeIcon,
-                ),
-              )
-              .toList(),
+          items:
+              _tabs
+                  .map(
+                    (_GuardTab tab) => BrandedNavigationItem(
+                      label: tab.label,
+                      icon: tab.icon,
+                      activeIcon: tab.activeIcon,
+                    ),
+                  )
+                  .toList(),
         ),
       ),
     );
@@ -166,15 +167,24 @@ class GuardMoreScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = CissThemeTokens.of(context);
     return ScreenScaffold(
-      title: 'More tools',
-      subtitle: 'Profile, leave, incident, and support actions',
+      title: 'More',
+      subtitle: 'Guard tools and account settings',
       children: <Widget>[
+        GuardHeroPanel(
+          eyebrow: 'Guard workspace',
+          title: 'Tools and support',
+          subtitle: 'Manage profile, requests, reports, and app preferences.',
+          icon: Icons.grid_view_rounded,
+          accentColor: tokens.accent,
+        ),
+        const SizedBox(height: AppSpacing.lg),
         const ThemeModeSelector(),
-        SectionCard(
+        const SizedBox(height: AppSpacing.md),
+        GuardRecordCard(
           title: 'Notifications',
           subtitle: 'View alerts, updates, and broadcasts',
           icon: Icons.notifications_outlined,
-          trailing: _NotificationBadge(),
+          trailing: const _NotificationBadge(),
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute<void>(
@@ -183,7 +193,7 @@ class GuardMoreScreen extends ConsumerWidget {
             );
           },
         ),
-        SectionCard(
+        GuardRecordCard(
           title: 'Patrol',
           subtitle: 'Hourly night checks and patrol rounds',
           icon: Icons.route_outlined,
@@ -195,7 +205,7 @@ class GuardMoreScreen extends ConsumerWidget {
             );
           },
         ),
-        SectionCard(
+        GuardRecordCard(
           title: 'Profile',
           subtitle: 'Personal and employment details',
           icon: Icons.person_outline_rounded,
@@ -207,7 +217,7 @@ class GuardMoreScreen extends ConsumerWidget {
             );
           },
         ),
-        SectionCard(
+        GuardRecordCard(
           title: 'Leave',
           subtitle: 'Apply and review leave requests',
           icon: Icons.event_available_rounded,
@@ -217,7 +227,7 @@ class GuardMoreScreen extends ConsumerWidget {
             );
           },
         ),
-        SectionCard(
+        GuardRecordCard(
           title: 'Evaluations',
           subtitle: 'Quiz and performance records',
           icon: Icons.workspace_premium_outlined,
@@ -229,7 +239,7 @@ class GuardMoreScreen extends ConsumerWidget {
             );
           },
         ),
-        SectionCard(
+        GuardRecordCard(
           title: 'Incidents',
           subtitle: 'Report incidents from the field',
           icon: Icons.report_gmailerrorred_outlined,
@@ -241,28 +251,32 @@ class GuardMoreScreen extends ConsumerWidget {
             );
           },
         ),
+        const SizedBox(height: AppSpacing.md),
         FilledButton(
           onPressed: () {
             Haptics.heavy();
             showDialog(
               context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Sign out?'),
-                content: const Text('You will be signed out of your account.'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('Cancel'),
+              builder:
+                  (ctx) => AlertDialog(
+                    title: const Text('Sign out?'),
+                    content: const Text(
+                      'You will be signed out of your account.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        child: const Text('Cancel'),
+                      ),
+                      FilledButton(
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          ref.read(authControllerProvider).signOut();
+                        },
+                        child: const Text('Sign out'),
+                      ),
+                    ],
                   ),
-                  FilledButton(
-                    onPressed: () {
-                      Navigator.of(ctx).pop();
-                      ref.read(authControllerProvider).signOut();
-                    },
-                    child: const Text('Sign out'),
-                  ),
-                ],
-              ),
             );
           },
           style: FilledButton.styleFrom(
@@ -277,24 +291,17 @@ class GuardMoreScreen extends ConsumerWidget {
 }
 
 class _NotificationBadge extends ConsumerWidget {
+  const _NotificationBadge();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = CissThemeTokens.of(context);
     final unreadAsync = ref.watch(NotificationService.unreadCountProvider);
     return unreadAsync.when(
-      data: (count) => count > 0
-          ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: tokens.danger,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                '$count',
-                style: TextStyle(color: tokens.surface, fontSize: 11, fontWeight: FontWeight.bold),
-              ),
-            )
-          : const SizedBox.shrink(),
+      data:
+          (count) =>
+              count > 0
+                  ? StatusChip(label: '$count new', tone: StatusChipTone.danger)
+                  : const SizedBox.shrink(),
       loading: () => const SizedBox.shrink(),
       error: (error, stackTrace) => const SizedBox.shrink(),
     );

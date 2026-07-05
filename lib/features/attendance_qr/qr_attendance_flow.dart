@@ -28,7 +28,8 @@ class QrAttendanceFlow extends ConsumerStatefulWidget {
   ConsumerState<QrAttendanceFlow> createState() => _QrAttendanceFlowState();
 }
 
-class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
+class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
+    with WidgetsBindingObserver {
   static const Uuid _uuid = Uuid();
 
   _QrFlowStep _step = _QrFlowStep.scan;
@@ -42,6 +43,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
   DateTime? _attendanceTime;
   String? _photoPath;
   String? _photoDataUrl; // base64 data URL for offline queue
+  String? _clientRequestId; // Stable across retries for idempotency
 
   MobileScannerController? _scannerController;
   DateTime? _lastScannedAt;
@@ -49,13 +51,26 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scannerController = MobileScannerController();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _scannerController?.dispose();
+    _loading = false; // defensive reset if widget unmounts mid-flight
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _scannerController?.stop();
+    } else if (state == AppLifecycleState.resumed) {
+      _scannerController?.start();
+    }
   }
 
   @override
@@ -119,6 +134,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
       }
       final status = employee.attendanceHint?.lastStatus == 'In' ? 'Out' : 'In';
       if (!mounted) return;
+      _scannerController?.stop();
       setState(() {
         _employee = employee;
         _selectedSite = nearest ?? (sites.isNotEmpty ? sites.first : null);
@@ -407,6 +423,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
       final status = employee.attendanceHint?.lastStatus == 'In' ? 'Out' : 'In';
 
       if (!mounted) return;
+      _scannerController?.stop();
       setState(() {
         _employee = employee;
         _selectedSite = nearest ?? (sites.isNotEmpty ? sites.first : null);
@@ -663,9 +680,12 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
   }
 
   Future<void> _capturePhoto() async {
+    // Pause scanner while the camera capture screen is shown
+    _scannerController?.stop();
     final result = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (_) => const CameraCaptureScreen()),
     );
+    _scannerController?.start();
     if (result != null && mounted) {
       // Pre-encode photo for offline queue support
       try {
@@ -725,7 +745,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
       );
 
       final now = DateTime.now();
-      final clientRequestId = _uuid.v4();
+      final clientRequestId = _clientRequestId ??= _uuid.v4();
 
       final distanceMeters = Geolocator.distanceBetween(
         pos.latitude,
@@ -856,6 +876,8 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow> {
         }
         return;
       }
+      // Defensive reset: _loading can stick if widget unmounts mid-flight
+      setState(() => _loading = false);
       rethrow;
     } catch (e) {
       if (!mounted) return;
