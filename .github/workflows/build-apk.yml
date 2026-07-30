@@ -47,7 +47,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          version_name="$(sed -n 's/^version: *\\([^+ ]*\\).*/\\1/p' pubspec.yaml)"
+          version_name="$(awk -F'[ +]' '/^version:/ { print $2; exit }' pubspec.yaml)"
           tag_version="${RELEASE_TAG#v}"
           if [[ "$version_name" != "$tag_version" ]]; then
             echo "pubspec version $version_name does not match release tag $RELEASE_TAG"
