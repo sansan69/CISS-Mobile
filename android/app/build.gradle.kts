@@ -13,6 +13,15 @@ val keystoreFile = rootProject.file("key.properties")
 if (keystoreFile.exists()) {
     keystoreProperties.load(keystoreFile.inputStream())
 }
+val releaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+if (releaseBuildRequested && !keystoreFile.exists()) {
+    throw GradleException(
+        "Release signing configuration is missing. " +
+            "Provide android/key.properties and the production keystore.",
+    )
+}
 
 android {
     namespace = "co.in.ciss.ciss_mobile"
@@ -50,10 +59,8 @@ android {
 
     buildTypes {
         release {
-            signingConfig = if (keystoreFile.exists()) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
+            if (keystoreFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }

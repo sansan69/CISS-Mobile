@@ -1,47 +1,151 @@
-name: Build Release APK
+name: Build signed Android release
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag matching pubspec.yaml, for example v1.0.17"
+        required: true
+        type: string
   push:
     tags:
-      - 'v*'
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_SIGNING_CERT_SHA256: ${{ secrets.ANDROID_SIGNING_CERT_SHA256 }}
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
-      
+          distribution: "temurin"
+          java-version: "17"
+
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.29.2'
-          channel: 'stable'
-      
+          flutter-version: "3.29.0"
+          channel: "stable"
+          cache: true
+
+      - name: Validate release version and signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_name="$(sed -n 's/^version: *\\([^+ ]*\\).*/\\1/p' pubspec.yaml)"
+          tag_version="${RELEASE_TAG#v}"
+          if [[ "$version_name" != "$tag_version" ]]; then
+            echo "pubspec version $version_name does not match release tag $RELEASE_TAG"
+            exit 1
+          fi
+          for variable in \
+            ANDROID_KEYSTORE_BASE64 \
+            ANDROID_STORE_PASSWORD \
+            ANDROID_KEY_PASSWORD \
+            ANDROID_KEY_ALIAS \
+            ANDROID_SIGNING_CERT_SHA256
+          do
+            if [[ -z "${!variable:-}" ]]; then
+              echo "Required GitHub Actions secret $variable is missing"
+              exit 1
+            fi
+          done
+
+      - name: Configure production signing
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/ciss-release.keystore
+          {
+            printf 'storePassword=%s\n' "$ANDROID_STORE_PASSWORD"
+            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+            printf 'storeFile=ciss-release.keystore\n'
+          } > android/key.properties
+
       - run: flutter pub get
-      
-      # Override local SDK paths for CI (delete Termux-specific paths)
-      - run: |
-          rm -f android/local.properties
-          echo "sdk.dir=${ANDROID_HOME}" > android/local.properties
-          echo "flutter.sdk=${FLUTTER_ROOT}" >> android/local.properties
-          # Remove Termux-specific AAPT2 override
-          sed -i '/android.aapt2/d' android/gradle.properties
-      
-      - run: flutter build apk --release --split-per-abi
-      
-      - name: Upload ARM64 APK
+      - run: flutter analyze
+      - run: flutter test --reporter expanded
+
+      - name: Build signed release artifacts
+        run: |
+          flutter build appbundle --release
+          flutter build apk --release --split-per-abi
+          flutter build apk --release
+
+      - name: Verify production certificate and checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="build/app/outputs/flutter-apk/app-release.apk"
+          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          "$apksigner" verify --verbose --print-certs "$apk" | tee build/signing-certificate.txt
+          actual_digest="$(
+            "$apksigner" verify --print-certs "$apk" |
+              sed -n 's/^Signer #1 certificate SHA-256 digest: //p' |
+              tr '[:upper:]' '[:lower:]' |
+              tr -d ':[:space:]'
+          )"
+          expected_digest="$(
+            printf '%s' "$ANDROID_SIGNING_CERT_SHA256" |
+              tr '[:upper:]' '[:lower:]' |
+              tr -d ':[:space:]'
+          )"
+          if [[ "$actual_digest" != "$expected_digest" ]]; then
+            echo "Release certificate does not match the approved CISS signing certificate"
+            exit 1
+          fi
+          shasum -a 256 \
+            build/app/outputs/bundle/release/app-release.aab \
+            build/app/outputs/flutter-apk/app-release.apk \
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+            > build/SHA256SUMS.txt
+
+      - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: app-arm64-v8a-release
-          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-      
-      - name: Upload ARMv7 APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-armeabi-v7a-release
-          path: build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+          name: ciss-workforce-${{ env.RELEASE_TAG }}
+          path: |
+            build/app/outputs/bundle/release/app-release.aab
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            build/SHA256SUMS.txt
+            build/signing-certificate.txt
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" \
+              --target "$GITHUB_SHA" \
+              --title "CISS Workforce $RELEASE_TAG" \
+              --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" --clobber \
+            build/app/outputs/bundle/release/app-release.aab \
+            build/app/outputs/flutter-apk/app-release.apk \
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+            build/SHA256SUMS.txt \
+            build/signing-certificate.txt
