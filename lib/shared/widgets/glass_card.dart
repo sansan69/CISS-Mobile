@@ -19,6 +19,7 @@ class GlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color resolvedAccent = accentColor ?? tokens.primary;
 
     return Padding(
@@ -26,21 +27,26 @@ class GlassCard extends StatelessWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadius.md),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
           child: Container(
             padding: padding,
             decoration: BoxDecoration(
-              color: tokens.surface.withValues(alpha: 0.88),
+              color: isDark
+                  ? tokens.surface.withValues(alpha: 0.65)
+                  : tokens.surface.withValues(alpha: 0.82),
               borderRadius: BorderRadius.circular(AppRadius.md),
               border: Border.all(
-                color: accentColor?.withValues(alpha: 0.34) ?? tokens.border,
+                color: isDark
+                    ? resolvedAccent.withValues(alpha: 0.22)
+                    : resolvedAccent.withValues(alpha: 0.15),
+                width: 1.2,
               ),
               boxShadow: [
                 BoxShadow(
-                  color: resolvedAccent.withValues(alpha: 0.06),
-                  blurRadius: 22,
-                  offset: const Offset(0, 10),
-                  spreadRadius: -8,
+                  color: resolvedAccent.withValues(alpha: 0.08),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                  spreadRadius: -4,
                 ),
               ],
             ),

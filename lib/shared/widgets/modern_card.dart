@@ -40,7 +40,9 @@ class ModernCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(radius),
               border: Border.all(
                 color: borderColor ?? tokens.border,
+                width: 1,
               ),
+              boxShadow: AppShadows.card,
             ),
             child: child,
           ),

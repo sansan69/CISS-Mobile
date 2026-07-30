@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../app/theme/app_tokens.dart';
+
 /// Subtle security-grid background painter for login screens.
 ///
 /// Draws a diagonal crosshatch pattern that evokes security mesh or
@@ -48,6 +50,7 @@ class _SecurityGridBackgroundState extends State<SecurityGridBackground>
 
   @override
   Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AnimatedBuilder(
@@ -57,14 +60,15 @@ class _SecurityGridBackgroundState extends State<SecurityGridBackground>
           painter: _SecurityGridPainter(
             progress: _ctrl.value,
             isDark: isDark,
+            scaffoldBg: tokens.canvas,
             gridColor: widget.gridColor ??
                 (isDark
-                    ? const Color(0xFF1A2A41).withValues(alpha: 0.5)
-                    : const Color(0xFFD9E3EA)),
+                    ? const Color(0xFF1A2A41).withValues(alpha: 0.25)
+                    : const Color(0xFFD9E3EA).withValues(alpha: 0.6)),
             dotColor: widget.dotColor ??
                 (isDark
-                    ? const Color(0xFF7CB8F0).withValues(alpha: 0.15)
-                    : const Color(0xFF0B4F82).withValues(alpha: 0.08)),
+                    ? const Color(0xFF7CB8F0).withValues(alpha: 0.08)
+                    : const Color(0xFF0B4F82).withValues(alpha: 0.04)),
           ),
           child: child,
         );
@@ -80,12 +84,14 @@ class _SecurityGridPainter extends CustomPainter {
     required this.gridColor,
     required this.dotColor,
     required this.isDark,
+    required this.scaffoldBg,
   });
 
   final double progress;
   final Color gridColor;
   final Color dotColor;
   final bool isDark;
+  final Color scaffoldBg;
 
   static const double _spacing = 48.0;
   static const double _dotSpacing = _spacing * 2.5;
@@ -135,7 +141,6 @@ class _SecurityGridPainter extends CustomPainter {
     }
 
     // Bottom gradient fade to ensure form readability
-    final scaffoldBg = isDark ? const Color(0xFF0B1320) : Colors.white;
     final fadePaint = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
@@ -144,9 +149,9 @@ class _SecurityGridPainter extends CustomPainter {
           Colors.transparent,
           Colors.transparent,
           scaffoldBg.withValues(alpha: 0.7),
-          scaffoldBg.withValues(alpha: 0.95),
+          scaffoldBg.withValues(alpha: 0.98),
         ],
-        stops: const [0.0, 0.5, 0.75, 1.0],
+        stops: const [0.0, 0.45, 0.7, 1.0],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
 
     canvas.drawRect(

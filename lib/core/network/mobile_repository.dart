@@ -52,25 +52,6 @@ class MobileRepository {
     }
   }
 
-  /// Request a PIN reset for a guard who cannot log in.
-  /// This is an unauthenticated call — the backend validates employee ID + phone.
-  Future<void> resetGuardPin({
-    required String employeeId,
-    required String phoneNumber,
-  }) async {
-    try {
-      await _apiClient.dio.post<dynamic>(
-        '/api/public/guard/reset-pin',
-        data: <String, String>{
-          'employeeId': employeeId,
-          'phoneNumber': phoneNumber,
-        },
-      );
-    } catch (error) {
-      throw Exception('PIN reset failed: ${_extractApiError(error)}');
-    }
-  }
-
   Future<List<Map<String, dynamic>>> fetchNotifications() async {
     try {
       final data = await _getJson(_mobileNotificationsPath);
@@ -82,11 +63,7 @@ class MobileRepository {
           .map((item) => Map<String, dynamic>.from(item))
           .toList();
     } catch (error) {
-      try {
-        return _fetchNotificationsDirectly();
-      } catch (_) {
-        rethrow;
-      }
+      return _fetchNotificationsDirectly();
     }
   }
 
@@ -95,12 +72,8 @@ class MobileRepository {
       final data = await _getJson(_mobileNotificationsPath);
       return (data['unreadCount'] as num?)?.toInt() ?? 0;
     } catch (error) {
-      try {
-        final notifications = await _fetchNotificationsDirectly();
-        return notifications.where((item) => item['read'] != true).length;
-      } catch (_) {
-        rethrow;
-      }
+      final notifications = await _fetchNotificationsDirectly();
+      return notifications.where((item) => item['read'] != true).length;
     }
   }
 
@@ -169,6 +142,13 @@ class MobileRepository {
       if (_isOfflineDioError(error)) rethrow;
       throw Exception(_extractApiError(error));
     }
+  }
+
+  Future<Map<String, dynamic>> getJson(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    return _getJson(path, queryParameters: queryParameters);
   }
 
   Future<Map<String, dynamic>> postGeneric(
@@ -274,6 +254,17 @@ class MobileRepository {
     final user = _auth.currentUser;
     if (user == null) return null;
 
+    // Check Firebase claims first to see if this is an admin or client role.
+    // The /api/mobile/session endpoint only resolves guard and fieldOfficer,
+    // so skip the backend call entirely for roles it doesn't support.
+    final token = await user.getIdTokenResult(false);
+    final claims = token.claims ?? <String, dynamic>{};
+    final role = _roleFromClaims(claims);
+
+    if (role == AppRole.admin || role == AppRole.client) {
+      return _buildSessionFromClaims(user: user, claims: claims, role: role!);
+    }
+
     try {
       final backendSession = await _resolveSessionFromBackend();
       if (backendSession != null) {
@@ -284,17 +275,15 @@ class MobileRepository {
       debugPrint('Backend session resolution failed: $e');
     }
 
-    final token = await user.getIdTokenResult(false);
-    final claims = token.claims ?? <String, dynamic>{};
-    final role = _roleFromClaims(claims);
-    if (role != null) {
-      if (role == AppRole.guard) {
-        final guardSession = await _resolveGuardSessionFromProfile(user);
-        if (guardSession != null) {
-          return guardSession;
-        }
+    // Fallback: try guard profile endpoint or build from claims.
+    if (role == AppRole.guard) {
+      final guardSession = await _resolveGuardSessionFromProfile(user);
+      if (guardSession != null) {
+        return guardSession;
       }
+    }
 
+    if (role != null) {
       return _buildSessionFromClaims(user: user, claims: claims, role: role);
     }
 
@@ -309,9 +298,10 @@ class MobileRepository {
     if (role == AppRole.guard) {
       return AuthSession(
         role: role,
-        displayName: (claims['name'] as String?)?.trim().isNotEmpty == true
-            ? claims['name'] as String
-            : (user.displayName ?? user.email ?? 'Guard'),
+        displayName:
+            (claims['name'] as String?)?.trim().isNotEmpty == true
+                ? claims['name'] as String
+                : (user.displayName ?? user.email ?? 'Guard'),
         primaryId: (claims['employeeId'] as String?) ?? user.uid,
         uid: user.uid,
         email: user.email,
@@ -326,9 +316,11 @@ class MobileRepository {
     if (role == AppRole.client) {
       return AuthSession(
         role: role,
-        displayName: (claims['name'] as String?)?.trim().isNotEmpty == true
-            ? claims['name'] as String
-            : (claims['clientName'] as String?) ?? (user.displayName ?? user.email ?? 'Client'),
+        displayName:
+            (claims['name'] as String?)?.trim().isNotEmpty == true
+                ? claims['name'] as String
+                : (claims['clientName'] as String?) ??
+                    (user.displayName ?? user.email ?? 'Client'),
         primaryId: user.uid,
         uid: user.uid,
         email: user.email,
@@ -340,9 +332,10 @@ class MobileRepository {
     if (role == AppRole.admin) {
       return AuthSession(
         role: role,
-        displayName: (claims['name'] as String?)?.trim().isNotEmpty == true
-            ? claims['name'] as String
-            : (user.displayName ?? user.email ?? 'Admin'),
+        displayName:
+            (claims['name'] as String?)?.trim().isNotEmpty == true
+                ? claims['name'] as String
+                : (user.displayName ?? user.email ?? 'Admin'),
         primaryId: user.uid,
         uid: user.uid,
         email: user.email,
@@ -351,9 +344,10 @@ class MobileRepository {
 
     return AuthSession(
       role: role,
-      displayName: (claims['name'] as String?)?.trim().isNotEmpty == true
-          ? claims['name'] as String
-          : (user.displayName ?? user.email ?? 'Field Officer'),
+      displayName:
+          (claims['name'] as String?)?.trim().isNotEmpty == true
+              ? claims['name'] as String
+              : (user.displayName ?? user.email ?? 'Field Officer'),
       primaryId: user.uid,
       uid: user.uid,
       email: user.email,
@@ -377,15 +371,18 @@ class MobileRepository {
 
     return AuthSession(
       role: role,
-      displayName: (data['displayName'] as String?)?.trim().isNotEmpty == true
-          ? data['displayName'] as String
-          : (user.displayName ?? user.email ?? role.label),
-      primaryId: (data['primaryId'] as String?)?.trim().isNotEmpty == true
-          ? data['primaryId'] as String
-          : user.uid,
-      uid: (data['uid'] as String?)?.trim().isNotEmpty == true
-          ? data['uid'] as String
-          : user.uid,
+      displayName:
+          (data['displayName'] as String?)?.trim().isNotEmpty == true
+              ? data['displayName'] as String
+              : (user.displayName ?? user.email ?? role.label),
+      primaryId:
+          (data['primaryId'] as String?)?.trim().isNotEmpty == true
+              ? data['primaryId'] as String
+              : user.uid,
+      uid:
+          (data['uid'] as String?)?.trim().isNotEmpty == true
+              ? data['uid'] as String
+              : user.uid,
       email: data['email'] as String? ?? user.email,
       employeeDocId: data['employeeDocId'] as String?,
       assignedDistricts:
@@ -404,10 +401,12 @@ class MobileRepository {
       final profile = await fetchGuardProfile();
       return AuthSession(
         role: AppRole.guard,
-        displayName: profile.fullName.isNotEmpty
-            ? profile.fullName
-            : (user.displayName ?? user.email ?? 'Guard'),
-        primaryId: profile.employeeId.isNotEmpty ? profile.employeeId : user.uid,
+        displayName:
+            profile.fullName.isNotEmpty
+                ? profile.fullName
+                : (user.displayName ?? user.email ?? 'Guard'),
+        primaryId:
+            profile.employeeId.isNotEmpty ? profile.employeeId : user.uid,
         uid: user.uid,
         email: user.email,
         employeeDocId: profile.id.isNotEmpty ? profile.id : null,
@@ -484,12 +483,13 @@ class MobileRepository {
       return const <Map<String, dynamic>>[];
     }
 
-    final snapshot = await _regionService.activeFirestore
-        .collection('notifications')
-        .where('recipientUid', isEqualTo: user.uid)
-        .orderBy('createdAt', descending: true)
-        .limit(50)
-        .get();
+    final snapshot =
+        await _regionService.activeFirestore
+            .collection('notifications')
+            .where('recipientUid', isEqualTo: user.uid)
+            .orderBy('createdAt', descending: true)
+            .limit(50)
+            .get();
 
     return snapshot.docs
         .map((doc) => _serializeNotificationDocument(doc))
@@ -508,7 +508,9 @@ class MobileRepository {
           .doc(notifId.trim());
       final snapshot = await docRef.get();
       final data = snapshot.data();
-      if (!snapshot.exists || data == null || data['recipientUid'] != user.uid) {
+      if (!snapshot.exists ||
+          data == null ||
+          data['recipientUid'] != user.uid) {
         return false;
       }
 
@@ -531,11 +533,12 @@ class MobileRepository {
 
     try {
       final firestore = _regionService.activeFirestore;
-      final snapshot = await firestore
-          .collection('notifications')
-          .where('recipientUid', isEqualTo: user.uid)
-          .limit(50)
-          .get();
+      final snapshot =
+          await firestore
+              .collection('notifications')
+              .where('recipientUid', isEqualTo: user.uid)
+              .limit(50)
+              .get();
 
       if (snapshot.docs.isEmpty) {
         return true;
@@ -570,18 +573,21 @@ class MobileRepository {
       'title': data['title'] ?? '',
       'body': data['body'] ?? '',
       'read': data['read'] == true,
-      'createdAt': createdAt is Timestamp
-          ? createdAt.toDate().toIso8601String()
-          : createdAt?.toString(),
-      'readAt': readAt is Timestamp
-          ? readAt.toDate().toIso8601String()
-          : readAt?.toString(),
+      'createdAt':
+          createdAt is Timestamp
+              ? createdAt.toDate().toIso8601String()
+              : createdAt?.toString(),
+      'readAt':
+          readAt is Timestamp
+              ? readAt.toDate().toIso8601String()
+              : readAt?.toString(),
       'recipientUid': data['recipientUid'],
       'recipientRole': data['recipientRole'],
       'recipientDistrict': data['recipientDistrict'],
-      'data': data['data'] is Map
-          ? Map<String, dynamic>.from(data['data'] as Map)
-          : null,
+      'data':
+          data['data'] is Map
+              ? Map<String, dynamic>.from(data['data'] as Map)
+              : null,
     };
   }
 
@@ -737,20 +743,22 @@ class MobileRepository {
 
   Future<GuardDashboardSnapshot> fetchGuardDashboard() async {
     final data = await _getJson('/api/guard/dashboard');
-    final leaveBalance = data['leaveBalance'] is Map<String, dynamic>
-        ? _parseLeaveBalance(
-            Map<String, dynamic>.from(data['leaveBalance'] as Map),
-          )
-        : null;
+    final leaveBalance =
+        data['leaveBalance'] is Map<String, dynamic>
+            ? _parseLeaveBalance(
+              Map<String, dynamic>.from(data['leaveBalance'] as Map),
+            )
+            : null;
     final recentAttendance =
         (data['recentAttendance'] as List<dynamic>? ?? const <dynamic>[])
             .whereType<Map<String, dynamic>>()
             .map((item) => AttendanceRecordModel.fromJson(item))
             .toList();
 
-    final nextShift = data['nextShift'] is Map<String, dynamic>
-        ? Map<String, dynamic>.from(data['nextShift'] as Map)
-        : null;
+    final nextShift =
+        data['nextShift'] is Map<String, dynamic>
+            ? Map<String, dynamic>.from(data['nextShift'] as Map)
+            : null;
 
     return GuardDashboardSnapshot(
       employeeName: (data['employeeName'] as String?) ?? '',
@@ -760,25 +768,27 @@ class MobileRepository {
       profilePhotoUrl: data['profilePhotoUrl'] as String?,
       presentDays:
           (data['attendanceStats'] as Map<String, dynamic>?)?['presentDays']
-              is num
-          ? ((data['attendanceStats'] as Map<String, dynamic>)['presentDays']
-                    as num)
-                .toInt()
-          : 0,
+                  is num
+              ? ((data['attendanceStats']
+                          as Map<String, dynamic>)['presentDays']
+                      as num)
+                  .toInt()
+              : 0,
       absentDays:
           (data['attendanceStats'] as Map<String, dynamic>?)?['absentDays']
-              is num
-          ? ((data['attendanceStats'] as Map<String, dynamic>)['absentDays']
-                    as num)
-                .toInt()
-          : 0,
+                  is num
+              ? ((data['attendanceStats'] as Map<String, dynamic>)['absentDays']
+                      as num)
+                  .toInt()
+              : 0,
       workingDays:
           (data['attendanceStats'] as Map<String, dynamic>?)?['workingDays']
-              is num
-          ? ((data['attendanceStats'] as Map<String, dynamic>)['workingDays']
-                    as num)
-                .toInt()
-          : 0,
+                  is num
+              ? ((data['attendanceStats']
+                          as Map<String, dynamic>)['workingDays']
+                      as num)
+                  .toInt()
+              : 0,
       leaveBalance: leaveBalance,
       latestEvalScore: data['latestEvalScore'] as num?,
       latestEvalPeriod: data['latestEvalPeriod'] as String?,
@@ -791,9 +801,12 @@ class MobileRepository {
 
   Future<GuardProfileModel> fetchGuardProfile() async {
     final data = await _getJson('/api/guard/profile');
-    final employee = data['employee'] is Map<String, dynamic>
-        ? Map<String, dynamic>.from(data['employee'] as Map)
-        : <String, dynamic>{};
+    // The backend returns the employee data flat (not wrapped in "employee").
+    // Support both shapes for backward compatibility.
+    final employee =
+        data['employee'] is Map<String, dynamic>
+            ? Map<String, dynamic>.from(data['employee'] as Map)
+            : data;
     return GuardProfileModel.fromJson(
       employee,
       id: employee['id'] as String? ?? '',
@@ -816,37 +829,44 @@ class MobileRepository {
   ]) async {
     final params = <String, dynamic>{};
     if (employeeId.isNotEmpty) params['employeeId'] = employeeId;
-    if (phoneNumber != null && phoneNumber.isNotEmpty) params['phoneNumber'] = phoneNumber;
-    if (resourceId != null && resourceId.isNotEmpty) params['resourceId'] = resourceId;
+    if (phoneNumber != null && phoneNumber.isNotEmpty) {
+      params['phoneNumber'] = phoneNumber;
+    }
+    if (resourceId != null && resourceId.isNotEmpty) {
+      params['resourceId'] = resourceId;
+    }
     if (params.isEmpty) return null;
     final data = await _getJson(
       '/api/public/attendance/employee',
       queryParameters: params,
     );
     if (data['found'] != true) return null;
-    final employee = data['employee'] is Map<String, dynamic>
-        ? Map<String, dynamic>.from(data['employee'] as Map)
-        : <String, dynamic>{};
-    final hint = employee['attendanceHint'] is Map<String, dynamic>
-        ? Map<String, dynamic>.from(employee['attendanceHint'] as Map)
-        : null;
+    final employee =
+        data['employee'] is Map<String, dynamic>
+            ? Map<String, dynamic>.from(data['employee'] as Map)
+            : <String, dynamic>{};
+    final hint =
+        employee['attendanceHint'] is Map<String, dynamic>
+            ? Map<String, dynamic>.from(employee['attendanceHint'] as Map)
+            : null;
     return PublicAttendanceEmployeeModel(
       id: employee['id'] as String? ?? '',
       employeeCode: employee['employeeCode'] as String?,
       fullName: employee['fullName'] as String? ?? '',
       phoneNumber: employee['phoneNumber'] as String?,
       clientName: employee['clientName'] as String?,
-      attendanceHint: hint == null
-          ? null
-          : AttendanceHintModel(
-              lastAttendanceDate: hint['lastAttendanceDate'] as String?,
-              lastStatus:
-                  hint['lastStatus'] == 'In' || hint['lastStatus'] == 'Out'
-                  ? hint['lastStatus'] as String
-                  : null,
-              lastDutyPointId: hint['lastDutyPointId'] as String?,
-              lastShiftCode: hint['lastShiftCode'] as String?,
-            ),
+      attendanceHint:
+          hint == null
+              ? null
+              : AttendanceHintModel(
+                lastAttendanceDate: hint['lastAttendanceDate'] as String?,
+                lastStatus:
+                    hint['lastStatus'] == 'In' || hint['lastStatus'] == 'Out'
+                        ? hint['lastStatus'] as String
+                        : null,
+                lastDutyPointId: hint['lastDutyPointId'] as String?,
+                lastShiftCode: hint['lastShiftCode'] as String?,
+              ),
     );
   }
 
@@ -855,50 +875,68 @@ class MobileRepository {
     required String dataUrl,
     String? siteId,
   }) async {
-    final ownerMatch = RegExp(r'^employees/([^/]+)/attendance/').firstMatch(path);
+    final ownerMatch = RegExp(
+      r'^employees/([^/]+)/attendance/',
+    ).firstMatch(path);
     final ownerKey = ownerMatch?.group(1);
     if (ownerKey == null || ownerKey.isEmpty) {
-      throw Exception('Attendance photo path must use employees/{id}/attendance.');
+      throw Exception(
+        'Attendance photo path must use employees/{id}/attendance.',
+      );
     }
     if (siteId == null || siteId.isEmpty) {
       throw Exception('Attendance site id is required for photo upload.');
     }
-    final tokenResponse = await _apiClient.dio.post<dynamic>(
-      '/api/public/attendance/upload-token',
-      data: <String, dynamic>{'employeeId': ownerKey, 'siteId': siteId},
-    );
-    final tokenData = Map<String, dynamic>.from(tokenResponse.data as Map);
-    final uploadToken = tokenData['uploadToken'] as String?;
-    if (uploadToken == null || uploadToken.isEmpty) {
-      throw Exception('Attendance photo upload token missing.');
+    try {
+      final tokenResponse = await _apiClient.dio.post<dynamic>(
+        '/api/public/attendance/upload-token',
+        data: <String, dynamic>{'employeeId': ownerKey, 'siteId': siteId},
+      );
+      final tokenData = Map<String, dynamic>.from(tokenResponse.data as Map);
+      final uploadToken = tokenData['uploadToken'] as String?;
+      if (uploadToken == null || uploadToken.isEmpty) {
+        throw Exception('Attendance photo upload token missing.');
+      }
+      final response = await _apiClient.dio.post<dynamic>(
+        '/api/public/attendance/upload',
+        data: <String, dynamic>{
+          'path': path,
+          'photoDataUrl': dataUrl,
+          'uploadToken': uploadToken,
+        },
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } catch (error) {
+      if (_isOfflineDioError(error)) rethrow;
+      throw Exception('Photo upload failed: ${_extractApiError(error)}');
     }
-    final response = await _apiClient.dio.post<dynamic>(
-      '/api/public/attendance/upload',
-      data: <String, dynamic>{
-        'path': path,
-        'photoDataUrl': dataUrl,
-        'uploadToken': uploadToken,
-      },
-    );
-    return Map<String, dynamic>.from(response.data as Map);
   }
 
   Future<Map<String, dynamic>> uploadReportPhoto({
     required String path,
     required String dataUrl,
   }) async {
-    final response = await _apiClient.dio.post<dynamic>(
-      '/api/field-officer/upload',
-      data: <String, dynamic>{'path': path, 'photoDataUrl': dataUrl},
-      options: Options(headers: await _authHeaders()),
-    );
-    return Map<String, dynamic>.from(response.data as Map);
+    try {
+      final response = await _apiClient.dio.post<dynamic>(
+        '/api/field-officer/upload',
+        data: <String, dynamic>{'path': path, 'photoDataUrl': dataUrl},
+        options: Options(headers: await _authHeaders()),
+      );
+      return Map<String, dynamic>.from(response.data as Map);
+    } catch (error) {
+      if (_isOfflineDioError(error)) rethrow;
+      throw Exception('Report photo upload failed: ${_extractApiError(error)}');
+    }
   }
 
   Future<Map<String, dynamic>> submitAttendance(
     Map<String, dynamic> payload,
   ) async {
     return _postJson('/api/attendance/submit', payload);
+  }
+
+  Future<Map<String, dynamic>> fetchGuardTrackingStatus() {
+    return _getJson('/api/guard/tracking/status');
   }
 
   Future<List<AttendanceRecordModel>> fetchAttendanceHistory({
@@ -1059,6 +1097,54 @@ class MobileRepository {
     );
   }
 
+  /// Fetches visit reports scoped to the client via the dedicated API.
+  /// Falls back to extracting from dashboard response if the endpoint is unavailable.
+  Future<List<Map<String, dynamic>>> fetchClientVisitReports() async {
+    try {
+      final data = await _getJson('/api/client/dashboard');
+      final reports =
+          data['recentVisitReports'] as List<dynamic>? ?? const <dynamic>[];
+      return reports.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      debugPrint('fetchClientVisitReports via dashboard fallback: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetches training reports scoped to the client via the dedicated API.
+  /// Falls back to extracting from dashboard response if the endpoint is unavailable.
+  Future<List<Map<String, dynamic>>> fetchClientTrainingReports() async {
+    try {
+      final data = await _getJson('/api/client/dashboard');
+      final reports =
+          data['recentTrainingReports'] as List<dynamic>? ?? const <dynamic>[];
+      return reports.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      debugPrint('fetchClientTrainingReports via dashboard fallback: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetches patrol activities extracted from the client dashboard response.
+  Future<List<Map<String, dynamic>>> fetchClientPatrolActivityList(
+    String clientId,
+  ) async {
+    try {
+      final data = await fetchClientPatrolActivities(clientId);
+      final activities =
+          data['activities'] as List<dynamic>? ??
+          data['patrolActivities'] as List<dynamic>? ??
+          const <dynamic>[];
+      return activities.whereType<Map<String, dynamic>>().toList();
+    } catch (e) {
+      // Fallback to dashboard extraction
+      final data = await _getJson('/api/client/dashboard');
+      final activities =
+          data['recentPatrolActivities'] as List<dynamic>? ?? const <dynamic>[];
+      return activities.whereType<Map<String, dynamic>>().toList();
+    }
+  }
+
   // ── Admin endpoints ──────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> fetchAdminDashboard() async {
@@ -1117,10 +1203,9 @@ class MobileRepository {
     required String employeeId,
     required String status,
   }) async {
-    return _patchJson(
-      '/api/admin/employees/$employeeId',
-      <String, dynamic>{'status': status},
-    );
+    return _patchJson('/api/admin/employees/$employeeId', <String, dynamic>{
+      'status': status,
+    });
   }
 
   // ── Admin Training Modules ───────────────────────────────────────────
@@ -1153,14 +1238,13 @@ class MobileRepository {
 
   // ── Admin Question Banks ─────────────────────────────────────────────
 
-  Future<List<QuestionBankModel>> fetchQuestionBanks({
-    String? moduleId,
-  }) async {
+  Future<List<QuestionBankModel>> fetchQuestionBanks({String? moduleId}) async {
     final data = await _getJson(
       '/api/admin/training/banks',
-      queryParameters: moduleId != null && moduleId.isNotEmpty
-          ? <String, dynamic>{'moduleId': moduleId}
-          : null,
+      queryParameters:
+          moduleId != null && moduleId.isNotEmpty
+              ? <String, dynamic>{'moduleId': moduleId}
+              : null,
     );
     final list = data['banks'] as List<dynamic>? ?? const <dynamic>[];
     return list
@@ -1453,9 +1537,18 @@ class MobileRepository {
               .toList(),
       totalGuards: (data['totalGuards'] as num?)?.toInt() ?? 0,
       activeGuards: (data['activeGuards'] as num?)?.toInt() ?? 0,
+      totalSitesInScope: (data['totalSitesInScope'] as num?)?.toInt() ?? 0,
       attendanceSummary: FieldOfficerAttendanceSummary.fromJson(
         data['attendanceSummary'] as Map<String, dynamic>?,
       ),
+      todayOverview: FieldOfficerTodayOverview.fromJson(
+        data['todayOverview'] as Map<String, dynamic>?,
+      ),
+      todaySites:
+          (data['todaySites'] as List<dynamic>? ?? const <dynamic>[])
+              .whereType<Map<String, dynamic>>()
+              .map(FieldOfficerTodaySiteBrief.fromJson)
+              .toList(),
       recentVisitReports: visitReports,
       attendanceSites:
           (data['attendanceSites'] as List<dynamic>? ?? const <dynamic>[])
@@ -1485,9 +1578,10 @@ class MobileRepository {
   }) async {
     final data = await _getJson(
       '/api/field-officer/sites',
-      queryParameters: (district != null && district.trim().isNotEmpty)
-          ? <String, dynamic>{'district': district.trim()}
-          : null,
+      queryParameters:
+          (district != null && district.trim().isNotEmpty)
+              ? <String, dynamic>{'district': district.trim()}
+              : null,
     );
     final rows = data['sites'] as List<dynamic>? ?? const <dynamic>[];
     return rows
@@ -1501,9 +1595,10 @@ class MobileRepository {
   }) async {
     final data = await _getJson(
       '/api/field-officer/guards',
-      queryParameters: (district != null && district.trim().isNotEmpty)
-          ? <String, dynamic>{'district': district.trim()}
-          : null,
+      queryParameters:
+          (district != null && district.trim().isNotEmpty)
+              ? <String, dynamic>{'district': district.trim()}
+              : null,
     );
     final guards = data['guards'] as List<dynamic>? ?? const <dynamic>[];
     return guards
@@ -1532,10 +1627,12 @@ class MobileRepository {
     final guards = data['guards'] as List<dynamic>? ?? const <dynamic>[];
     return guards
         .whereType<Map<String, dynamic>>()
-        .map((g) => <String, dynamic>{
-              'id': g['id']?.toString() ?? '',
-              'name': g['name']?.toString() ?? g['fullName']?.toString() ?? '',
-            })
+        .map(
+          (g) => <String, dynamic>{
+            'id': g['id']?.toString() ?? '',
+            'name': g['name']?.toString() ?? g['fullName']?.toString() ?? '',
+          },
+        )
         .toList();
   }
 
@@ -1618,9 +1715,10 @@ class MobileRepository {
   }
 
   LeaveBalanceModel _parseLeaveBalance(Map<String, dynamic> json) {
-    final casual = json['casual'] is Map<String, dynamic>
-        ? Map<String, dynamic>.from(json['casual'] as Map)
-        : const <String, dynamic>{};
+    final casual =
+        json['casual'] is Map<String, dynamic>
+            ? Map<String, dynamic>.from(json['casual'] as Map)
+            : const <String, dynamic>{};
     // We only need one summary card in the mobile shell right now.
     final balance =
         (casual['balance'] as num?)?.toInt() ??
@@ -1661,9 +1759,7 @@ class MobileRepository {
 
   // ── Admin Sites ───────────────────────────────────────────────────────
 
-  Future<List<Map<String, dynamic>>> fetchAdminSites({
-    String? clientId,
-  }) async {
+  Future<List<Map<String, dynamic>>> fetchAdminSites({String? clientId}) async {
     final params = <String, dynamic>{};
     if (clientId != null && clientId.isNotEmpty) params['clientId'] = clientId;
     final data = await _getJson(
@@ -1712,10 +1808,9 @@ class MobileRepository {
   // ── Admin QR ──────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>> generateQR(String employeeId) async {
-    return _postJson(
-      '/api/admin/qr/generate',
-      <String, dynamic>{'employeeId': employeeId},
-    );
+    return _postJson('/api/admin/qr/generate', <String, dynamic>{
+      'employeeId': employeeId,
+    });
   }
 
   Future<Map<String, dynamic>> bulkGenerateQR() async {
@@ -1771,13 +1866,15 @@ class MobileRepository {
     required String exam,
     required String newName,
   }) async {
-    return _postJson(
-      '/api/admin/work-orders/rename-exam',
-      <String, dynamic>{'exam': exam, 'newName': newName},
-    );
+    return _postJson('/api/admin/work-orders/rename-exam', <String, dynamic>{
+      'exam': exam,
+      'newName': newName,
+    });
   }
 
-  Future<Map<String, dynamic>> bulkDeleteWorkOrders(Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> bulkDeleteWorkOrders(
+    Map<String, dynamic> payload,
+  ) async {
     return _deleteJson('/api/admin/work-orders/bulk-delete');
   }
 
@@ -1789,9 +1886,8 @@ class MobileRepository {
     required String workOrderId,
     required List<Map<String, dynamic>> assignedGuards,
   }) async {
-    await _patchJson(
-      '/api/admin/work-orders/$workOrderId',
-      <String, dynamic>{'assignedGuards': assignedGuards},
-    );
+    await _patchJson('/api/admin/work-orders/$workOrderId', <String, dynamic>{
+      'assignedGuards': assignedGuards,
+    });
   }
 }

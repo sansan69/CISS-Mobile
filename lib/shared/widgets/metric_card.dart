@@ -22,35 +22,58 @@ class MetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
     final effectiveColor = color ?? tokens.primary;
-    final effectiveBackground =
-        backgroundColor ?? effectiveColor.withValues(alpha: 0.1);
 
     return Container(
       width: width,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: effectiveBackground,
+        color: tokens.surface,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: tokens.border, width: 1),
+        boxShadow: AppShadows.subtle,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              color: tokens.inkMuted,
-              fontWeight: FontWeight.w600,
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: tokens.inkMuted,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: effectiveColor,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: effectiveColor.withValues(alpha: 0.4),
+                      blurRadius: 6,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text(
             value,
             style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: effectiveColor,
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              color: tokens.ink,
               height: 1.0,
             ),
           ),

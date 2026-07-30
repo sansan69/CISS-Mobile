@@ -365,20 +365,11 @@ class _RoleCardState extends State<_RoleCard>
                 borderRadius: BorderRadius.circular(AppRadius.lg),
                 border: Border.all(
                   color: _pressed
-                      ? widget.color.withValues(alpha: 0.5)
-                      : tokens.border.withValues(alpha: 0.5),
+                      ? widget.color
+                      : tokens.border,
                   width: _pressed ? 1.5 : 1,
                 ),
-                boxShadow: _pressed
-                    ? const <BoxShadow>[]
-                    : <BoxShadow>[
-                        BoxShadow(
-                          color: tokens.ink.withValues(alpha: 0.05),
-                          blurRadius: 16,
-                          offset: const Offset(0, 6),
-                          spreadRadius: -2,
-                        ),
-                      ],
+                boxShadow: _pressed ? AppShadows.subtle : AppShadows.card,
               ),
               clipBehavior: Clip.antiAlias,
               child: IntrinsicHeight(

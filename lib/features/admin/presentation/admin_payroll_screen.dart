@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/models/admin_models.dart';
+import '../../../core/haptics.dart';
 import '../../../core/network/providers.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/state_block.dart';
 import '../../../shared/widgets/status_chip.dart';
+import 'admin_payroll_cycle_detail_screen.dart';
+import 'admin_payroll_run_screen.dart';
 
 class AdminPayrollScreen extends ConsumerStatefulWidget {
   const AdminPayrollScreen({super.key});
@@ -102,149 +105,188 @@ class _AdminPayrollScreenState extends ConsumerState<AdminPayrollScreen> {
                   ),
                 )
               : _cycles.isEmpty
-                  ? const Center(
-                      child: StateBlock(
-                        icon: Icons.payments_rounded,
-                        title: 'No payroll cycles',
-                        message: 'Payroll cycles will appear here.',
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 40),
+                      child: Column(
+                        children: <Widget>[
+                          const StateBlock(
+                            icon: Icons.payments_rounded,
+                            title: 'No payroll cycles',
+                            message: 'Payroll cycles will appear here.',
+                          ),
+                          const SizedBox(height: 16),
+                          FilledButton.icon(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const AdminPayrollRunScreen(),
+                              ),
+                            ),
+                            icon: const Icon(Icons.add_rounded, size: 18),
+                            label: const Text('CREATE A CYCLE'),
+                          ),
+                        ],
                       ),
                     )
-                  : RefreshIndicator(
-                      onRefresh: _fetchCycles,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _cycles.length,
-                        itemBuilder: (context, index) {
-                          final cycle = _cycles[index];
-                          final entries = _entryCache[cycle.id];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 12),
-                            child: GlassCard(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              cycle.period,
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w700,
-                                                color: tokens.ink,
+                  : Stack(
+                      children: <Widget>[
+                        Positioned.fill(
+                          child: RefreshIndicator(
+                            onRefresh: _fetchCycles,
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _cycles.length,
+                              itemBuilder: (context, index) {
+                                final cycle = _cycles[index];
+                                final entries = _entryCache[cycle.id];
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      Haptics.light();
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              AdminPayrollCycleDetailScreen(
+                                            cycle: cycle,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    child: GlassCard(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      cycle.period,
+                                                      style: TextStyle(
+                                                        fontSize: 16,
+                                                        fontWeight: FontWeight.w700,
+                                                        color: tokens.ink,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      '${cycle.employeeCount} employees',
+                                                      style: TextStyle(
+                                                        fontSize: 12,
+                                                        color: tokens.inkMuted,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              '${cycle.employeeCount} employees',
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: tokens.inkMuted,
+                                              StatusChip(
+                                                label: cycle.statusLabel,
+                                                tone: cycle.status == 'finalized' || cycle.status == 'paid'
+                                                    ? StatusChipTone.success
+                                                    : cycle.status == 'processing'
+                                                        ? StatusChipTone.warning
+                                                        : StatusChipTone.neutral,
                                               ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      StatusChip(
-                                        label: cycle.statusLabel,
-                                        tone: cycle.status == 'finalized' ||
-                                                cycle.status == 'paid'
-                                            ? StatusChipTone.success
-                                            : cycle.status == 'processing'
-                                                ? StatusChipTone.warning
-                                                : StatusChipTone.neutral,
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _AmountPill(
-                                          label: 'Gross',
-                                          value: cycle.totalGross,
-                                          color: tokens.primary,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: _AmountPill(
-                                          label: 'Net Pay',
-                                          value: cycle.totalNetPay,
-                                          color: tokens.success,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  if (entries != null) ...[
-                                    const SizedBox(height: 12),
-                                    const Divider(height: 1),
-                                    const SizedBox(height: 8),
-                                    ...entries.take(5).map(
-                                      (entry) => Padding(
-                                        padding: const EdgeInsets.only(
-                                          top: 4,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                entry.employeeName,
-                                                maxLines: 1,
-                                                overflow:
-                                                    TextOverflow.ellipsis,
-                                                style: TextStyle(
-                                                  fontSize: 13,
-                                                  color: tokens.ink,
+                                            ],
+                                          ),
+                                          const SizedBox(height: 10),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: _AmountPill(
+                                                  label: 'Gross',
+                                                  value: cycle.totalGross,
+                                                  color: tokens.primary,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: _AmountPill(
+                                                  label: 'Net Pay',
+                                                  value: cycle.totalNetPay,
+                                                  color: tokens.success,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          if (entries != null) ...[
+                                            const SizedBox(height: 12),
+                                            const Divider(height: 1),
+                                            const SizedBox(height: 8),
+                                            ...entries.take(5).map(
+                                              (entry) => Padding(
+                                                padding: const EdgeInsets.only(top: 4),
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        entry.employeeName,
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                        style: TextStyle(fontSize: 13, color: tokens.ink),
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      '\u20B9${entry.netPay.toStringAsFixed(0)}',
+                                                      style: TextStyle(
+                                                        fontSize: 13,
+                                                        fontWeight: FontWeight.w600,
+                                                        color: tokens.success,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
                                             ),
-                                            Text(
-                                              '\u20B9${entry.netPay.toStringAsFixed(0)}',
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w600,
-                                                color: tokens.success,
+                                            if (entries.length > 5)
+                                              Padding(
+                                                padding: const EdgeInsets.only(top: 4),
+                                                child: Text(
+                                                  '+${entries.length - 5} more',
+                                                  style: TextStyle(fontSize: 12, color: tokens.inkMuted),
+                                                ),
+                                              ),
+                                          ] else ...[
+                                            const SizedBox(height: 8),
+                                            SizedBox(
+                                              height: 32,
+                                              child: TextButton.icon(
+                                                onPressed: () => _fetchCycleDetail(cycle.id),
+                                                icon: const Icon(Icons.expand_more, size: 18),
+                                                label: const Text('View entries'),
                                               ),
                                             ),
                                           ],
-                                        ),
+                                        ],
                                       ),
                                     ),
-                                    if (entries.length > 5)
-                                      Padding(
-                                        padding: const EdgeInsets.only(top: 4),
-                                        child: Text(
-                                          '+${entries.length - 5} more',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: tokens.inkMuted,
-                                          ),
-                                        ),
-                                      ),
-                                  ] else ...[
-                                    const SizedBox(height: 8),
-                                    SizedBox(
-                                      height: 32,
-                                      child: TextButton.icon(
-                                        onPressed: () =>
-                                            _fetchCycleDetail(cycle.id),
-                                        icon: const Icon(Icons.expand_more,
-                                            size: 18),
-                                        label: const Text('View entries'),
-                                      ),
-                                    ),
-                                  ],
-                                ],
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        // FAB for Run Payroll
+                        Positioned(
+                          right: 16,
+                          bottom: 16,
+                          child: FloatingActionButton.extended(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AdminPayrollRunScreen(),
                               ),
                             ),
-                          );
-                        },
-                      ),
+                            icon: const Icon(Icons.play_arrow_rounded, size: 18),
+                            label: const Text('Run'),
+                          ),
+                        ),
+                      ],
                     ),
     );
   }

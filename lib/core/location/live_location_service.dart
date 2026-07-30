@@ -83,9 +83,7 @@ class GuardLocationData {
     return _buildFromData(doc.id, d);
   }
 
-  static GuardLocationData _buildFromData(
-    String id, Map<String, dynamic> d,
-  ) {
+  static GuardLocationData _buildFromData(String id, Map<String, dynamic> d) {
     return GuardLocationData(
       employeeDocId: id,
       employeeId: (d['employeeId'] as String?) ?? '',
@@ -106,69 +104,20 @@ class GuardLocationData {
       geofenceRadius: (d['geofenceRadius'] as num?)?.toDouble(),
     );
   }
-
-  Map<String, dynamic> toFirestore() => {
-    'employeeDocId': employeeDocId,
-    'employeeId': employeeId,
-    'guardName': guardName,
-    'siteId': siteId,
-    'siteName': siteName,
-    'clientName': clientName,
-    'district': district,
-    'lat': lat,
-    'lng': lng,
-    'accuracy': accuracy,
-    'isOutOfZone': isOutOfZone,
-    'status': status,
-    'updatedAt': FieldValue.serverTimestamp(),
-    if (attendanceId != null) 'attendanceId': attendanceId,
-    if (siteLat != null) 'siteLat': siteLat,
-    if (siteLng != null) 'siteLng': siteLng,
-    if (geofenceRadius != null) 'geofenceRadius': geofenceRadius,
-  };
 }
 
 class LiveLocationService {
   LiveLocationService([FirebaseFirestore? firestore])
-      : _firestore = firestore ?? RegionService.instance.activeFirestore;
+    : _firestore = firestore ?? RegionService.instance.activeFirestore;
 
   final FirebaseFirestore _firestore;
 
   static const String collection = 'guardLocations';
 
-  // ── Write ──────────────────────────────────────────────────────────────────
-
-  /// Called when a guard marks IN or during heartbeat updates.
-  Future<void> setLocation(GuardLocationData data) async {
-    await _firestore
-        .collection(collection)
-        .doc(data.employeeDocId)
-        .set(data.toFirestore(), SetOptions(merge: true));
-  }
-
-  /// Called when a guard marks OUT — clears location but keeps the doc for
-  /// the shared status flag.
-  Future<void> markOut(String employeeDocId) async {
-    await _firestore.collection(collection).doc(employeeDocId).update({
-      'status': 'Out',
-      'lat': 0,
-      'lng': 0,
-      'isOutOfZone': false,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-  }
-
-  /// Remove the document entirely (e.g. guard logs out or data stale).
-  Future<void> remove(String employeeDocId) async {
-    await _firestore.collection(collection).doc(employeeDocId).delete();
-  }
-
   // ── Read ───────────────────────────────────────────────────────────────────
 
   /// Stream all guards currently clocked IN. Used by FO attendance tab.
-  Stream<List<GuardLocationData>> streamActiveLocations({
-    String? district,
-  }) {
+  Stream<List<GuardLocationData>> streamActiveLocations({String? district}) {
     Query<Map<String, dynamic>> query = _firestore
         .collection(collection)
         .where('status', isEqualTo: 'In');
@@ -177,11 +126,13 @@ class LiveLocationService {
       query = query.where('district', isEqualTo: district.trim());
     }
 
-    return query.snapshots().map((snap) =>
-        snap.docs
-            .map((d) => GuardLocationData.tryFromFirestore(d))
-            .whereType<GuardLocationData>()
-            .toList());
+    return query.snapshots().map(
+      (snap) =>
+          snap.docs
+              .map((d) => GuardLocationData.tryFromFirestore(d))
+              .whereType<GuardLocationData>()
+              .toList(),
+    );
   }
 
   /// Stream a single guard's location. Used by the guard detail screen.
@@ -211,9 +162,7 @@ class LiveLocationService {
     }
 
     final snap = await query.get();
-    return snap.docs
-        .map((d) => GuardLocationData.fromFirestore(d))
-        .toList();
+    return snap.docs.map((d) => GuardLocationData.fromFirestore(d)).toList();
   }
 }
 

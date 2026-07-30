@@ -47,51 +47,51 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
 
   factory CissThemeTokens.light() {
     return const CissThemeTokens(
-      canvas: Color(0xFFF5F7F9),
+      canvas: Color(0xFFF0F4F8),
       surface: Color(0xFFFFFFFF),
-      surfaceMuted: Color(0xFFF8FAFB),
-      surfaceStrong: Color(0xFFEAF0F4),
+      surfaceMuted: Color(0xFFF5F8FA),
+      surfaceStrong: Color(0xFFE1E8ED),
       surfaceGlass: Color(0xB2FFFFFF),
-      surfaceAlt: Color(0xFFF8FAFB),
-      border: Color(0xFFD8E0E7),
-      borderStrong: Color(0xFFAFC0CD),
-      ink: Color(0xFF132435),
-      inkMuted: Color(0xFF607080),
-      primary: Color(0xFF145C82),
-      primaryStrong: Color(0xFF0B3F5D),
-      primarySoft: Color(0xFFDDEEF6),
-      accent: Color(0xFFD99A2B),
-      success: Color(0xFF17805D),
-      successSoft: Color(0xFFDDF3EA),
-      warning: Color(0xFFB56D16),
-      warningSoft: Color(0xFFF7E7CA),
-      danger: Color(0xFFB23B52),
-      dangerSoft: Color(0xFFF6DCE2),
+      surfaceAlt: Color(0xFFF8FAFC),
+      border: Color(0xFFD3DFE9),
+      borderStrong: Color(0xFFA2B6C7),
+      ink: Color(0xFF0F1F31),
+      inkMuted: Color(0xFF536A80),
+      primary: Color(0xFF1B3D6D),
+      primaryStrong: Color(0xFF0E2342),
+      primarySoft: Color(0xFFE3EDF7),
+      accent: Color(0xFFE08D23),
+      success: Color(0xFF1B825E),
+      successSoft: Color(0xFFE3F5EE),
+      warning: Color(0xFFB86618),
+      warningSoft: Color(0xFFFAF0E3),
+      danger: Color(0xFFB52B44),
+      dangerSoft: Color(0xFFFCE8EB),
     );
   }
 
   factory CissThemeTokens.dark() {
     return const CissThemeTokens(
-      canvas: Color(0xFF0E151D),
-      surface: Color(0xFF141E28),
-      surfaceMuted: Color(0xFF192532),
-      surfaceStrong: Color(0xFF223142),
-      surfaceGlass: Color(0x99141E28),
-      surfaceAlt: Color(0xFF192532),
-      border: Color(0xFF2B3C4F),
-      borderStrong: Color(0xFF466079),
-      ink: Color(0xFFF3F6F8),
-      inkMuted: Color(0xFFB5C0CA),
-      primary: Color(0xFF88C4DF),
-      primaryStrong: Color(0xFFC0E5F4),
-      primarySoft: Color(0xFF173846),
-      accent: Color(0xFFE9B44C),
-      success: Color(0xFF65D29A),
-      successSoft: Color(0xFF153A2B),
-      warning: Color(0xFFE2A84B),
-      warningSoft: Color(0xFF3D2D16),
-      danger: Color(0xFFF17D92),
-      dangerSoft: Color(0xFF3C1D27),
+      canvas: Color(0xFF070B11),
+      surface: Color(0xFF0F1622),
+      surfaceMuted: Color(0xFF141D2D),
+      surfaceStrong: Color(0xFF1A263B),
+      surfaceGlass: Color(0x990F1622),
+      surfaceAlt: Color(0xFF141D2D),
+      border: Color(0xFF1E2E44),
+      borderStrong: Color(0xFF334B68),
+      ink: Color(0xFFEBF1F5),
+      inkMuted: Color(0xFF9CB1C9),
+      primary: Color(0xFF5C9DD6),
+      primaryStrong: Color(0xFF8AC1EB),
+      primarySoft: Color(0xFF14243A),
+      accent: Color(0xFFF5B041),
+      success: Color(0xFF46C289),
+      successSoft: Color(0xFF0E2E20),
+      warning: Color(0xFFE89A38),
+      warningSoft: Color(0xFF3D270F),
+      danger: Color(0xFFE8586E),
+      dangerSoft: Color(0xFF3E131A),
     );
   }
 
@@ -194,17 +194,17 @@ abstract final class AppRadius {
 
 abstract final class AppShadows {
   static const List<BoxShadow> card = <BoxShadow>[
-    BoxShadow(color: Color(0x140C2A43), blurRadius: 24, offset: Offset(0, 10)),
+    BoxShadow(color: Color(0x0A060E18), blurRadius: 20, offset: Offset(0, 8)),
   ];
 
   static const List<BoxShadow> subtle = <BoxShadow>[
-    BoxShadow(color: Color(0x0A0C2A43), blurRadius: 12, offset: Offset(0, 4)),
+    BoxShadow(color: Color(0x06060E18), blurRadius: 10, offset: Offset(0, 4)),
   ];
 
   static const List<BoxShadow> elevated = <BoxShadow>[
     BoxShadow(
-      color: Color(0x1A0C2A43),
-      blurRadius: 32,
+      color: Color(0x0F060E18),
+      blurRadius: 28,
       offset: Offset(0, 12),
       spreadRadius: -4,
     ),

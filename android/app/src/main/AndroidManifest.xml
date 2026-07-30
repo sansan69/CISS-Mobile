@@ -7,10 +7,6 @@
     <!-- Location: fine + coarse for indoor/outdoor hybrid positioning -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-
-    <!-- WiFi state for indoor network-based positioning in warehouses/factories -->
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <!-- Camera for attendance photo proof and incident reporting -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -24,14 +20,8 @@
     <!-- Keep device awake during active duty tracking -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Restart tracking service after device reboot -->
-    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-
     <!-- Notifications for duty alerts and geofence breaches -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-
-    <!-- Ignore battery optimizations so background tracking isn't killed -->
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- Vibration for duty alerts -->
     <uses-permission android:name="android.permission.VIBRATE" />
@@ -54,7 +44,7 @@
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:foregroundServiceType="location"
-            android:exported="true"
+            android:exported="false"
             tools:replace="android:exported" />
 
         <!-- FileProvider for in-app APK installation -->

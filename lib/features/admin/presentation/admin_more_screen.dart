@@ -21,7 +21,14 @@ import 'admin_qr_management_screen.dart';
 import 'admin_data_export_screen.dart';
 import 'admin_wage_config_screen.dart';
 import 'admin_enrollment_config_screen.dart';
-
+import 'admin_leaderboard_screen.dart';
+import 'admin_visit_reports_screen.dart';
+import 'admin_training_reports_screen.dart';
+import 'admin_patrol_activity_screen.dart';
+import 'admin_site_management_screen.dart';
+import 'admin_state_management_screen.dart';
+import 'admin_tools_screen.dart';
+import 'admin_reports_settings_screen.dart';
 class AdminMoreScreen extends ConsumerWidget {
   const AdminMoreScreen({super.key});
 
@@ -86,6 +93,62 @@ class AdminMoreScreen extends ConsumerWidget {
                       Navigator.push(
                         context,
                         _adminRoute(const AdminPayrollScreen()),
+                      );
+                    },
+                  ),
+                  _divider(tokens),
+                  _MoreTile(
+                    icon: Icons.leaderboard_rounded,
+                    title: 'Leaderboard',
+                    subtitle: 'Guard scores, rankings & awards',
+                    color: const Color(0xFFFFD700),
+                    onTap: () {
+                      Haptics.light();
+                      Navigator.push(
+                        context,
+                        _adminRoute(const AdminLeaderboardScreen()),
+                      );
+                    },
+                  ),
+                  _divider(tokens),
+                  _MoreTile(
+                    icon: Icons.fact_check_rounded,
+                    title: 'Visit Reports',
+                    subtitle: 'Field officer site visit reports',
+                    color: tokens.primary,
+                    onTap: () {
+                      Haptics.light();
+                      Navigator.push(
+                        context,
+                        _adminRoute(const AdminVisitReportsScreen()),
+                      );
+                    },
+                  ),
+                  _divider(tokens),
+                  _MoreTile(
+                    icon: Icons.school_rounded,
+                    title: 'Training Reports',
+                    subtitle: 'Delivered training sessions',
+                    color: tokens.success,
+                    onTap: () {
+                      Haptics.light();
+                      Navigator.push(
+                        context,
+                        _adminRoute(const AdminTrainingReportsScreen()),
+                      );
+                    },
+                  ),
+                  _divider(tokens),
+                  _MoreTile(
+                    icon: Icons.route_rounded,
+                    title: 'Patrol Activity',
+                    subtitle: 'Night checks & guard patrols',
+                    color: Colors.deepPurple,
+                    onTap: () {
+                      Haptics.light();
+                      Navigator.push(
+                        context,
+                        _adminRoute(const AdminPatrolActivityScreen()),
                       );
                     },
                   ),
@@ -242,6 +305,62 @@ class AdminMoreScreen extends ConsumerWidget {
                       Navigator.push(
                         context,
                         _adminRoute(const AdminEnrollmentConfigScreen()),
+                      );
+                    },
+                  ),
+                  _divider(tokens),
+                  _MoreTile(
+                    icon: Icons.place_outlined,
+                    title: 'Site Management',
+                    subtitle: 'Add, edit & delete sites',
+                    color: Colors.teal,
+                    onTap: () {
+                      Haptics.light();
+                      Navigator.push(
+                        context,
+                        _adminRoute(const AdminSiteManagementScreen()),
+                      );
+                    },
+                  ),
+                  _divider(tokens),
+                  _MoreTile(
+                    icon: Icons.map_rounded,
+                    title: 'State Management',
+                    subtitle: 'Region name, code & timezone',
+                    color: Colors.purple,
+                    onTap: () {
+                      Haptics.light();
+                      Navigator.push(
+                        context,
+                        _adminRoute(const AdminStateManagementScreen()),
+                      );
+                    },
+                  ),
+                  _divider(tokens),
+                  _MoreTile(
+                    icon: Icons.build_rounded,
+                    title: 'Admin Tools',
+                    subtitle: 'Imports, QR, exports & alerts',
+                    color: Colors.deepOrange,
+                    onTap: () {
+                      Haptics.light();
+                      Navigator.push(
+                        context,
+                        _adminRoute(const AdminToolsScreen()),
+                      );
+                    },
+                  ),
+                  _divider(tokens),
+                  _MoreTile(
+                    icon: Icons.bar_chart_rounded,
+                    title: 'Reports Settings',
+                    subtitle: 'Attendance reports & data',
+                    color: Colors.cyan,
+                    onTap: () {
+                      Haptics.light();
+                      Navigator.push(
+                        context,
+                        _adminRoute(const AdminReportsSettingsScreen()),
                       );
                     },
                   ),

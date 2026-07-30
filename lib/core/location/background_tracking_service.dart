@@ -10,10 +10,11 @@ import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../network/mobile_repository.dart';
 import '../region/region_service.dart';
+import 'tracking_session_store.dart';
 
 /// Background location tracking service optimized for CISS guard duty.
 ///
@@ -22,6 +23,7 @@ import '../region/region_service.dart';
 /// positioning with network fallback for poor-GPS environments.
 class BackgroundTrackingService {
   static bool _configured = false;
+  static const TrackingSessionStore _sessionStore = TrackingSessionStore();
 
   static Future<void> initialize() async {
     if (_configured) return;
@@ -63,24 +65,15 @@ class BackgroundTrackingService {
     final locStatus = await Permission.location.status;
     if (locStatus != PermissionStatus.granted &&
         locStatus != PermissionStatus.limited) {
-      debugPrint('BackgroundTracking: location permission not granted ($locStatus)');
+      debugPrint(
+        'BackgroundTracking: location permission not granted ($locStatus)',
+      );
       return;
-    }
-
-    // Request battery optimization exemption (best-effort, Android only)
-    try {
-      final batteryStatus = await Permission.ignoreBatteryOptimizations.status;
-      if (batteryStatus != PermissionStatus.granted) {
-        await Permission.ignoreBatteryOptimizations.request();
-      }
-    } catch (_) {
-      debugPrint('BackgroundTracking: battery optimization request not supported on this platform');
     }
 
     final service = FlutterBackgroundService();
     final activeRegion = RegionService.instance.activeRegion;
-    service.startService();
-    service.invoke('set_site_context', {
+    final context = <String, dynamic>{
       'siteId': siteId,
       'siteName': siteName,
       'lat': lat,
@@ -94,11 +87,60 @@ class BackgroundTrackingService {
       'regionCode': activeRegion?.code ?? 'KL',
       'apiUrl': activeRegion?.apiUrl ?? 'https://cisskerala.site',
       if (activeRegion != null) 'regionConfig': activeRegion.toJson(),
-    });
+    };
+    await _sessionStore.save(context);
+    await service.startService();
+    service.invoke('set_site_context', context);
   }
 
-  static void stop() {
+  static Future<void> stop() async {
+    await _sessionStore.clear();
     FlutterBackgroundService().invoke('stopService');
+  }
+
+  static Future<void> reconcileWithServer(MobileRepository repository) async {
+    final status = await repository.fetchGuardTrackingStatus();
+    if (status['isClockedIn'] != true) {
+      await stop();
+      return;
+    }
+
+    final siteId = status['siteId'] as String?;
+    if (siteId == null || siteId.isEmpty) return;
+
+    final saved = await _sessionStore.load();
+    if (saved != null && saved['siteId'] == siteId) {
+      await _restartFromSavedContext(saved);
+      return;
+    }
+
+    final profile = await repository.fetchGuardProfile();
+    final sites = await repository.fetchAttendanceSites();
+    final matches = sites.where((site) => site.id == siteId);
+    if (matches.isEmpty) return;
+    final site = matches.first;
+    if (site.lat == null || site.lng == null) return;
+
+    await start(
+      siteId: site.id,
+      siteName: site.siteName,
+      lat: site.lat!,
+      lng: site.lng!,
+      radiusMeters: site.geofenceRadiusMeters.toDouble(),
+      employeeId: profile.employeeId,
+      employeeDocId: profile.id,
+      guardName: profile.fullName,
+      clientName: profile.clientName,
+      district: profile.district,
+    );
+  }
+
+  static Future<void> _restartFromSavedContext(
+    Map<String, dynamic> saved,
+  ) async {
+    final service = FlutterBackgroundService();
+    await service.startService();
+    service.invoke('set_site_context', saved);
   }
 }
 
@@ -127,13 +169,15 @@ void onStart(ServiceInstance service) async {
     debugPrint('Background Firebase init error: $e');
   }
 
-  Map<String, dynamic>? siteContext;
+  Map<String, dynamic>? siteContext = await const TrackingSessionStore().load();
   FirebaseAuth activeAuth = FirebaseAuth.instance;
-  FirebaseFirestore activeFirestore = FirebaseFirestore.instance;
   bool isInside = true; // Assume inside until first check proves otherwise
   bool firstReading = true;
   DateTime? lastOutsideAt;
-  int heartbeatCount = 0;
+
+  if (siteContext != null) {
+    activeAuth = await _configureBackgroundRegion(siteContext);
+  }
 
   if (service is AndroidServiceInstance) {
     service.on('set_site_context').listen((event) {
@@ -141,10 +185,8 @@ void onStart(ServiceInstance service) async {
       isInside = true;
       firstReading = true;
       lastOutsideAt = null;
-      heartbeatCount = 0;
-      _configureBackgroundRegion(event).then((instances) {
-        activeAuth = instances.$1;
-        activeFirestore = instances.$2;
+      _configureBackgroundRegion(event).then((auth) {
+        activeAuth = auth;
       });
     });
 
@@ -153,15 +195,12 @@ void onStart(ServiceInstance service) async {
     });
   }
 
-  // Primary heartbeat: every 3 minutes (more responsive than 5 min)
-  Timer.periodic(const Duration(minutes: 3), (timer) async {
+  Future<void> sendHeartbeat() async {
     if (siteContext == null) return;
 
     if (service is AndroidServiceInstance) {
       if (!(await service.isForegroundService())) return;
     }
-
-    heartbeatCount++;
 
     try {
       final siteLat = (siteContext!['lat'] as num?)?.toDouble();
@@ -226,8 +265,12 @@ void onStart(ServiceInstance service) async {
 
       if (position == null) {
         debugPrint('BackgroundTracking: no position available');
-        _updateNotification(service, siteContext, isInside,
-            'Location unavailable — checking again shortly');
+        _updateNotification(
+          service,
+          siteContext,
+          isInside,
+          'Location unavailable — checking again shortly',
+        );
         return;
       }
 
@@ -243,9 +286,8 @@ void onStart(ServiceInstance service) async {
       // add a buffer: if accuracy is >30m, don't flag as out until
       // distance exceeds radius + accuracy/2. This prevents false alarms
       // when GPS is bouncing inside a large warehouse.
-      final accuracyBuffer = (accuracy != null && accuracy > 30.0)
-          ? accuracy / 2
-          : 0.0;
+      final accuracyBuffer =
+          (accuracy != null && accuracy > 30.0) ? accuracy / 2 : 0.0;
       final effectiveRadius = radius + accuracyBuffer;
       final isOut = distance > effectiveRadius;
 
@@ -260,28 +302,12 @@ void onStart(ServiceInstance service) async {
         // Guard re-entered site — reset exit counter
         isInside = true;
         lastOutsideAt = null;
-        _sendGeofenceEvent(
-          siteContext: siteContext!,
-          eventType: 'enter',
-          position: position,
-          distance: distance,
-          accuracy: accuracy,
-          locationSource: locationSource,
-        );
       } else if (isOut && isInside) {
         // Guard may have left — require 2 consecutive outs to avoid GPS glitches
         if (lastOutsideAt != null &&
             DateTime.now().difference(lastOutsideAt!).inMinutes < 6) {
           isInside = false;
           lastOutsideAt = null;
-          _sendGeofenceEvent(
-            siteContext: siteContext!,
-            eventType: 'exit',
-            position: position,
-            distance: distance,
-            accuracy: accuracy,
-            locationSource: locationSource,
-          );
         } else {
           // First consecutive out — start the 6-minute window
           lastOutsideAt = DateTime.now();
@@ -289,7 +315,8 @@ void onStart(ServiceInstance service) async {
       }
 
       // ── Heartbeat upload ──────────────────────────────────────────────────
-      final baseUrl = (siteContext?['apiUrl'] as String?) ??
+      final baseUrl =
+          (siteContext?['apiUrl'] as String?) ??
           const String.fromEnvironment(
             'CISS_API_BASE_URL',
             defaultValue: 'https://cisskerala.site',
@@ -297,97 +324,96 @@ void onStart(ServiceInstance service) async {
 
       final user = activeAuth.currentUser;
       String? token = await user?.getIdToken(false);
+      var heartbeatSucceeded = false;
 
       try {
-        final response = await http.post(
-          Uri.parse('$baseUrl/api/guard/tracking/heartbeat'),
-          headers: {
-            'Content-Type': 'application/json',
-            if (token != null) 'Authorization': 'Bearer $token',
-          },
-          body: jsonEncode({
-            'employeeId': siteContext!['employeeId'],
-            'siteId': siteContext!['siteId'],
-            'lat': position.latitude,
-            'lng': position.longitude,
-            'accuracy': accuracy,
-            'distanceFromSite': distance,
-            'isOutOfZone': isOut,
-            'batteryLevel': null,
-            'heartbeatCount': heartbeatCount,
-            'timestamp': DateTime.now().toIso8601String(),
-          }),
-        ).timeout(const Duration(seconds: 15));
+        http.Response response = await http
+            .post(
+              Uri.parse('$baseUrl/api/guard/tracking/heartbeat'),
+              headers: {
+                'Content-Type': 'application/json',
+                if (token != null) 'Authorization': 'Bearer $token',
+              },
+              body: jsonEncode({
+                'siteId': siteContext!['siteId'],
+                'lat': position.latitude,
+                'lng': position.longitude,
+                'accuracy': accuracy,
+                'batteryLevel': null,
+                'speed': position.speed >= 0 ? position.speed : null,
+                'capturedAt': DateTime.now().toUtc().toIso8601String(),
+              }),
+            )
+            .timeout(const Duration(seconds: 15));
 
         // Retry with fresh token on 401
         if (response.statusCode == 401) {
           token = await user?.getIdToken(true);
           if (token != null) {
-            await http.post(
-              Uri.parse('$baseUrl/api/guard/tracking/heartbeat'),
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer $token',
-              },
-              body: jsonEncode({
-                'employeeId': siteContext!['employeeId'],
-                'siteId': siteContext!['siteId'],
-                'lat': position.latitude,
-                'lng': position.longitude,
-                'accuracy': accuracy,
-                'distanceFromSite': distance,
-                'isOutOfZone': isOut,
-                'locationSource': locationSource,
-                'heartbeatCount': heartbeatCount,
-                'timestamp': DateTime.now().toIso8601String(),
-              }),
-            ).timeout(const Duration(seconds: 15));
+            response = await http
+                .post(
+                  Uri.parse('$baseUrl/api/guard/tracking/heartbeat'),
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer $token',
+                  },
+                  body: jsonEncode({
+                    'siteId': siteContext!['siteId'],
+                    'lat': position.latitude,
+                    'lng': position.longitude,
+                    'accuracy': accuracy,
+                    'batteryLevel': null,
+                    'speed': position.speed >= 0 ? position.speed : null,
+                    'capturedAt': DateTime.now().toUtc().toIso8601String(),
+                  }),
+                )
+                .timeout(const Duration(seconds: 15));
           }
+        }
+
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          heartbeatSucceeded = true;
+          final responseData =
+              jsonDecode(response.body) as Map<String, dynamic>;
+          final zoneStatus = responseData['zoneStatus'] as String?;
+          if (zoneStatus == 'in_zone') {
+            isInside = true;
+          } else if (zoneStatus == 'out_of_zone') {
+            isInside = false;
+          }
+        } else if (response.statusCode == 403 || response.statusCode == 409) {
+          _updateNotification(
+            service,
+            siteContext,
+            isInside,
+            'Duty session closed — tracking stopped',
+          );
+          if (service is AndroidServiceInstance) {
+            await const TrackingSessionStore().clear();
+            await service.stopSelf();
+          }
+          return;
+        } else {
+          _updateNotification(
+            service,
+            siteContext,
+            isInside,
+            'Location update delayed — retrying',
+          );
         }
       } catch (httpErr) {
         debugPrint('Heartbeat upload error (will retry next cycle): $httpErr');
+        _updateNotification(
+          service,
+          siteContext,
+          isInside,
+          'Location update delayed — retrying',
+        );
       }
 
-      // ── Firestore live location update (with retry) ──────────────────────
-      for (int attempt = 0; attempt < 3; attempt++) {
-        try {
-          final employeeDocId = siteContext!['employeeDocId'] as String? ?? siteContext!['employeeId'] as String;
-          final employeeId = siteContext!['employeeId'] as String? ?? '';
-          await activeFirestore
-              .collection('guardLocations')
-              .doc(employeeDocId)
-              .set({
-            'employeeDocId': employeeDocId,
-            'employeeId': employeeId,
-            'guardName': siteContext!['guardName'] ?? employeeId,
-            'siteId': siteContext!['siteId'],
-            'siteName': siteContext!['siteName'],
-            'clientName': siteContext!['clientName'] ?? '',
-            'district': siteContext!['district'] ?? '',
-            'lat': position.latitude,
-            'lng': position.longitude,
-            'accuracy': accuracy,
-            'isOutOfZone': isOut,
-            'locationSource': locationSource,
-            'distanceFromSite': distance,
-            'status': isInside ? 'In' : 'Out',
-            'updatedAt': FieldValue.serverTimestamp(),
-            'siteLat': siteLat,
-            'siteLng': siteLng,
-            'geofenceRadius': radius,
-          }, SetOptions(merge: true));
-          break; // Success — exit retry loop
-        } catch (fsErr) {
-          if (attempt < 2) {
-            await Future<void>.delayed(const Duration(seconds: 1));
-          } else {
-            debugPrint('Firestore location update failed after retries: $fsErr');
-          }
-        }
+      if (heartbeatSucceeded) {
+        _updateNotification(service, siteContext, isInside, null);
       }
-
-      // ── Notification update ────────────────────────────────────────────────
-      _updateNotification(service, siteContext, isInside, null);
 
       debugPrint(
         'Tracking [$locationSource]: ${position.latitude.toStringAsFixed(5)}, '
@@ -404,75 +430,23 @@ void onStart(ServiceInstance service) async {
         'Tracking error — will retry',
       );
     }
-  });
+  }
 
-  // Secondary: fast location check every 30s while inside, used for
-  // patrol route detection and movement validation.
-  Timer.periodic(const Duration(seconds: 30), (timer) async {
-    if (siteContext == null || !isInside) return;
-    if (service is AndroidServiceInstance &&
-        !(await service.isForegroundService())) {
-      return;
-    }
-
-    try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.medium,
-          timeLimit: Duration(seconds: 5),
-        ),
-      );
-
-      final siteLat = (siteContext!['lat'] as num?)?.toDouble();
-      final siteLng = (siteContext!['lng'] as num?)?.toDouble();
-      if (siteLat == null || siteLng == null) return;
-
-      final distance = Geolocator.distanceBetween(
-        siteLat,
-        siteLng,
-        position.latitude,
-        position.longitude,
-      );
-
-      // Store movement trace in Firestore subcollection (with retry)
-      for (int attempt = 0; attempt < 3; attempt++) {
-        try {
-          final traceRef = activeFirestore
-              .collection('guardLocations')
-              .doc(siteContext!['employeeDocId'] as String? ?? siteContext!['employeeId'] as String)
-              .collection('locationHistory')
-              .doc();
-          await traceRef.set({
-            'lat': position.latitude,
-            'lng': position.longitude,
-            'accuracy': position.accuracy,
-            'distanceFromSite': distance,
-            'timestamp': FieldValue.serverTimestamp(),
-          });
-          break;
-        } catch (e) {
-          if (attempt < 2) {
-            await Future<void>.delayed(const Duration(seconds: 1));
-          } else {
-            debugPrint('Movement trace write error after retries: $e');
-          }
-        }
-      }
-    } catch (e) {
-      // Silent fail for fast check — primary heartbeat handles errors
-    }
-  });
+  // Send a reading as soon as a shift starts or is recovered, then maintain
+  // the three-minute heartbeat expected by the live operations dashboard.
+  unawaited(sendHeartbeat());
+  Timer.periodic(const Duration(minutes: 3), (_) => unawaited(sendHeartbeat()));
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-Future<(FirebaseAuth, FirebaseFirestore)> _configureBackgroundRegion(
+Future<FirebaseAuth> _configureBackgroundRegion(
   Map<String, dynamic>? context,
 ) async {
   final code = context?['regionCode'] as String?;
   final rawConfig = context?['regionConfig'];
   if (code == null || code == 'KL' || rawConfig is! Map) {
-    return (FirebaseAuth.instance, FirebaseFirestore.instance);
+    return FirebaseAuth.instance;
   }
 
   try {
@@ -482,26 +456,19 @@ Future<(FirebaseAuth, FirebaseFirestore)> _configureBackgroundRegion(
     try {
       app = Firebase.app(appName);
     } catch (_) {
-      final options = region.androidConfig?.toFirebaseOptions() ??
+      final options =
+          region.androidConfig?.toFirebaseOptions() ??
           region.webConfig?.toFirebaseOptions();
       if (options == null) {
-        return (FirebaseAuth.instance, FirebaseFirestore.instance);
+        return FirebaseAuth.instance;
       }
       app = await Firebase.initializeApp(name: appName, options: options);
     }
-    return (
-      FirebaseAuth.instanceFor(app: app),
-      FirebaseFirestore.instanceFor(app: app),
-    );
+    return FirebaseAuth.instanceFor(app: app);
   } catch (error) {
     debugPrint('Background region init failed: $error');
-    return (FirebaseAuth.instance, FirebaseFirestore.instance);
+    return FirebaseAuth.instance;
   }
-}
-
-Future<FirebaseAuth> _authForSiteContext(Map<String, dynamic> siteContext) async {
-  final instances = await _configureBackgroundRegion(siteContext);
-  return instances.$1;
 }
 
 void _updateNotification(
@@ -514,80 +481,13 @@ void _updateNotification(
 
   final siteName = siteContext['siteName'] as String? ?? 'Site';
   final title = 'CISS Active Duty: $siteName';
-  final content = overrideContent ??
+  final content =
+      overrideContent ??
       (isInside
           ? 'On-site monitoring active'
           : 'WARNING: Outside site boundary!');
 
-  service.setForegroundNotificationInfo(
-    title: title,
-    content: content,
-  );
-}
-
-Future<void> _sendGeofenceEvent({
-  required Map<String, dynamic> siteContext,
-  required String eventType,
-  required Position position,
-  required double distance,
-  required double? accuracy,
-  required String locationSource,
-}) async {
-  final baseUrl = (siteContext['apiUrl'] as String?) ??
-      const String.fromEnvironment(
-        'CISS_API_BASE_URL',
-        defaultValue: 'https://cisskerala.site',
-      );
-
-  final user = (await _authForSiteContext(siteContext)).currentUser;
-  String? token = await user?.getIdToken(false);
-
-  try {
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/guard/tracking/geofence-event'),
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null) 'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        'employeeId': siteContext['employeeId'],
-        'siteId': siteContext['siteId'],
-        'eventType': eventType, // 'enter' | 'exit'
-        'lat': position.latitude,
-        'lng': position.longitude,
-        'accuracy': accuracy,
-        'distanceFromSite': distance,
-        'locationSource': locationSource,
-        'timestamp': DateTime.now().toIso8601String(),
-      }),
-    ).timeout(const Duration(seconds: 15));
-
-    if (response.statusCode == 401) {
-      token = await user?.getIdToken(true);
-      if (token != null) {
-        await http.post(
-          Uri.parse('$baseUrl/api/guard/tracking/geofence-event'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token',
-          },
-          body: jsonEncode({
-            'employeeId': siteContext['employeeId'],
-            'siteId': siteContext['siteId'],
-            'eventType': eventType,
-            'lat': position.latitude,
-            'lng': position.longitude,
-            'accuracy': accuracy,
-            'distanceFromSite': distance,
-            'locationSource': locationSource,
-            'timestamp': DateTime.now().toIso8601String(),
-          }),
-        ).timeout(const Duration(seconds: 15));
-      }
-    }
-  } catch (httpErr) {
-    debugPrint('Geofence event HTTP error: $httpErr');
-  }
+  service.setForegroundNotificationInfo(title: title, content: content);
 }
 
 @pragma('vm:entry-point')

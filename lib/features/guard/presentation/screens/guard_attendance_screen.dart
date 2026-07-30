@@ -15,7 +15,6 @@ import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/location/background_tracking_service.dart';
-import '../../../../../core/location/live_location_service.dart';
 import '../../../../../core/fcm/providers.dart';
 import '../../../../../shared/widgets/camera_capture_screen.dart';
 import '../../../../../shared/widgets/modern_card.dart';
@@ -435,7 +434,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
 
         if (_status == 'In') {
           if (_site!.lat != null && _site!.lng != null) {
-            BackgroundTrackingService.start(
+            await BackgroundTrackingService.start(
               siteId: _site!.id,
               siteName: _site!.siteName,
               lat: _site!.lat!,
@@ -450,8 +449,6 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           } else {
             debugPrint('Tracking skipped: site coordinates missing.');
           }
-          // Write initial location to Firestore for live tracking
-          _writeLiveLocation(profile, _status);
           // Notify field officers
           await ref
               .read(notificationServiceProvider)
@@ -466,11 +463,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                 data: {'employeeId': profile.employeeId, 'siteId': _site!.id},
               );
         } else {
-          BackgroundTrackingService.stop();
-          // Mark OUT in Firestore
-          await LiveLocationService().markOut(
-            profile.id.isNotEmpty ? profile.id : profile.employeeId,
-          );
+          await BackgroundTrackingService.stop();
         }
 
         if (mounted) {
@@ -497,10 +490,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                 method: 'POST',
                 body: {...payload, 'photoDataUrl': dataUrl},
               );
+          if (_status == 'Out') {
+            await BackgroundTrackingService.stop();
+          }
           if (mounted) {
             Haptics.medium();
-            // Still write to Firestore so FO can see live location
-            _writeLiveLocation(profile, _status);
             if (mounted) {
               setState(() {
                 _photoPath = null;
@@ -525,38 +519,6 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           _busy = false;
         });
       }
-    }
-  }
-
-  Future<void> _writeLiveLocation(
-    GuardProfileModel profile,
-    String status,
-  ) async {
-    final site = _site;
-    if (site == null || _position == null) return;
-    try {
-      await LiveLocationService().setLocation(
-        GuardLocationData(
-          employeeDocId: profile.id,
-          employeeId: profile.employeeId,
-          guardName: profile.fullName,
-          siteId: site.id,
-          siteName: site.siteName,
-          clientName: profile.clientName,
-          district: profile.district,
-          lat: _position!.latitude,
-          lng: _position!.longitude,
-          accuracy: _position!.accuracy,
-          isOutOfZone: false,
-          status: status,
-          updatedAt: DateTime.now(),
-          siteLat: site.lat,
-          siteLng: site.lng,
-          geofenceRadius: site.geofenceRadiusMeters.toDouble(),
-        ),
-      );
-    } catch (e) {
-      debugPrint('LiveLocation write error: $e');
     }
   }
 
@@ -590,14 +552,26 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
               (Object error, StackTrace stackTrace) => ModernCard(
                 child: Row(
                   children: <Widget>[
-                    Icon(Icons.error_outline_rounded, color: tokens.danger, size: 24),
+                    Icon(
+                      Icons.error_outline_rounded,
+                      color: tokens.danger,
+                      size: 24,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                          Text('Profile error', style: AppTypography.bodyStrong(context)),
-                          Text(guardErrorMessage(error), style: AppTypography.micro(context).copyWith(color: tokens.inkMuted)),
+                          Text(
+                            'Profile error',
+                            style: AppTypography.bodyStrong(context),
+                          ),
+                          Text(
+                            guardErrorMessage(error),
+                            style: AppTypography.micro(
+                              context,
+                            ).copyWith(color: tokens.inkMuted),
+                          ),
                         ],
                       ),
                     ),
@@ -616,14 +590,26 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                   (Object error, StackTrace stackTrace) => ModernCard(
                     child: Row(
                       children: <Widget>[
-                        Icon(Icons.error_outline_rounded, color: tokens.danger, size: 24),
+                        Icon(
+                          Icons.error_outline_rounded,
+                          color: tokens.danger,
+                          size: 24,
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
-                              Text('Site error', style: AppTypography.bodyStrong(context)),
-                              Text(guardErrorMessage(error), style: AppTypography.micro(context).copyWith(color: tokens.inkMuted)),
+                              Text(
+                                'Site error',
+                                style: AppTypography.bodyStrong(context),
+                              ),
+                              Text(
+                                guardErrorMessage(error),
+                                style: AppTypography.micro(
+                                  context,
+                                ).copyWith(color: tokens.inkMuted),
+                              ),
                             ],
                           ),
                         ),
@@ -1034,16 +1020,27 @@ class _AttendanceHistorySection extends ConsumerWidget {
                   color: tokens.primarySoft,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(Icons.history_rounded, color: tokens.primaryStrong, size: 22),
+                child: Icon(
+                  Icons.history_rounded,
+                  color: tokens.primaryStrong,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text('Attendance Log', style: AppTypography.bodyStrong(context)),
-                    Text('Your check-in and check-out history',
-                        style: AppTypography.micro(context).copyWith(color: tokens.inkMuted)),
+                    Text(
+                      'Attendance Log',
+                      style: AppTypography.bodyStrong(context),
+                    ),
+                    Text(
+                      'Your check-in and check-out history',
+                      style: AppTypography.micro(
+                        context,
+                      ).copyWith(color: tokens.inkMuted),
+                    ),
                   ],
                 ),
               ),

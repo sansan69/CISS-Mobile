@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -29,20 +27,17 @@ class _PermissionResult {
     required this.permission,
     required this.label,
     required this.granted,
-    this.isOptional = false,
   });
 
   final Permission permission;
   final String label;
   final bool granted;
-  final bool isOptional;
 }
 
 class _PermissionOnboardingScreenState
     extends ConsumerState<PermissionOnboardingScreen> {
   bool _isProcessing = false;
   List<_PermissionResult> _results = <_PermissionResult>[];
-  bool _showBatteryOptimization = false;
 
   static const List<_PermissionItem> _permissionItems = <_PermissionItem>[
     _PermissionItem(
@@ -51,15 +46,6 @@ class _PermissionOnboardingScreenState
       description:
           'Required for site attendance and geofencing during duty hours.',
       permission: Permission.location,
-      critical: true,
-    ),
-    _PermissionItem(
-      icon: Icons.gps_fixed_rounded,
-      title: 'Background location',
-      description:
-          'Allows the system to verify you remain at the assigned site while on duty, even when the app is closed.',
-      permission: Permission.locationAlways,
-      critical: true,
     ),
     _PermissionItem(
       icon: Icons.camera_alt_rounded,
@@ -67,7 +53,6 @@ class _PermissionOnboardingScreenState
       description:
           'Used for photo proof during check-in and incident reporting.',
       permission: Permission.camera,
-      critical: true,
     ),
     _PermissionItem(
       icon: Icons.notifications_active_rounded,
@@ -75,24 +60,6 @@ class _PermissionOnboardingScreenState
       description:
           'Receive shift updates, site alerts, and emergency escalations.',
       permission: Permission.notification,
-      critical: true,
-    ),
-    _PermissionItem(
-      icon: Icons.directions_walk_rounded,
-      title: 'Activity recognition',
-      description:
-          'Detects movement patterns (walking, still) to confirm patrol routes and guard presence.',
-      permission: Permission.activityRecognition,
-      critical: false,
-    ),
-    _PermissionItem(
-      icon: Icons.wifi_rounded,
-      title: 'WiFi state',
-      description:
-          'Helps locate guards inside buildings, warehouses, and factories where GPS signals are weak.',
-      permission: Permission.location, // WiFi state is covered by location on Android
-      critical: false,
-      request: false,
     ),
   ];
 
@@ -108,17 +75,6 @@ class _PermissionOnboardingScreenState
         permission: Permission.location,
         label: 'Location',
         granted: locationStatus.isGranted,
-      ),
-    );
-
-    // Request background location — Android requires this as a separate step
-    // and may show a system dialog redirecting to settings.
-    final bgStatus = await Permission.locationAlways.request();
-    results.add(
-      _PermissionResult(
-        permission: Permission.locationAlways,
-        label: 'Background location',
-        granted: bgStatus.isGranted,
       ),
     );
 
@@ -142,17 +98,6 @@ class _PermissionOnboardingScreenState
       ),
     );
 
-    // Activity recognition (optional)
-    final activityStatus = await Permission.activityRecognition.request();
-    results.add(
-      _PermissionResult(
-        permission: Permission.activityRecognition,
-        label: 'Activity recognition',
-        granted: activityStatus.isGranted,
-        isOptional: true,
-      ),
-    );
-
     // Initialize background tracking service now that POST_NOTIFICATIONS
     // (and other permissions) have been requested.
     try {
@@ -167,34 +112,15 @@ class _PermissionOnboardingScreenState
     });
 
     // Check if any critical permission was denied
-    final criticalDenied = results
-        .where((r) => !r.isOptional && !r.granted)
-        .map((r) => r.label)
-        .toList();
+    final criticalDenied =
+        results.where((r) => !r.granted).map((r) => r.label).toList();
 
     if (criticalDenied.isNotEmpty && mounted) {
       _showCriticalDeniedDialog(criticalDenied);
       return;
     }
 
-    // Check battery optimization on Android
-    if (Platform.isAndroid) {
-      final isIgnoring = await Permission.ignoreBatteryOptimizations.isGranted;
-      if (!isIgnoring && mounted) {
-        setState(() => _showBatteryOptimization = true);
-        return;
-      }
-    }
-
     if (mounted) {
-      context.go('/');
-    }
-  }
-
-  Future<void> _requestBatteryOptimization() async {
-    final status = await Permission.ignoreBatteryOptimizations.request();
-    if (status.isGranted && mounted) {
-      setState(() => _showBatteryOptimization = false);
       context.go('/');
     }
   }
@@ -203,27 +129,28 @@ class _PermissionOnboardingScreenState
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Permissions Required'),
-        content: Text(
-          'The following permissions are required to use CISS Workforce:\n\n'
-          '${denied.map((d) => '• $d').join('\n')}\n\n'
-          'Please grant them in Settings to continue.',
-        ),
-        actions: <Widget>[
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Retry'),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Permissions Required'),
+            content: Text(
+              'The following permissions are required to use CISS Workforce:\n\n'
+              '${denied.map((d) => '• $d').join('\n')}\n\n'
+              'Please grant them in Settings to continue.',
+            ),
+            actions: <Widget>[
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Retry'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  openAppSettings();
+                },
+                child: const Text('Open Settings'),
+              ),
+            ],
           ),
-          FilledButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              openAppSettings();
-            },
-            child: const Text('Open Settings'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -253,46 +180,30 @@ class _PermissionOnboardingScreenState
             status: _statusFor(item.permission),
           ),
         ),
-        if (_showBatteryOptimization) ...<Widget>[
-          _PermissionTile(
-            icon: Icons.battery_charging_full_rounded,
-            title: 'Battery optimization',
-            description:
-                'Allow CISS to run in the background so duty tracking is not interrupted by battery saving.',
-            status: _PermissionStatus.pending,
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _requestBatteryOptimization,
-            icon: const Icon(Icons.battery_saver_rounded),
-            label: const Text('Allow background operation'),
-          ),
-        ],
-        if (_results.isNotEmpty && !_showBatteryOptimization) ...<Widget>[
+        if (_results.isNotEmpty) ...<Widget>[
           const SizedBox(height: 12),
           _ResultsSummary(results: _results),
         ],
         const SizedBox(height: 12),
         FilledButton(
-          onPressed: _isProcessing || _showBatteryOptimization
-              ? null
-              : _requestPermissions,
-          child: _isProcessing
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+          onPressed: _isProcessing ? null : _requestPermissions,
+          child:
+              _isProcessing
+                  ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                  : Text(
+                    _results.isEmpty
+                        ? 'Grant required permissions'
+                        : 'Retry permissions',
                   ),
-                )
-              : Text(
-                  _results.isEmpty
-                      ? 'Grant required permissions'
-                      : 'Retry permissions',
-                ),
         ),
-        if (_results.isNotEmpty && !_showBatteryOptimization) ...<Widget>[
+        if (_results.isNotEmpty) ...<Widget>[
           const SizedBox(height: 8),
           TextButton(
             onPressed: () => context.go('/'),
@@ -306,11 +217,12 @@ class _PermissionOnboardingScreenState
   _PermissionStatus _statusFor(Permission perm) {
     final result = _results.firstWhere(
       (r) => r.permission == perm,
-      orElse: () => const _PermissionResult(
-        permission: Permission.location,
-        label: '',
-        granted: false,
-      ),
+      orElse:
+          () => const _PermissionResult(
+            permission: Permission.location,
+            label: '',
+            granted: false,
+          ),
     );
     if (result.label.isEmpty) return _PermissionStatus.pending;
     return result.granted
@@ -327,16 +239,12 @@ class _PermissionItem {
     required this.title,
     required this.description,
     required this.permission,
-    required this.critical,
-    this.request = true,
   });
 
   final IconData icon;
   final String title;
   final String description;
   final Permission permission;
-  final bool critical;
-  final bool request;
 }
 
 class _PermissionTile extends StatelessWidget {
@@ -383,9 +291,9 @@ class _PermissionTile extends StatelessWidget {
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   description,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: tokens.inkMuted,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(color: tokens.inkMuted),
                 ),
               ],
             ),

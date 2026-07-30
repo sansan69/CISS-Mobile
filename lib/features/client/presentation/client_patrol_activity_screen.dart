@@ -3,8 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/network/providers.dart';
+import '../../auth/application/auth_controller.dart';
 import '../../../shared/widgets/modern_card.dart';
-import '../../../shared/widgets/info_line.dart';
+import '../../../shared/widgets/modern_hero.dart';
 import '../../../shared/widgets/state_block.dart';
 import '../../../shared/widgets/status_chip.dart';
 
@@ -19,7 +20,6 @@ class ClientPatrolActivityScreen extends ConsumerStatefulWidget {
 class _ClientPatrolActivityScreenState
     extends ConsumerState<ClientPatrolActivityScreen> {
   List<Map<String, dynamic>> _activities = const [];
-  Map<String, dynamic>? _summary;
   bool _loading = true;
   String? _error;
 
@@ -35,19 +35,15 @@ class _ClientPatrolActivityScreenState
       _error = null;
     });
     try {
+      final session = ref.read(authSessionProvider).value;
+      final clientId = session?.clientId ?? '';
+
       final data = await ref
           .read(mobileRepositoryProvider)
-          .fetchClientDashboard()
-          .timeout(const Duration(seconds: 12));
-      final activities = data['recentPatrolActivities'] as List<dynamic>? ??
-          const <dynamic>[];
-      final summary = data['summary'] as Map<String, dynamic>?;
-
+          .fetchClientPatrolActivityList(clientId);
       if (!mounted) return;
       setState(() {
-        _activities =
-            activities.whereType<Map<String, dynamic>>().toList();
-        _summary = summary;
+        _activities = data;
         _loading = false;
       });
     } catch (e) {
@@ -65,239 +61,174 @@ class _ClientPatrolActivityScreenState
 
     return Scaffold(
       backgroundColor: tokens.canvas,
-      appBar: AppBar(
-        title: const Text('Patrol Activity'),
-        backgroundColor: tokens.canvas,
-      ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
-              ? Center(
-                  child: StateBlock(
-                    icon: Icons.cloud_off_rounded,
-                    title: 'Error',
-                    message: _error!,
-                    action: FilledButton.tonal(
-                      onPressed: _fetch,
-                      child: const Text('Retry'),
-                    ),
-                  ),
-                )
-              : _activities.isEmpty
-                  ? const Center(
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _fetch,
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
+                  ? Center(
                       child: StateBlock(
-                        icon: Icons.shield_rounded,
-                        title: 'No patrol activity',
-                        message:
-                            'Patrol rounds and night checks will appear here.',
+                        icon: Icons.cloud_off_rounded,
+                        title: 'Could not load patrol activity',
+                        message: _error!,
+                        action: FilledButton.tonal(
+                          onPressed: _fetch,
+                          child: const Text('Try again'),
+                        ),
                       ),
                     )
-                  : RefreshIndicator(
-                      onRefresh: _fetch,
-                      child: ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: <Widget>[
-                          if (_summary != null)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: _SummaryBar(
-                                summary: _summary!,
-                                tokens: tokens,
-                              ),
+                  : CustomScrollView(
+                      slivers: <Widget>[
+                        SliverToBoxAdapter(
+                          child: ModernHero(
+                            eyebrow: 'Operations',
+                            title: 'Patrol Activity',
+                            subtitle: '${_activities.length} activities',
+                          ),
+                        ),
+                        if (_activities.isEmpty)
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: StateBlock(
+                              icon: Icons.route_outlined,
+                              title: 'No patrol activity',
+                              message:
+                                  'Night checks and patrol rounds will appear here.',
                             ),
-                          ..._activities.map((a) {
-                            final type =
-                                a['type']?.toString() ?? 'patrol';
-                            final guardName =
-                                a['guardName']?.toString() ?? 'Guard';
-                            final siteName =
-                                a['siteName']?.toString() ?? '';
-                            final dutyPoint =
-                                a['dutyPointName']?.toString() ??
-                                    a['patrolPointName']?.toString() ??
-                                    '';
-                            final shiftLabel =
-                                a['shiftLabel']?.toString() ?? '';
-                            final activityAt =
-                                a['activityAt']?.toString() ?? '';
-                            final district =
-                                a['district']?.toString() ?? '';
-
-                            final isHourlyPhoto = type == 'hourly_photo';
-
-                            return Padding(
-                              padding:
-                                  const EdgeInsets.only(bottom: 12),
-                              child: ModernCard(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: <Widget>[
-                                    Row(
-                                      children: <Widget>[
-                                        Container(
-                                          width: 40,
-                                          height: 40,
-                                          decoration: BoxDecoration(
-                                            color: isHourlyPhoto
-                                                ? tokens.successSoft
-                                                : tokens.accent
-                                                    .withValues(alpha: 0.1),
-                                            borderRadius:
-                                                BorderRadius.circular(10),
-                                          ),
-                                          alignment: Alignment.center,
-                                          child: Icon(
-                                            isHourlyPhoto
-                                                ? Icons.photo_camera_rounded
-                                                : Icons.route_rounded,
-                                            size: 20,
-                                            color: isHourlyPhoto
-                                                ? tokens.success
-                                                : tokens.accent,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: <Widget>[
-                                              Text(
-                                                guardName,
-                                                style: TextStyle(
-                                                  fontSize: 15,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: tokens.ink,
-                                                ),
-                                              ),
-                                              if (siteName.isNotEmpty)
-                                                InfoLine(
-                                                  Icons.location_on_rounded,
-                                                  siteName,
-                                                ),
-                                              if (dutyPoint.isNotEmpty)
-                                                InfoLine(
-                                                  Icons.my_location_rounded,
-                                                  dutyPoint,
-                                                ),
-                                              if (shiftLabel.isNotEmpty)
-                                                InfoLine(
-                                                  Icons.access_time_rounded,
-                                                  shiftLabel,
-                                                ),
-                                              if (district.isNotEmpty)
-                                                InfoLine(
-                                                  Icons.place_rounded,
-                                                  district,
-                                                ),
-                                              if (activityAt.isNotEmpty)
-                                                InfoLine(
-                                                  Icons.schedule_rounded,
-                                                  _formatDate(activityAt),
-                                                ),
-                                            ],
-                                          ),
-                                        ),
-                                        StatusChip(
-                                          label: isHourlyPhoto
-                                              ? 'Photo'
-                                              : 'Patrol',
-                                          tone: isHourlyPhoto
-                                              ? StatusChipTone.success
-                                              : StatusChipTone.info,
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }),
-                        ],
-                      ),
+                          )
+                        else
+                          SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                final a = _activities[index];
+                                return Padding(
+                                  padding: EdgeInsets.fromLTRB(
+                                    16, index == 0 ? 12 : 0, 16,
+                                    index == _activities.length - 1 ? 24 : 8,
+                                  ),
+                                  child: _ActivityCard(activity: a),
+                                );
+                              },
+                              childCount: _activities.length,
+                            ),
+                          ),
+                      ],
                     ),
+        ),
+      ),
     );
-  }
-
-  String _formatDate(String value) {
-    final p = DateTime.tryParse(value);
-    if (p == null) return value;
-    final local = p.toLocal();
-    return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')} ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
   }
 }
 
-class _SummaryBar extends StatelessWidget {
-  const _SummaryBar({required this.summary, required this.tokens});
-
-  final Map<String, dynamic> summary;
-  final CissThemeTokens tokens;
+class _ActivityCard extends StatelessWidget {
+  const _ActivityCard({required this.activity});
+  final Map<String, dynamic> activity;
 
   @override
   Widget build(BuildContext context) {
-    final total = (summary['patrolActivitiesToday'] as num?)?.toInt() ?? 0;
-    final nightChecks =
-        (summary['hourlyNightChecksToday'] as num?)?.toInt() ?? 0;
+    final tokens = CissThemeTokens.of(context);
+
+    final guardName = _text(activity['guardName']);
+    final siteName = _text(activity['siteName']);
+    final type = _text(activity['type']);
+    final shiftLabel = _text(activity['shiftLabel']);
+    final activityAt = _text(activity['activityAt']).isNotEmpty
+        ? _text(activity['activityAt'])
+        : _text(activity['createdAt']);
+
+    final isCheckIn = type == 'check-in';
+    final isCheckOut = type == 'check-out';
+    final isPatrol = type == 'patrol' || type == 'hourly_photo';
+
+    IconData icon;
+    Color color;
+    if (isCheckIn) {
+      icon = Icons.login_rounded;
+      color = tokens.success;
+    } else if (isCheckOut) {
+      icon = Icons.logout_rounded;
+      color = tokens.warning;
+    } else if (isPatrol) {
+      icon = Icons.route_rounded;
+      color = tokens.primary;
+    } else {
+      icon = Icons.circle_outlined;
+      color = tokens.inkMuted;
+    }
 
     return ModernCard(
+      padding: const EdgeInsets.all(14),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Expanded(
-            child: _Metric(
-              value: '$total',
-              label: 'Total Today',
-              color: tokens.primary,
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
             ),
+            child: Icon(icon, color: color, size: 22),
           ),
-          Container(width: 1, height: 38, color: tokens.border),
+          const SizedBox(width: 12),
           Expanded(
-            child: _Metric(
-              value: '$nightChecks',
-              label: 'Night Checks',
-              color: tokens.success,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  guardName.isNotEmpty ? guardName : 'Unknown',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: tokens.ink,
+                  ),
+                ),
+                if (siteName.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    siteName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, color: tokens.inkMuted),
+                  ),
+                ],
+                const SizedBox(height: 4),
+                Row(
+                  children: <Widget>[
+                    StatusChip(
+                      label: type.toUpperCase(),
+                      tone: isCheckIn
+                          ? StatusChipTone.success
+                          : isCheckOut
+                              ? StatusChipTone.warning
+                              : StatusChipTone.info,
+                    ),
+                    if (shiftLabel.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        shiftLabel,
+                        style: TextStyle(fontSize: 11, color: tokens.inkMuted),
+                      ),
+                    ],
+                  ],
+                ),
+                if (activityAt.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    activityAt,
+                    style: TextStyle(fontSize: 10, color: tokens.inkMuted),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
       ),
     );
   }
-}
 
-class _Metric extends StatelessWidget {
-  const _Metric({
-    required this.value,
-    required this.label,
-    required this.color,
-  });
-
-  final String value;
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = CissThemeTokens.of(context);
-    return Column(
-      children: <Widget>[
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-            color: color,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: tokens.inkMuted,
-          ),
-        ),
-      ],
-    );
-  }
+  String _text(Object? value) => (value as String?)?.trim() ?? '';
 }

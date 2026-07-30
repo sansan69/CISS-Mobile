@@ -8,6 +8,7 @@ import '../../../shared/widgets/modern_card.dart';
 import '../../../shared/widgets/modern_hero.dart';
 import '../../../shared/widgets/state_block.dart';
 import '../../../shared/widgets/status_chip.dart';
+import '../../../shared/widgets/document_list_tile.dart';
 
 class AdminGuardDetailScreen extends ConsumerStatefulWidget {
   const AdminGuardDetailScreen({super.key, required this.employeeId});
@@ -183,6 +184,15 @@ class _AdminGuardDetailScreenState extends ConsumerState<AdminGuardDetailScreen>
     final email = guard['email']?.toString() ?? '';
     final address = guard['address']?.toString() ?? '';
     final doj = guard['dateOfJoining']?.toString() ?? guard['createdAt']?.toString() ?? '';
+    // ── Document fields ─────────────────────────────────────────────
+    final profilePhotoUrl = guard['profilePhotoUrl']?.toString() ?? '';
+    final idProofFrontUrl = guard['idProofFrontUrl']?.toString() ?? '';
+    final idProofBackUrl = guard['idProofBackUrl']?.toString() ?? '';
+    final addressProofFrontUrl = guard['addressProofFrontUrl']?.toString() ?? '';
+    final addressProofBackUrl = guard['addressProofBackUrl']?.toString() ?? '';
+    final signatureUrl = guard['signatureUrl']?.toString() ?? '';
+    final idProofType = guard['idProofType']?.toString() ?? '';
+    final addressProofType = guard['addressProofType']?.toString() ?? '';
 
     return Scaffold(
       backgroundColor: tokens.canvas,
@@ -274,16 +284,16 @@ class _AdminGuardDetailScreenState extends ConsumerState<AdminGuardDetailScreen>
             const SizedBox(height: 24),
             _sectionHeader('DOCUMENTS', tokens),
             const SizedBox(height: 12),
-            ModernCard(
-              child: Column(
-                children: [
-                  _docRow(Icons.picture_as_pdf_rounded, 'Profile Photo', tokens),
-                  _divider(tokens),
-                  _docRow(Icons.picture_as_pdf_rounded, 'ID Proof', tokens),
-                  _divider(tokens),
-                  _docRow(Icons.picture_as_pdf_rounded, 'Address Proof', tokens),
-                ],
-              ),
+            ..._buildDocumentTiles(
+              tokens: tokens,
+              profilePhotoUrl: profilePhotoUrl,
+              idProofType: idProofType,
+              idProofFrontUrl: idProofFrontUrl,
+              idProofBackUrl: idProofBackUrl,
+              addressProofType: addressProofType,
+              addressProofFrontUrl: addressProofFrontUrl,
+              addressProofBackUrl: addressProofBackUrl,
+              signatureUrl: signatureUrl,
             ),
             const SizedBox(height: 32),
             SizedBox(
@@ -345,13 +355,118 @@ class _AdminGuardDetailScreenState extends ConsumerState<AdminGuardDetailScreen>
     );
   }
 
-  Widget _docRow(IconData icon, String label, CissThemeTokens tokens) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: tokens.primary),
-      title: Text(label, style: const TextStyle(fontSize: 14)),
-      trailing: Icon(Icons.download_rounded, color: tokens.inkMuted),
-    );
+  List<Widget> _buildDocumentTiles({
+    required CissThemeTokens tokens,
+    required String profilePhotoUrl,
+    required String idProofType,
+    required String idProofFrontUrl,
+    required String idProofBackUrl,
+    required String addressProofType,
+    required String addressProofFrontUrl,
+    required String addressProofBackUrl,
+    required String signatureUrl,
+  }) {
+    final docs = <Widget>[];
+
+    if (profilePhotoUrl.isNotEmpty) {
+      docs.add(Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: DocumentListTile(
+          name: 'Profile Photo',
+          url: profilePhotoUrl,
+          fileType: _guessFileType(profilePhotoUrl),
+        ),
+      ));
+    }
+
+    if (idProofFrontUrl.isNotEmpty) {
+      docs.add(Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: DocumentListTile(
+          name: idProofType.isNotEmpty
+              ? '$idProofType (Front)'
+              : 'ID Proof (Front)',
+          url: idProofFrontUrl,
+          fileType: _guessFileType(idProofFrontUrl),
+        ),
+      ));
+    }
+
+    if (idProofBackUrl.isNotEmpty) {
+      docs.add(Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: DocumentListTile(
+          name: idProofType.isNotEmpty
+              ? '$idProofType (Back)'
+              : 'ID Proof (Back)',
+          url: idProofBackUrl,
+          fileType: _guessFileType(idProofBackUrl),
+        ),
+      ));
+    }
+
+    if (addressProofFrontUrl.isNotEmpty) {
+      docs.add(Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: DocumentListTile(
+          name: addressProofType.isNotEmpty
+              ? '$addressProofType (Front)'
+              : 'Address Proof (Front)',
+          url: addressProofFrontUrl,
+          fileType: _guessFileType(addressProofFrontUrl),
+        ),
+      ));
+    }
+
+    if (addressProofBackUrl.isNotEmpty) {
+      docs.add(Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: DocumentListTile(
+          name: addressProofType.isNotEmpty
+              ? '$addressProofType (Back)'
+              : 'Address Proof (Back)',
+          url: addressProofBackUrl,
+          fileType: _guessFileType(addressProofBackUrl),
+        ),
+      ));
+    }
+
+    if (signatureUrl.isNotEmpty) {
+      docs.add(Padding(
+        padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+        child: DocumentListTile(
+          name: 'Signature',
+          url: signatureUrl,
+          fileType: _guessFileType(signatureUrl),
+        ),
+      ));
+    }
+
+    if (docs.isEmpty) {
+      docs.add(ModernCard(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Center(
+            child: Text(
+              'No documents uploaded',
+              style: TextStyle(fontSize: 13, color: tokens.inkMuted),
+            ),
+          ),
+        ),
+      ));
+    }
+
+    return docs;
+  }
+
+  String _guessFileType(String url) {
+    final lower = url.toLowerCase();
+    if (lower.endsWith('.pdf')) return 'pdf';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image';
+    if (lower.endsWith('.png')) return 'image';
+    if (lower.endsWith('.gif')) return 'image';
+    if (lower.endsWith('.webp')) return 'image';
+    return 'image';
   }
 
   Widget _divider(CissThemeTokens tokens) {

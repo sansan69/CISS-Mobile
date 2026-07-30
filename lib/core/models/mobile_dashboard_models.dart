@@ -38,6 +38,105 @@ class GuardDashboardSnapshot {
   final List<AttendanceRecordModel> recentAttendance;
 }
 
+class FieldOfficerTodayOverview {
+  const FieldOfficerTodayOverview({
+    required this.sitesScheduled,
+    required this.dutiesScheduled,
+    required this.requiredGuards,
+    required this.assignedGuards,
+    required this.unassignedGuards,
+    required this.sitesWithoutAttendance,
+    required this.visitReportsToday,
+    required this.trainingReportsToday,
+    required this.pendingSiteReports,
+    required this.underAssignedSites,
+  });
+
+  /// Number of sites with duties scheduled today
+  final int sitesScheduled;
+
+  /// Number of work orders / duties happening today
+  final int dutiesScheduled;
+
+  /// Total guard slots required across all today's duties
+  final int requiredGuards;
+
+  /// Number of guard slots already assigned
+  final int assignedGuards;
+
+  /// Shortfall: requiredGuards - assignedGuards (clamped at 0)
+  final int unassignedGuards;
+
+  /// Sites that have scheduled duties but zero attendance records today
+  final int sitesWithoutAttendance;
+
+  /// Number of visit reports filed today by this FO
+  final int visitReportsToday;
+
+  /// Number of training reports filed today by this FO
+  final int trainingReportsToday;
+
+  /// Number of sites still needing a site visit report today
+  final int pendingSiteReports;
+
+  /// Number of sites where assignedGuards < requiredGuards
+  final int underAssignedSites;
+
+  factory FieldOfficerTodayOverview.fromJson(Map<String, dynamic>? json) {
+    final data = json ?? const <String, dynamic>{};
+    return FieldOfficerTodayOverview(
+      sitesScheduled: (data['sitesScheduled'] as num?)?.toInt() ?? 0,
+      dutiesScheduled: (data['dutiesScheduled'] as num?)?.toInt() ?? 0,
+      requiredGuards: (data['requiredGuards'] as num?)?.toInt() ?? 0,
+      assignedGuards: (data['assignedGuards'] as num?)?.toInt() ?? 0,
+      unassignedGuards: (data['unassignedGuards'] as num?)?.toInt() ?? 0,
+      sitesWithoutAttendance: (data['sitesWithoutAttendance'] as num?)?.toInt() ?? 0,
+      visitReportsToday: (data['visitReportsToday'] as num?)?.toInt() ?? 0,
+      trainingReportsToday: (data['trainingReportsToday'] as num?)?.toInt() ?? 0,
+      pendingSiteReports: (data['pendingSiteReports'] as num?)?.toInt() ?? 0,
+      underAssignedSites: (data['underAssignedSites'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class FieldOfficerTodaySiteBrief {
+  const FieldOfficerTodaySiteBrief({
+    required this.siteId,
+    required this.siteName,
+    required this.district,
+    required this.clientName,
+    required this.requiredGuards,
+    required this.assignedGuards,
+    required this.shiftLabel,
+    required this.dateLabel,
+    this.hasAttendance,
+  });
+
+  final String siteId;
+  final String siteName;
+  final String district;
+  final String clientName;
+  final int requiredGuards;
+  final int assignedGuards;
+  final String shiftLabel;
+  final String dateLabel;
+  final bool? hasAttendance;
+
+  factory FieldOfficerTodaySiteBrief.fromJson(Map<String, dynamic> json) {
+    return FieldOfficerTodaySiteBrief(
+      siteId: (json['siteId'] as String?) ?? '',
+      siteName: (json['siteName'] as String?) ?? '',
+      district: (json['district'] as String?) ?? '',
+      clientName: (json['clientName'] as String?) ?? '',
+      requiredGuards: (json['requiredGuards'] as num?)?.toInt() ?? 0,
+      assignedGuards: (json['assignedGuards'] as num?)?.toInt() ?? 0,
+      shiftLabel: (json['shiftLabel'] as String?) ?? '',
+      dateLabel: (json['date'] as String?) ?? (json['dateLabel'] as String?) ?? '',
+      hasAttendance: json['hasAttendance'] as bool?,
+    );
+  }
+}
+
 class FieldOfficerDashboardSnapshot {
   const FieldOfficerDashboardSnapshot({
     required this.name,
@@ -45,7 +144,10 @@ class FieldOfficerDashboardSnapshot {
     required this.assignedDistricts,
     required this.totalGuards,
     required this.activeGuards,
+    required this.totalSitesInScope,
     required this.attendanceSummary,
+    required this.todayOverview,
+    required this.todaySites,
     required this.attendanceSites,
     required this.upcomingWorkOrders,
     required this.recentVisitReports,
@@ -58,7 +160,10 @@ class FieldOfficerDashboardSnapshot {
   final List<String> assignedDistricts;
   final int totalGuards;
   final int activeGuards;
+  final int totalSitesInScope;
   final FieldOfficerAttendanceSummary attendanceSummary;
+  final FieldOfficerTodayOverview todayOverview;
+  final List<FieldOfficerTodaySiteBrief> todaySites;
   final List<FieldOfficerAttendanceSite> attendanceSites;
   final List<WorkOrderModel> upcomingWorkOrders;
   final List<VisitReportModel> recentVisitReports;

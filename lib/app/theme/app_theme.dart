@@ -12,7 +12,7 @@ ThemeData buildCissTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
 
   final ColorScheme colorScheme = ColorScheme.fromSeed(
-    seedColor: const Color(0xFF0B4F82),
+    seedColor: const Color(0xFF1B3D6D),
     brightness: brightness,
     primary: tokens.primary,
     secondary: tokens.accent,
@@ -80,12 +80,12 @@ ThemeData buildCissTheme(Brightness brightness) {
     // Card — M3 filled card (elevation via surface tint)
     cardTheme: CardThemeData(
       color: tokens.surface,
-      elevation: 1,
-      surfaceTintColor: tokens.primary,
-      shadowColor: tokens.ink.withValues(alpha: 0.06),
+      elevation: 0,
+      surfaceTintColor: Colors.transparent,
+      shadowColor: Colors.transparent,
       shape: RoundedRectangleBorder(
         borderRadius: const BorderRadius.all(Radius.circular(AppRadius.md)),
-        side: BorderSide(color: tokens.border),
+        side: BorderSide(color: tokens.border, width: 1),
       ),
       margin: EdgeInsets.zero,
     ),
@@ -124,15 +124,15 @@ ThemeData buildCissTheme(Brightness brightness) {
     // Input — M3 filled style: depth via background, not border
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: tokens.surfaceStrong,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      fillColor: isDark ? tokens.surfaceMuted : tokens.surface,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.sm),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(color: tokens.border, width: 1),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.sm),
-        borderSide: BorderSide.none,
+        borderSide: BorderSide(color: tokens.border, width: 1),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.sm),

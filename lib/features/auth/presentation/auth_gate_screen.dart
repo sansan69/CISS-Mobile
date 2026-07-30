@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +13,8 @@ import '../../../core/models/auth_session.dart';
 import '../../../app/theme/theme_mode_controller.dart';
 import '../../../core/auth/biometric_service.dart';
 import '../../../core/brand.dart';
+import '../../../core/location/background_tracking_service.dart';
+import '../../../core/network/providers.dart';
 import '../../../core/region/region_service.dart';
 import '../../../shared/widgets/auth/login_background.dart';
 import '../../field_officer/presentation/field_officer_shell.dart';
@@ -32,6 +36,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
   bool _permissionsChecked = false;
   bool _bioTriggered = false;
   bool _regionChecked = false;
+  String? _trackingReconciledUid;
   AuthSession? _lastSession;
 
   Future<void> _checkBiometrics(bool enabled) async {
@@ -88,50 +93,57 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: isDark
-          ? SystemUiOverlayStyle.light.copyWith(
-              statusBarColor: Colors.transparent,
-            )
-          : SystemUiOverlayStyle.dark.copyWith(
-              statusBarColor: Colors.transparent,
-            ),
+      value:
+          isDark
+              ? SystemUiOverlayStyle.light.copyWith(
+                statusBarColor: Colors.transparent,
+              )
+              : SystemUiOverlayStyle.dark.copyWith(
+                statusBarColor: Colors.transparent,
+              ),
       child: sessionAsync.when(
         // Show a branded skeleton on initial load instead of a bare spinner.
         loading: () => const _AppLoadingScreen(),
-        error: (Object error, StackTrace stackTrace) => Scaffold(
-          body: SafeArea(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.error_outline, size: 48, color: CissThemeTokens.of(context).danger),
-                    const SizedBox(height: 16),
-                    Text('Auth error: $error', textAlign: TextAlign.center),
-                    const SizedBox(height: 24),
-                    FilledButton.tonal(
-                      onPressed: () => ref.invalidate(authSessionProvider),
-                      child: const Text('Retry'),
+        error:
+            (Object error, StackTrace stackTrace) => Scaffold(
+              body: SafeArea(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.error_outline,
+                          size: 48,
+                          color: CissThemeTokens.of(context).danger,
+                        ),
+                        const SizedBox(height: 16),
+                        Text('Auth error: $error', textAlign: TextAlign.center),
+                        const SizedBox(height: 24),
+                        FilledButton.tonal(
+                          onPressed: () => ref.invalidate(authSessionProvider),
+                          child: const Text('Retry'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            ref.read(authControllerProvider).signOut();
+                          },
+                          child: const Text('Sign out'),
+                        ),
+                      ],
                     ),
-                    TextButton(
-                      onPressed: () {
-                        ref.read(authControllerProvider).signOut();
-                      },
-                      child: const Text('Sign out'),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
         data: (session) {
           // Reset permission check when session changes (new login).
           if (_lastSession?.uid != session?.uid) {
             _permissionsChecked = false;
             _bioTriggered = false;
             _authenticated = false;
+            _trackingReconciledUid = null;
           }
           _lastSession = session;
 
@@ -141,7 +153,8 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
               WidgetsBinding.instance.addPostFrameCallback((_) async {
                 if (!mounted) return;
                 final router = GoRouter.of(context);
-                final saved = await ref.read(regionServiceProvider).getSavedRegion();
+                final saved =
+                    await ref.read(regionServiceProvider).getSavedRegion();
                 if (!mounted) return;
                 if (saved == null) {
                   router.go('/region-select');
@@ -156,10 +169,11 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
           if (settings.biometricsEnabled && !_authenticated) {
             _maybeTriggerBiometrics();
             return _BiometricLockScreen(
-              onRetry: () => setState(() {
-                _isAuthenticating = false;
-                _bioTriggered = false;
-              }),
+              onRetry:
+                  () => setState(() {
+                    _isAuthenticating = false;
+                    _bioTriggered = false;
+                  }),
               isAuthenticating: _isAuthenticating,
             );
           }
@@ -168,7 +182,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
           // check permissions in background.
           if (session.role == AppRole.guard && !_permissionsChecked) {
             _permissionsChecked = true;
-            _checkGuardPermissionsInBackground();
+            unawaited(_prepareGuardRuntime(session.uid));
           }
 
           if (session.role == AppRole.fieldOfficer) {
@@ -187,23 +201,33 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
     );
   }
 
-  /// Check guard permissions in the background without blocking the UI.
-  /// Routes to permission onboarding if any critical permission is missing.
-  void _checkGuardPermissionsInBackground() {
-    Future.wait([
-      Permission.location.status,
-      Permission.locationAlways.status,
-      Permission.camera.status,
-      Permission.notification.status,
-    ]).then((statuses) {
-      final allGranted = statuses.every((s) => s.isGranted);
-      if (!allGranted && mounted) {
+  /// Verifies the Android runtime prerequisites before recovering an active
+  /// shift. This avoids starting the foreground service while permission
+  /// onboarding is still in progress.
+  Future<void> _prepareGuardRuntime(String uid) async {
+    try {
+      final statuses = await Future.wait([
+        Permission.location.status,
+        Permission.camera.status,
+        Permission.notification.status,
+      ]);
+      if (!mounted) return;
+
+      final allGranted = statuses.every((status) => status.isGranted);
+      if (!allGranted) {
         context.go('/permissions');
+        return;
       }
-    }).catchError((_) {
-      // Silently ignore permission check failures; they'll be checked again
-      // when the user tries to use location or camera.
-    });
+
+      if (_trackingReconciledUid == uid) return;
+      _trackingReconciledUid = uid;
+      await BackgroundTrackingService.initialize();
+      await BackgroundTrackingService.reconcileWithServer(
+        ref.read(mobileRepositoryProvider),
+      );
+    } catch (error) {
+      debugPrint('Tracking reconciliation deferred: $error');
+    }
   }
 }
 
@@ -233,10 +257,7 @@ class _AppLoadingScreen extends StatelessWidget {
                     gradient: LinearGradient(
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
-                      colors: [
-                        tokens.primary,
-                        tokens.primaryStrong,
-                      ],
+                      colors: [tokens.primary, tokens.primaryStrong],
                     ),
                   ),
                   child: Container(
@@ -245,10 +266,7 @@ class _AppLoadingScreen extends StatelessWidget {
                       color: tokens.canvas,
                       shape: BoxShape.circle,
                     ),
-                    child: Image.asset(
-                      kCompanyLogoAsset,
-                      fit: BoxFit.contain,
-                    ),
+                    child: Image.asset(kCompanyLogoAsset, fit: BoxFit.contain),
                   ),
                 ),
                 const SizedBox(height: 28),
@@ -310,10 +328,7 @@ class _BiometricLockScreen extends StatelessWidget {
                       gradient: LinearGradient(
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
-                        colors: [
-                          tokens.primary,
-                          tokens.primaryStrong,
-                        ],
+                        colors: [tokens.primary, tokens.primaryStrong],
                       ),
                       shape: BoxShape.circle,
                       boxShadow: <BoxShadow>[
@@ -346,9 +361,9 @@ class _BiometricLockScreen extends StatelessWidget {
                     'Unlock with biometrics to continue accessing your workspace',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: tokens.inkMuted,
-                          height: 1.4,
-                        ),
+                      color: tokens.inkMuted,
+                      height: 1.4,
+                    ),
                   ),
                   const SizedBox(height: 40),
                   if (isAuthenticating)

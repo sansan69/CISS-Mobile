@@ -16,7 +16,7 @@ import '../../../core/sync/providers.dart';
 import '../../../core/qr/qr_parser.dart';
 import '../../../core/utils/date_format.dart';
 import '../../../shared/widgets/camera_capture_screen.dart';
-import '../../../core/location/live_location_service.dart';
+import '../../../core/location/background_tracking_service.dart';
 import '../../../core/fcm/providers.dart';
 
 enum _QrFlowStep { scan, action, confirmation }
@@ -103,7 +103,9 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
     final phone = _manualPhoneCtrl.text.trim();
     final rid = _manualResourceCtrl.text.trim();
     if (id.isEmpty && phone.isEmpty && rid.isEmpty) {
-      setState(() => _error = 'Enter employee ID, phone number, or resource ID');
+      setState(
+        () => _error = 'Enter employee ID, phone number, or resource ID',
+      );
       return;
     }
     setState(() => _loading = true);
@@ -146,7 +148,8 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = 'Lookup failed. ${e.toString().replaceFirst("Exception: ", "")}';
+        _error =
+            'Lookup failed. ${e.toString().replaceFirst("Exception: ", "")}';
         _loading = false;
       });
     }
@@ -277,8 +280,13 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
                     // Manual entry toggle
                     if (!_showManualEntry)
                       TextButton.icon(
-                        onPressed: () => setState(() => _showManualEntry = true),
-                        icon: const Icon(Icons.edit_rounded, color: Colors.white70, size: 18),
+                        onPressed:
+                            () => setState(() => _showManualEntry = true),
+                        icon: const Icon(
+                          Icons.edit_rounded,
+                          color: Colors.white70,
+                          size: 18,
+                        ),
                         label: const Text(
                           'Type employee ID / phone / resource ID',
                           style: TextStyle(color: Colors.white70, fontSize: 13),
@@ -297,12 +305,24 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
                           children: [
                             TextField(
                               controller: _manualIdCtrl,
-                              style: const TextStyle(color: Colors.white, fontSize: 14),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
                               decoration: InputDecoration(
                                 hintText: 'Employee ID (e.g. CISS/TCS/...)',
-                                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
-                                prefixIcon: Icon(Icons.badge_rounded, color: Colors.white.withValues(alpha: 0.5), size: 20),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                hintStyle: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                  fontSize: 13,
+                                ),
+                                prefixIcon: Icon(
+                                  Icons.badge_rounded,
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                  size: 20,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                                 filled: true,
                                 fillColor: Colors.white.withValues(alpha: 0.06),
                               ),
@@ -310,26 +330,55 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
                             const SizedBox(height: 8),
                             Row(
                               children: [
-                                const Expanded(child: Divider(color: Colors.white24)),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                                  child: Text('OR', style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
+                                const Expanded(
+                                  child: Divider(color: Colors.white24),
                                 ),
-                                const Expanded(child: Divider(color: Colors.white24)),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                  child: Text(
+                                    'OR',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.4,
+                                      ),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                                const Expanded(
+                                  child: Divider(color: Colors.white24),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
                             TextField(
                               controller: _manualPhoneCtrl,
-                              style: const TextStyle(color: Colors.white, fontSize: 14),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
                               keyboardType: TextInputType.phone,
                               maxLength: 10,
                               decoration: InputDecoration(
                                 hintText: 'Phone number (10 digits)',
-                                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
-                                prefixIcon: Icon(Icons.phone_rounded, color: Colors.white.withValues(alpha: 0.5), size: 20),
-                                counterStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 10),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                hintStyle: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                  fontSize: 13,
+                                ),
+                                prefixIcon: Icon(
+                                  Icons.phone_rounded,
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                  size: 20,
+                                ),
+                                counterStyle: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.3),
+                                  fontSize: 10,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                                 filled: true,
                                 fillColor: Colors.white.withValues(alpha: 0.06),
                               ),
@@ -337,23 +386,49 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
                             const SizedBox(height: 8),
                             Row(
                               children: [
-                                const Expanded(child: Divider(color: Colors.white24)),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                                  child: Text('OR', style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
+                                const Expanded(
+                                  child: Divider(color: Colors.white24),
                                 ),
-                                const Expanded(child: Divider(color: Colors.white24)),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                  child: Text(
+                                    'OR',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(
+                                        alpha: 0.4,
+                                      ),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                                const Expanded(
+                                  child: Divider(color: Colors.white24),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
                             TextField(
                               controller: _manualResourceCtrl,
-                              style: const TextStyle(color: Colors.white, fontSize: 14),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                              ),
                               decoration: InputDecoration(
                                 hintText: 'Resource ID',
-                                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
-                                prefixIcon: Icon(Icons.qr_code_rounded, color: Colors.white.withValues(alpha: 0.5), size: 20),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                                hintStyle: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                  fontSize: 13,
+                                ),
+                                prefixIcon: Icon(
+                                  Icons.qr_code_rounded,
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                  size: 20,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
                                 filled: true,
                                 fillColor: Colors.white.withValues(alpha: 0.06),
                               ),
@@ -363,9 +438,17 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
                               width: double.infinity,
                               child: FilledButton(
                                 onPressed: _loading ? null : _lookupManual,
-                                child: _loading
-                                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                    : const Text('Look up guard'),
+                                child:
+                                    _loading
+                                        ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            color: Colors.white,
+                                          ),
+                                        )
+                                        : const Text('Look up guard'),
                               ),
                             ),
                           ],
@@ -400,7 +483,10 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
       final repo = ref.read(mobileRepositoryProvider);
       final employee = await repo.fetchAttendanceEmployee(employeeId);
       if (employee == null) {
-        setState(() { _error = 'Employee not found.'; _loading = false; });
+        setState(() {
+          _error = 'Employee not found.';
+          _loading = false;
+        });
         return;
       }
       final sites = await repo.fetchAttendanceSites();
@@ -812,11 +898,8 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
         _step = _QrFlowStep.confirmation;
       });
 
-      // Write to Firestore for live tracking
-      if (_attendanceStatus == 'In') {
-        _writeLiveLocation(pos);
-      } else {
-        LiveLocationService().markOut(employee.employeeCode ?? employee.id);
+      if (_attendanceStatus == 'Out') {
+        await BackgroundTrackingService.stop();
       }
 
       // Notify field officers
@@ -848,10 +931,10 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
               );
 
           if (!mounted) return;
-          // Still write to Firestore so FO can see the guard
-          if (_attendanceStatus == 'In') {
-            _writeLiveLocation(null);
+          if (_attendanceStatus == 'Out') {
+            await BackgroundTrackingService.stop();
           }
+          if (!mounted) return;
 
           setState(() {
             _loading = false;
@@ -890,40 +973,6 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
           action: SnackBarAction(label: 'Retry', onPressed: _submitAttendance),
         ),
       );
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Live Location
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  Future<void> _writeLiveLocation(Position? pos) async {
-    final employee = _employee;
-    final site = _selectedSite;
-    if (employee == null || site == null) return;
-    try {
-      await LiveLocationService().setLocation(
-        GuardLocationData(
-          employeeDocId: employee.id,
-          employeeId: employee.employeeCode ?? employee.id,
-          guardName: employee.fullName,
-          siteId: site.id,
-          siteName: site.siteName,
-          clientName: employee.clientName ?? '',
-          district: site.district,
-          lat: pos?.latitude ?? 0,
-          lng: pos?.longitude ?? 0,
-          accuracy: pos?.accuracy ?? 0,
-          isOutOfZone: false,
-          status: _attendanceStatus,
-          updatedAt: DateTime.now(),
-          siteLat: site.lat,
-          siteLng: site.lng,
-          geofenceRadius: site.geofenceRadiusMeters.toDouble(),
-        ),
-      );
-    } catch (e) {
-      debugPrint('QR LiveLocation write error: $e');
     }
   }
 

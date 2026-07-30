@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/biometric_credential_store.dart';
 import '../../../core/auth/saved_accounts_service.dart';
 import '../../../core/fcm/providers.dart';
+import '../../../core/location/background_tracking_service.dart';
 import '../../../core/models/app_role.dart';
 import '../../../core/models/auth_session.dart';
 import '../../../core/models/guard_pin_status.dart';
@@ -73,9 +74,8 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
       }
 
       try {
-        final session = await ref
-            .read(mobileRepositoryProvider)
-            .resolveCurrentSession();
+        final session =
+            await ref.read(mobileRepositoryProvider).resolveCurrentSession();
         if (_disposed) return;
         _cachedSession = session;
         state = AsyncData(session);
@@ -92,25 +92,28 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
     });
 
     // Block only on first-ever resolution; warm starts use the fast path above.
-    final session = await ref
-        .read(mobileRepositoryProvider)
-        .resolveCurrentSession();
+    final session =
+        await ref.read(mobileRepositoryProvider).resolveCurrentSession();
     _cachedSession = session;
     return session;
   }
 
   void _scheduleBackgroundRefresh() {
     // Refresh in the background without blocking.
-    ref.read(mobileRepositoryProvider).resolveCurrentSession().then((session) {
-      if (_disposed || session == null) return;
-      _cachedSession = session;
-      // Only update state if it hasn't changed to null in the meantime.
-      if (state.valueOrNull != null) {
-        state = AsyncData(session);
-      }
-    }).catchError((_) {
-      // Silent — the cached session is still valid.
-    });
+    ref
+        .read(mobileRepositoryProvider)
+        .resolveCurrentSession()
+        .then((session) {
+          if (_disposed || session == null) return;
+          _cachedSession = session;
+          // Only update state if it hasn't changed to null in the meantime.
+          if (state.valueOrNull != null) {
+            state = AsyncData(session);
+          }
+        })
+        .catchError((_) {
+          // Silent — the cached session is still valid.
+        });
   }
 
   /// Inject a session after a fresh login — avoids a redundant backend call.
@@ -130,8 +133,8 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
 
 final authSessionProvider =
     AsyncNotifierProvider<AuthSessionNotifier, AuthSession?>(
-  AuthSessionNotifier.new,
-);
+      AuthSessionNotifier.new,
+    );
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Auth controller — orchestrates login / logout actions.
@@ -160,27 +163,35 @@ class AuthController {
 
     // 3. Persist the account for quick login next time.
     final trimmedLoginId = loginIdOrPhone.trim();
-    unawaited(_ref.read(savedAccountsServiceProvider).saveAccount(
-      SavedAccount(
-        role: 'guard',
-        loginId: trimmedLoginId,
-        displayName: session.displayName,
-        lastLoginAt: DateTime.now(),
-        biometricEnabled: saveForBiometric,
-      ),
-    ));
+    unawaited(
+      _ref
+          .read(savedAccountsServiceProvider)
+          .saveAccount(
+            SavedAccount(
+              role: 'guard',
+              loginId: trimmedLoginId,
+              displayName: session.displayName,
+              lastLoginAt: DateTime.now(),
+              biometricEnabled: saveForBiometric,
+            ),
+          ),
+    );
 
     // 4. If biometric login is requested, encrypt and store the PIN.
     if (saveForBiometric) {
       unawaited(
-        _ref.read(biometricCredentialStoreProvider).saveCredentials(
-          role: 'guard',
-          loginId: trimmedLoginId,
-          password: pin,
-        ),
+        _ref
+            .read(biometricCredentialStoreProvider)
+            .saveCredentials(
+              role: 'guard',
+              loginId: trimmedLoginId,
+              password: pin,
+            ),
       );
       unawaited(
-        _ref.read(appSettingsControllerProvider.notifier).setBiometricsEnabled(true),
+        _ref
+            .read(appSettingsControllerProvider.notifier)
+            .setBiometricsEnabled(true),
       );
     }
 
@@ -227,27 +238,35 @@ class AuthController {
 
     // 3. Persist the account.
     final trimmedEmail = email.trim();
-    unawaited(_ref.read(savedAccountsServiceProvider).saveAccount(
-      SavedAccount(
-        role: 'fieldOfficer',
-        loginId: trimmedEmail,
-        displayName: session.displayName,
-        lastLoginAt: DateTime.now(),
-        biometricEnabled: saveForBiometric,
-      ),
-    ));
+    unawaited(
+      _ref
+          .read(savedAccountsServiceProvider)
+          .saveAccount(
+            SavedAccount(
+              role: 'fieldOfficer',
+              loginId: trimmedEmail,
+              displayName: session.displayName,
+              lastLoginAt: DateTime.now(),
+              biometricEnabled: saveForBiometric,
+            ),
+          ),
+    );
 
     // 4. If biometric login is requested, encrypt and store the password.
     if (saveForBiometric) {
       unawaited(
-        _ref.read(biometricCredentialStoreProvider).saveCredentials(
-          role: 'fieldOfficer',
-          loginId: trimmedEmail,
-          password: password,
-        ),
+        _ref
+            .read(biometricCredentialStoreProvider)
+            .saveCredentials(
+              role: 'fieldOfficer',
+              loginId: trimmedEmail,
+              password: password,
+            ),
       );
       unawaited(
-        _ref.read(appSettingsControllerProvider.notifier).setBiometricsEnabled(true),
+        _ref
+            .read(appSettingsControllerProvider.notifier)
+            .setBiometricsEnabled(true),
       );
     }
 
@@ -259,10 +278,9 @@ class AuthController {
     required String role,
     required String loginId,
   }) async {
-    return _ref.read(biometricCredentialStoreProvider).getPassword(
-      role: role,
-      loginId: loginId,
-    );
+    return _ref
+        .read(biometricCredentialStoreProvider)
+        .getPassword(role: role, loginId: loginId);
   }
 
   /// Enable or disable biometric login for a saved account.
@@ -279,18 +297,18 @@ class AuthController {
       );
       final updated = target.withUpdated(biometricEnabled: enabled);
 
-      final updatedList = accounts.map((a) {
-        if (a.role == role && a.loginId == loginId) return updated;
-        return a;
-      }).toList();
+      final updatedList =
+          accounts.map((a) {
+            if (a.role == role && a.loginId == loginId) return updated;
+            return a;
+          }).toList();
 
       await service.saveAll(updatedList);
 
       if (!enabled) {
-        await _ref.read(biometricCredentialStoreProvider).deleteCredentials(
-          role: role,
-          loginId: loginId,
-        );
+        await _ref
+            .read(biometricCredentialStoreProvider)
+            .deleteCredentials(role: role, loginId: loginId);
       }
     } catch (e) {
       debugPrint('setBiometricEnabled error: $e');
@@ -301,10 +319,9 @@ class AuthController {
     required String role,
     required String loginId,
   }) async {
-    await _ref.read(biometricCredentialStoreProvider).deleteCredentials(
-      role: role,
-      loginId: loginId,
-    );
+    await _ref
+        .read(biometricCredentialStoreProvider)
+        .deleteCredentials(role: role, loginId: loginId);
   }
 
   Future<AuthSession> signInAsAdminOrClient({
@@ -323,26 +340,34 @@ class AuthController {
 
     final trimmedEmail = email.trim();
     final roleLabel = session.role == AppRole.admin ? 'admin' : 'client';
-    unawaited(_ref.read(savedAccountsServiceProvider).saveAccount(
-      SavedAccount(
-        role: roleLabel,
-        loginId: trimmedEmail,
-        displayName: session.displayName,
-        lastLoginAt: DateTime.now(),
-        biometricEnabled: saveForBiometric,
-      ),
-    ));
+    unawaited(
+      _ref
+          .read(savedAccountsServiceProvider)
+          .saveAccount(
+            SavedAccount(
+              role: roleLabel,
+              loginId: trimmedEmail,
+              displayName: session.displayName,
+              lastLoginAt: DateTime.now(),
+              biometricEnabled: saveForBiometric,
+            ),
+          ),
+    );
 
     if (saveForBiometric) {
       unawaited(
-        _ref.read(biometricCredentialStoreProvider).saveCredentials(
-          role: roleLabel,
-          loginId: trimmedEmail,
-          password: password,
-        ),
+        _ref
+            .read(biometricCredentialStoreProvider)
+            .saveCredentials(
+              role: roleLabel,
+              loginId: trimmedEmail,
+              password: password,
+            ),
       );
       unawaited(
-        _ref.read(appSettingsControllerProvider.notifier).setBiometricsEnabled(true),
+        _ref
+            .read(appSettingsControllerProvider.notifier)
+            .setBiometricsEnabled(true),
       );
     }
 
@@ -351,6 +376,7 @@ class AuthController {
 
   Future<void> signOut() async {
     await _ref.read(notificationServiceProvider).clearTopicSubscriptions();
+    await BackgroundTrackingService.stop();
 
     // Clear the session immediately so the UI reacts before the auth listener.
     _ref.read(authSessionProvider.notifier).clearSession();

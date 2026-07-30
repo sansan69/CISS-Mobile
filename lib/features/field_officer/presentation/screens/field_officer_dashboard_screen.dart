@@ -79,6 +79,8 @@ class _DashboardBody extends ConsumerWidget {
         ? 0.0
         : (onDuty / checkedIn).clamp(0, 1).toDouble();
 
+    final overview = data.todayOverview;
+
     return Scaffold(
       backgroundColor: tokens.canvas,
       body: SafeArea(
@@ -149,6 +151,48 @@ class _DashboardBody extends ConsumerWidget {
                 ),
               ),
 
+              // Today Overview — new webapp-matched section
+              if (overview.sitesScheduled > 0 || overview.dutiesScheduled > 0) ...[
+                const SizedBox(height: AppSpacing.xl),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'Today\'s Overview',
+                        style: AppTypography.title(context),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      ModernCard(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: <Widget>[
+                            _overviewMetricRow(tokens,
+                              sitesScheduled: overview.sitesScheduled,
+                              dutiesScheduled: overview.dutiesScheduled,
+                              requiredGuards: overview.requiredGuards,
+                              assignedGuards: overview.assignedGuards,
+                              unassignedGuards: overview.unassignedGuards,
+                            ),
+                            const SizedBox(height: AppSpacing.md),
+                            Divider(height: 1, color: tokens.border),
+                            const SizedBox(height: AppSpacing.md),
+                            _overviewStatusRow(tokens,
+                              sitesWithoutAttendance: overview.sitesWithoutAttendance,
+                              visitReportsToday: overview.visitReportsToday,
+                              trainingReportsToday: overview.trainingReportsToday,
+                              pendingSiteReports: overview.pendingSiteReports,
+                              underAssignedSites: overview.underAssignedSites,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               const SizedBox(height: AppSpacing.xl),
 
               // Quick Actions
@@ -199,6 +243,134 @@ class _DashboardBody extends ConsumerWidget {
 
               const SizedBox(height: AppSpacing.xl),
 
+              // Today's Sites (todaySites)
+              if (data.todaySites.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: <Widget>[
+                          Text(
+                            'Today\'s Sites',
+                            style: AppTypography.title(context),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: tokens.primarySoft,
+                              borderRadius: BorderRadius.circular(AppRadius.pill),
+                            ),
+                            child: Text(
+                              '${data.todaySites.length} sites',
+                              style: AppTypography.label(context).copyWith(
+                                color: tokens.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      ...data.todaySites.take(5).map((site) {
+                        final shortage = site.requiredGuards - site.assignedGuards;
+                        final isStaffed = shortage <= 0;
+                        final hasAttendance = site.hasAttendance ?? false;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: ModernCard(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: <Widget>[
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: isStaffed
+                                        ? (hasAttendance
+                                            ? tokens.successSoft
+                                            : tokens.warningSoft)
+                                        : tokens.dangerSoft,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Icon(
+                                    isStaffed
+                                        ? (hasAttendance
+                                            ? Icons.check_circle_rounded
+                                            : Icons.check_circle_outline_rounded)
+                                        : Icons.warning_amber_rounded,
+                                    color: isStaffed
+                                        ? (hasAttendance
+                                            ? tokens.success
+                                            : tokens.warning)
+                                        : tokens.danger,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: <Widget>[
+                                      Text(
+                                        site.siteName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                          color: tokens.ink,
+                                        ),
+                                      ),
+                                      Text(
+                                        site.clientName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: tokens.inkMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: <Widget>[
+                                    Text(
+                                      '${site.assignedGuards}/${site.requiredGuards}',
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w800,
+                                        color: isStaffed
+                                            ? tokens.success
+                                            : tokens.danger,
+                                      ),
+                                    ),
+                                    if (!isStaffed)
+                                      Text(
+                                        '-$shortage',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: tokens.danger,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xl),
+              ],
+
               // Attendance Coverage
               _AttendanceCoverage(
                 data: data,
@@ -228,6 +400,190 @@ class _DashboardBody extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Today's Overview — 5 metric tiles in a row showing scheduling health.
+Widget _overviewMetricRow(
+  CissThemeTokens tokens, {
+  required int sitesScheduled,
+  required int dutiesScheduled,
+  required int requiredGuards,
+  required int assignedGuards,
+  required int unassignedGuards,
+}) {
+  return Wrap(
+    spacing: 8,
+    runSpacing: 10,
+    children: <Widget>[
+      _tile(
+        label: 'Sites',
+        value: '$sitesScheduled',
+        icon: Icons.location_city_rounded,
+        color: tokens.primary,
+      ),
+      _tile(
+        label: 'Duties',
+        value: '$dutiesScheduled',
+        icon: Icons.work_rounded,
+        color: tokens.accent,
+      ),
+      _tile(
+        label: 'Required',
+        value: '$requiredGuards',
+        icon: Icons.people_rounded,
+        color: tokens.ink,
+      ),
+      _tile(
+        label: 'Assigned',
+        value: '$assignedGuards',
+        icon: Icons.person_pin_rounded,
+        color: tokens.success,
+      ),
+      _tile(
+        label: 'Unassigned',
+        value: '$unassignedGuards',
+        icon: Icons.person_off_rounded,
+        color: unassignedGuards > 0 ? tokens.danger : tokens.inkMuted,
+      ),
+    ],
+  );
+}
+
+Widget _tile({
+  required String label,
+  required String value,
+  required IconData icon,
+  required Color color,
+}) {
+  return SizedBox(
+    width: 56,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Icon(icon, color: color, size: 18),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: color.withValues(alpha: 0.7),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Today's Overview — status row with colored indicators for exceptions.
+Widget _overviewStatusRow(
+  CissThemeTokens tokens, {
+  required int sitesWithoutAttendance,
+  required int visitReportsToday,
+  required int trainingReportsToday,
+  required int pendingSiteReports,
+  required int underAssignedSites,
+}) {
+  return Column(
+    children: <Widget>[
+      _statusLineInner(
+        tokens: tokens,
+        icon: Icons.fact_check_rounded,
+        label: 'Sites w/o attendance',
+        value: sitesWithoutAttendance,
+        warnThreshold: 1,
+        suffix: 'sites',
+      ),
+      const SizedBox(height: 8),
+      _statusLineInner(
+        tokens: tokens,
+        icon: Icons.rate_review_rounded,
+        label: 'Visit reports today',
+        value: visitReportsToday,
+        invert: true,
+        suffix: 'filed',
+      ),
+      const SizedBox(height: 8),
+      _statusLineInner(
+        tokens: tokens,
+        icon: Icons.school_rounded,
+        label: 'Training reports today',
+        value: trainingReportsToday,
+        invert: true,
+        suffix: 'filed',
+      ),
+      const SizedBox(height: 8),
+      _statusLineInner(
+        tokens: tokens,
+        icon: Icons.pending_actions_rounded,
+        label: 'Pending site reports',
+        value: pendingSiteReports,
+        warnThreshold: 1,
+        suffix: 'pending',
+      ),
+      const SizedBox(height: 8),
+      _statusLineInner(
+        tokens: tokens,
+        icon: Icons.warning_amber_rounded,
+        label: 'Under-assigned sites',
+        value: underAssignedSites,
+        warnThreshold: 1,
+        suffix: 'sites',
+      ),
+    ],
+  );
+}
+
+Widget _statusLineInner({
+  required CissThemeTokens tokens,
+  required IconData icon,
+  required String label,
+  required int value,
+  bool invert = false,
+  int? warnThreshold,
+  String suffix = '',
+}) {
+  final isGood = invert ? value > 0 : (warnThreshold == null || value < warnThreshold);
+  final color = isGood ? tokens.success : tokens.danger;
+
+  return Row(
+    children: <Widget>[
+      Icon(icon, size: 16, color: color),
+      const SizedBox(width: 8),
+      Expanded(
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: tokens.ink,
+          ),
+        ),
+      ),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          '$value${suffix.isNotEmpty ? ' $suffix' : ''}',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+      ),
+    ],
+  );
 }
 
 class _QuickActionChip extends StatelessWidget {
@@ -316,7 +672,8 @@ class _AttendanceCoverage extends StatelessWidget {
                 style: AppTypography.title(context),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: tokens.primarySoft,
                   borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -356,7 +713,8 @@ class _AttendanceCoverage extends StatelessWidget {
                       ),
                     ),
                     StatusChip(
-                      label: data.stateCode.isEmpty ? 'LIVE' : data.stateCode,
+                      label:
+                          data.stateCode.isEmpty ? 'LIVE' : data.stateCode,
                       icon: Icons.radar_rounded,
                       tone: StatusChipTone.info,
                     ),
@@ -556,7 +914,8 @@ class _ProgressLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    final p = checkedIn <= 0 ? 0.0 : (onDuty / checkedIn).clamp(0, 1).toDouble();
+    final p =
+        checkedIn <= 0 ? 0.0 : (onDuty / checkedIn).clamp(0, 1).toDouble();
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.md),

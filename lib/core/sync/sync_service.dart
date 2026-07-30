@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' as foundation;
 
 import '../network/mobile_repository.dart';
+import '../location/background_tracking_service.dart';
 import '../offline/offline_queue.dart';
 import '../offline/offline_request.dart';
 
@@ -65,11 +66,10 @@ class SyncService {
         var adjustedRetryCount = request.retryCount;
         if (adjustedRetryCount > 0 &&
             (_lastSuccessTime == null ||
-                DateTime.now().difference(_lastSuccessTime!) > _successWindow)) {
+                DateTime.now().difference(_lastSuccessTime!) >
+                    _successWindow)) {
           adjustedRetryCount = 0;
-          await _queue.updateRequest(
-            request.copyWith(retryCount: 0),
-          );
+          await _queue.updateRequest(request.copyWith(retryCount: 0));
           foundation.debugPrint(
             'Reset retryCount for request ${request.id} after success window.',
           );
@@ -87,9 +87,10 @@ class SyncService {
         }
 
         // Use the potentially-decayed request (retryCount may have been reset)
-        final processRequest = adjustedRetryCount == request.retryCount
-            ? request
-            : request.copyWith(retryCount: adjustedRetryCount);
+        final processRequest =
+            adjustedRetryCount == request.retryCount
+                ? request
+                : request.copyWith(retryCount: adjustedRetryCount);
         final success = await _processRequest(processRequest);
         if (success) {
           _lastSuccessTime = DateTime.now();
@@ -99,6 +100,15 @@ class SyncService {
             foundation.debugPrint(
               'Failed to remove request ${request.id} from queue: $removeError',
             );
+          }
+          if (request.path == '/api/attendance/submit') {
+            try {
+              await BackgroundTrackingService.reconcileWithServer(_repository);
+            } catch (error) {
+              foundation.debugPrint(
+                'Attendance synced; tracking reconciliation deferred: $error',
+              );
+            }
           }
         } else {
           foundation.debugPrint(
@@ -127,9 +137,10 @@ class SyncService {
       if (body.containsKey('photoDataUrl')) {
         final dataUrl = body.remove('photoDataUrl') as String;
         final employeeDocId = body['employeeDocId'] as String?;
-        final uploadPath = employeeDocId != null
-            ? 'employees/$employeeDocId/attendance/${DateTime.now().millisecondsSinceEpoch}.jpg'
-            : 'temp/attendance/${DateTime.now().millisecondsSinceEpoch}.jpg';
+        final uploadPath =
+            employeeDocId != null
+                ? 'employees/$employeeDocId/attendance/${DateTime.now().millisecondsSinceEpoch}.jpg'
+                : 'temp/attendance/${DateTime.now().millisecondsSinceEpoch}.jpg';
 
         final result = await _repository.uploadAttendancePhoto(
           path: uploadPath,
@@ -146,7 +157,9 @@ class SyncService {
 
       // 2. Handle multiple photos upload if present
       if (body.containsKey('photoDataUrls')) {
-        final dataUrls = List<String>.from(body.remove('photoDataUrls') as List);
+        final dataUrls = List<String>.from(
+          body.remove('photoDataUrls') as List,
+        );
         final photoUrls = <String>[];
         // Detect FO report paths for correct upload folder
         final isVisitReport = request.path.contains('visit-reports');
@@ -187,7 +200,9 @@ class SyncService {
       // Treat 200/201/204 as success; also validate response body if present.
       final responseData = response.data;
       if (responseData is Map && responseData['success'] == false) {
-        throw Exception(responseData['error']?.toString() ?? 'Server rejected the request');
+        throw Exception(
+          responseData['error']?.toString() ?? 'Server rejected the request',
+        );
       }
       return true;
     } catch (e) {

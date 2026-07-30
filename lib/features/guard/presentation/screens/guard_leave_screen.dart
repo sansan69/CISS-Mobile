@@ -85,11 +85,7 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
               error.type == DioExceptionType.connectionError)) {
         await ref
             .read(offlineQueueProvider)
-            .enqueue(
-              path: '/api/guard/leave/requests',
-              method: 'POST',
-              body: payload,
-            );
+            .enqueue(path: '/api/guard/leave', method: 'POST', body: payload);
         setState(() => _message = 'Offline: Leave request queued.');
       } else {
         if (mounted) {

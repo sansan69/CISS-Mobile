@@ -7,6 +7,8 @@ import '../../../core/network/providers.dart';
 import '../../../shared/widgets/glass_card.dart';
 import '../../../shared/widgets/state_block.dart';
 import '../../../shared/widgets/status_chip.dart';
+import '../../../core/haptics.dart';
+import 'admin_training_bank_questions_screen.dart';
 
 class AdminTrainingScreen extends ConsumerStatefulWidget {
   const AdminTrainingScreen({super.key});
@@ -362,7 +364,17 @@ class _AdminTrainingScreenState extends ConsumerState<AdminTrainingScreen>
 
           return Padding(
             padding: const EdgeInsets.only(bottom: 12),
-            child: GlassCard(
+            child: GestureDetector(
+              onTap: () {
+                Haptics.light();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => AdminTrainingBankQuestionsScreen(bank: b),
+                  ),
+                );
+              },
+              child: GlassCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -397,6 +409,7 @@ class _AdminTrainingScreenState extends ConsumerState<AdminTrainingScreen>
                   ),
                 ],
               ),
+            ),
             ),
           );
         },

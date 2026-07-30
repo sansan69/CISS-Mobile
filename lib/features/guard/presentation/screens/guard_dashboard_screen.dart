@@ -14,7 +14,8 @@ import '../../../shared/notification_inbox_screen.dart';
 import '../../guard_tab_provider.dart';
 import 'guard_incidents_screen.dart';
 import 'guard_patrol_screen.dart';
-import 'guard_profile_screen.dart';
+import 'guard_payslips_screen.dart';
+import 'guard_leave_screen.dart';
 
 final FutureProvider<GuardDashboardSnapshot> guardDashboardProvider =
     FutureProvider<GuardDashboardSnapshot>((Ref ref) {
@@ -213,6 +214,112 @@ class _DashboardBody extends ConsumerWidget {
 
               const SizedBox(height: AppSpacing.xl),
 
+              // Eval Score + Payslip Card
+              if (data.latestEvalScore != null) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  child: ModernCard(
+                    child: Row(
+                      children: <Widget>[
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: tokens.warningSoft,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(Icons.stars_rounded,
+                              color: tokens.accent, size: 26),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                'Latest Evaluation',
+                                style: AppTypography.cardTitle(context),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                data.latestEvalPeriod ??
+                                    'Current period',
+                                style: AppTypography.micro(context)
+                                    .copyWith(color: tokens.inkMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: tokens.warningSoft,
+                            borderRadius: BorderRadius.circular(AppRadius.pill),
+                          ),
+                          child: Text(
+                            '${data.latestEvalScore!.toStringAsFixed(0)}%',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: tokens.accent,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+              ],
+
+              if (data.leaveBalance != null) ...[
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  child: ModernCard(
+                    child: Row(
+                      children: <Widget>[
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: tokens.primarySoft,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(Icons.event_available_rounded,
+                              color: tokens.primary, size: 26),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text('Leave Balance',
+                                  style: AppTypography.cardTitle(context)),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${data.leaveBalance!.balance} remaining · ${data.leaveBalance!.entitled} entitled · ${data.leaveBalance!.taken} taken',
+                                style: AppTypography.micro(context)
+                                    .copyWith(color: tokens.inkMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.chevron_right_rounded,
+                            color: tokens.inkMuted, size: 20),
+                      ],
+                    ),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) =>
+                            const GuardLeaveScreen(),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.xl),
+              ],
+
               // Quick Actions
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
@@ -229,7 +336,7 @@ class _DashboardBody extends ConsumerWidget {
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             onTap: () => Navigator.of(context).push(
                               MaterialPageRoute<void>(
-                                builder: (_) => const GuardProfileScreen(),
+                                builder: (_) => const GuardPayslipsScreen(),
                               ),
                             ),
                             child: Column(

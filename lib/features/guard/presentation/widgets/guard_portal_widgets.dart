@@ -119,14 +119,18 @@ class GuardHeroPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: tokens.primaryStrong,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        gradient: LinearGradient(
+          colors: [tokens.primary, tokens.primaryStrong],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: tokens.primaryStrong.withValues(alpha: 0.18),
+            color: tokens.primaryStrong.withValues(alpha: 0.22),
             blurRadius: 26,
-            offset: const Offset(0, 14),
+            offset: const Offset(0, 10),
           ),
         ],
       ),
