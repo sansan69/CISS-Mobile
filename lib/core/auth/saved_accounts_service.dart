@@ -142,6 +142,34 @@ class SavedAccountsService {
     } catch (_) {}
   }
 
+  /// Flip biometric-unlock for one saved account without touching its
+  /// display name or login timestamp.
+  Future<void> setBiometricEnabled({
+    required String role,
+    required String loginId,
+    required bool enabled,
+  }) async {
+    try {
+      final all = await loadAll();
+      final updated = all.map((account) {
+        if (account.role == role && account.loginId == loginId) {
+          return account.withUpdated(biometricEnabled: enabled);
+        }
+        return account;
+      }).toList();
+      await _storage.write(
+        key: _storageKey,
+        value: jsonEncode(updated.map((a) => a.toJson()).toList()),
+      );
+    } catch (_) {}
+  }
+
+  /// True when at least one saved account has biometric unlock enabled.
+  Future<bool> anyBiometricEnabled() async {
+    final all = await loadAll();
+    return all.any((account) => account.biometricEnabled);
+  }
+
   Future<void> saveAll(List<SavedAccount> accounts) async {
     try {
       final trimmed = accounts.take(_maxAccounts).toList();

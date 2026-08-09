@@ -18,25 +18,25 @@ enum LoginRole { guard, fieldOfficer }
 class RoleLoginScreen extends ConsumerStatefulWidget {
   const RoleLoginScreen.guard({super.key})
     : role = LoginRole.guard,
-      pageTitle = 'Guard duty login',
-      heroTitle = 'Guard Operations',
-      heroSubtitle = 'Secure access for on-site attendance and shift tools.',
+      pageTitle = 'Guard login',
+      heroTitle = 'Guard',
+      heroSubtitle = 'Sign in for attendance and shift tools.',
       usernameLabel = 'Employee ID or phone',
       usernameHint = 'CISS/2026/001',
       passwordLabel = 'Duty PIN',
       passwordHint = '••••',
-      buttonLabel = 'Continue to duty workspace';
+      buttonLabel = 'Sign in';
 
   const RoleLoginScreen.fieldOfficer({super.key})
     : role = LoginRole.fieldOfficer,
-      pageTitle = 'Field officer command login',
-      heroTitle = 'Field Command',
-      heroSubtitle = 'Secure access for district oversight and reporting.',
+      pageTitle = 'Field Officer login',
+      heroTitle = 'Field Officer',
+      heroSubtitle = 'Sign in for district oversight and reporting.',
       usernameLabel = 'Official email',
       usernameHint = 'officer@cissindia.co.in',
       passwordLabel = 'Account password',
       passwordHint = '••••••••',
-      buttonLabel = 'Continue to command workspace';
+      buttonLabel = 'Sign in';
 
   final LoginRole role;
   final String pageTitle;
@@ -72,9 +72,13 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
 
   Future<void> _checkBiometricAvailability() async {
     final bioService = ref.read(biometricServiceProvider);
-    final available = await bioService.canAuthenticate();
+    final support = await bioService.checkFingerprintSupport();
     if (mounted) {
-      setState(() => _biometricAvailable = available);
+      setState(
+        () =>
+            _biometricAvailable =
+                support.availability == FingerprintAvailability.supported,
+      );
     }
   }
 
@@ -88,11 +92,6 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
       vsync: this,
       duration: const Duration(milliseconds: 700),
     );
-
-    // Staggered entrance animation
-    Future.delayed(const Duration(milliseconds: 120), () {
-      if (mounted) _animCtrl.forward();
-    });
   }
 
   @override
@@ -141,10 +140,11 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
     setState(() => _loading = true);
     try {
       final bioService = ref.read(biometricServiceProvider);
-      final success = await bioService.authenticate(
-        localizedReason: 'Authenticate to sign in as ${account.displayName}',
+      final outcome = await bioService.authenticateFingerprint(
+        localizedReason:
+            'Authenticate to sign in as ${account.displayName}',
       );
-      if (!success || !mounted) {
+      if (outcome != BiometricAuthOutcome.success || !mounted) {
         setState(() => _loading = false);
         return;
       }
@@ -177,7 +177,7 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Biometric login failed: $e';
+        _error = 'Could not sign in with saved login. Please enter your details and try again.';
       });
     }
   }
@@ -329,8 +329,6 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
 
     // Role-specific accent colors
     final Color heroColor = isGuard ? tokens.primary : tokens.accent;
-    final Color heroColorStrong =
-        isGuard ? tokens.primaryStrong : tokens.accent.withValues(alpha: 0.8);
     final Color heroSoft = isGuard ? tokens.primarySoft : tokens.accent.withValues(alpha: 0.1);
     final IconData roleIcon = isGuard
         ? Icons.verified_user_rounded
@@ -390,11 +388,11 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                isGuard ? 'GUARD ACCESS' : 'OFFICER ACCESS',
+                                isGuard ? 'Guard login' : 'Field Officer login',
                                 style: theme.textTheme.labelSmall?.copyWith(
                                   color: heroColor,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 0.8,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.2,
                                 ),
                               ),
                             ],
@@ -412,7 +410,7 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                   padding: const EdgeInsets.fromLTRB(20, 32, 20, 0),
                   child: Column(
                     children: <Widget>[
-                      // Large role icon with gradient
+                      // Large role icon
                       _FadeSlide(
                         fade: _fade(0.05, 0.45),
                         slide: _slide(0.05, 0.45),
@@ -421,22 +419,7 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                           height: 96,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                heroColor,
-                                heroColorStrong,
-                              ],
-                            ),
-                            boxShadow: <BoxShadow>[
-                              BoxShadow(
-                                color: heroColor.withValues(alpha: 0.25),
-                                blurRadius: 32,
-                                spreadRadius: 4,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
+                            color: heroColor,
                           ),
                           child: Icon(
                             roleIcon,
@@ -629,14 +612,15 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                                       );
                                     },
                               style: TextButton.styleFrom(
-                                foregroundColor: tokens.inkMuted,
-                                padding: EdgeInsets.zero,
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                foregroundColor: tokens.primary,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 12,
+                                ),
                               ),
                               child: Text(
                                 'Set up PIN for first-time login',
-                                style: theme.textTheme.bodySmall?.copyWith(
+                                style: theme.textTheme.bodyMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -657,14 +641,15 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                                       );
                                     },
                               style: TextButton.styleFrom(
-                                foregroundColor: tokens.danger.withValues(alpha: 0.8),
-                                padding: EdgeInsets.zero,
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                foregroundColor: tokens.inkMuted,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 12,
+                                ),
                               ),
                               child: Text(
                                 'Forgot PIN?',
-                                style: theme.textTheme.bodySmall?.copyWith(
+                                style: theme.textTheme.bodyMedium?.copyWith(
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -780,7 +765,7 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  'Enable biometric login for next time',
+                                  'Enable fingerprint login for next time',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: tokens.inkMuted,
                                     fontWeight: FontWeight.w500,
@@ -848,13 +833,9 @@ class _FadeSlide extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: fade,
-      child: SlideTransition(
-        position: slide,
-        child: child,
-      ),
-    );
+    // Entrance animations intentionally removed — content renders instantly
+    // for a calmer, more usable first impression.
+    return child;
   }
 }
 
@@ -892,7 +873,7 @@ class _IconButtonCircle extends StatelessWidget {
   }
 }
 
-class _LoginTextField extends StatelessWidget {
+class _LoginTextField extends StatefulWidget {
   const _LoginTextField({
     required this.controller,
     required this.label,
@@ -920,14 +901,28 @@ class _LoginTextField extends StatelessWidget {
   final CissThemeTokens tokens;
 
   @override
+  State<_LoginTextField> createState() => _LoginTextFieldState();
+}
+
+class _LoginTextFieldState extends State<_LoginTextField> {
+  late bool _obscured;
+
+  @override
+  void initState() {
+    super.initState();
+    _obscured = widget.obscureText;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final tokens = widget.tokens;
     return TextField(
-      controller: controller,
-      focusNode: focusNode,
-      obscureText: obscureText,
-      keyboardType: keyboardType,
-      textInputAction: textInputAction,
-      onSubmitted: onSubmitted,
+      controller: widget.controller,
+      focusNode: widget.focusNode,
+      obscureText: _obscured,
+      keyboardType: widget.keyboardType,
+      textInputAction: widget.textInputAction,
+      onSubmitted: widget.onSubmitted,
       autocorrect: false,
       enableSuggestions: false,
       style: TextStyle(
@@ -936,16 +931,28 @@ class _LoginTextField extends StatelessWidget {
         color: tokens.ink,
       ),
       decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
+        labelText: widget.label,
+        hintText: widget.hint,
         hintStyle: TextStyle(
           color: tokens.inkMuted.withValues(alpha: 0.5),
         ),
         prefixIcon: Icon(
-          prefixIcon,
+          widget.prefixIcon,
           size: 20,
           color: tokens.inkMuted,
         ),
+        suffixIcon: widget.obscureText
+            ? IconButton(
+                icon: Icon(
+                  _obscured
+                      ? Icons.visibility_outlined
+                      : Icons.visibility_off_outlined,
+                  size: 20,
+                  color: tokens.inkMuted,
+                ),
+                onPressed: () => setState(() => _obscured = !_obscured),
+              )
+            : null,
         filled: true,
         fillColor: tokens.surface,
         border: OutlineInputBorder(
@@ -959,7 +966,7 @@ class _LoginTextField extends StatelessWidget {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(
-            color: accentColor,
+            color: widget.accentColor,
             width: 2,
           ),
         ),

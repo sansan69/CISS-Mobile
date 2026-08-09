@@ -50,6 +50,20 @@ class DeviceCompatService {
     }
   }
 
+  /// Opens the OS fingerprint enrollment screen (falls back to biometric
+  /// enrollment, then security settings). Used when the device has a scanner
+  /// but no fingerprint registered yet.
+  Future<bool> openFingerprintEnrollSettings() async {
+    try {
+      return await _channel.invokeMethod<bool>(
+            'openFingerprintEnrollSettings',
+          ) ??
+          false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   /// Build.MANUFACTURER, e.g. "Xiaomi", "vivo", "google".
   Future<String> getManufacturer() async {
     try {

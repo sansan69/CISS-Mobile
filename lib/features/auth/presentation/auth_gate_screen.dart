@@ -19,8 +19,6 @@ import '../../../core/region/region_service.dart';
 import '../../../shared/widgets/auth/login_background.dart';
 import '../../field_officer/presentation/field_officer_shell.dart';
 import '../../guard/presentation/guard_shell.dart';
-import '../../admin/presentation/admin_shell.dart';
-import '../../client/presentation/client_shell.dart';
 import 'login_hub_screen.dart';
 
 class AuthGateScreen extends ConsumerStatefulWidget {
@@ -36,6 +34,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
   bool _permissionsChecked = false;
   bool _bioTriggered = false;
   bool _regionChecked = false;
+  String? _bioMessage;
   String? _trackingReconciledUid;
   AuthSession? _lastSession;
 
@@ -43,34 +42,60 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
     if (!enabled || _authenticated || _isAuthenticating) return;
     if (!mounted) return;
 
-    setState(() => _isAuthenticating = true);
+    setState(() {
+      _isAuthenticating = true;
+      _bioMessage = null;
+    });
     try {
       final biometricService = ref.read(biometricServiceProvider);
-      final success = await biometricService.authenticate(
+      final outcome = await biometricService.authenticateFingerprint(
         localizedReason: 'Authenticate to access your duty workspace',
       );
 
       if (!mounted) return;
-      setState(() {
-        _authenticated = success;
-        _isAuthenticating = false;
-      });
+      switch (outcome) {
+        case BiometricAuthOutcome.success:
+          setState(() {
+            _authenticated = true;
+            _isAuthenticating = false;
+          });
+        case BiometricAuthOutcome.notAvailable:
+        case BiometricAuthOutcome.notEnrolled:
+          // The stored binding no longer matches this device — never brick
+          // the user; fall back to a fresh PIN/password sign-in.
+          setState(() {
+            _isAuthenticating = false;
+            _bioMessage =
+                'Fingerprint unlock is not available right now. '
+                'Sign in with your PIN or password to continue.';
+          });
+        case BiometricAuthOutcome.permanentlyLockedOut:
+          setState(() {
+            _isAuthenticating = false;
+            _bioMessage =
+                'Fingerprint was permanently locked on this device. '
+                'Sign in with your PIN or password to continue.';
+          });
+        case BiometricAuthOutcome.lockedOut:
+          setState(() {
+            _isAuthenticating = false;
+            _bioMessage =
+                'Fingerprint is temporarily locked. Unlock your phone '
+                'with its PIN or pattern, then retry.';
+          });
+        case BiometricAuthOutcome.failed:
+        case BiometricAuthOutcome.error:
+          setState(() {
+            _isAuthenticating = false;
+            _bioMessage = 'Could not verify with fingerprint. Try again.';
+          });
+      }
     } catch (error) {
       if (!mounted) return;
-      setState(() => _isAuthenticating = false);
-      // Show error so user isn't silently locked out.
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Biometric error: $error'),
-          action: SnackBarAction(
-            label: 'Retry',
-            onPressed: () {
-              _bioTriggered = false;
-              _maybeTriggerBiometrics();
-            },
-          ),
-        ),
-      );
+      setState(() {
+        _isAuthenticating = false;
+        _bioMessage = 'Could not verify with fingerprint. Please try again.';
+      });
     }
   }
 
@@ -119,7 +144,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
                           color: CissThemeTokens.of(context).danger,
                         ),
                         const SizedBox(height: 16),
-                        Text('Auth error: $error', textAlign: TextAlign.center),
+                        Text('Could not sign in. Please try again.', textAlign: TextAlign.center),
                         const SizedBox(height: 24),
                         FilledButton.tonal(
                           onPressed: () => ref.invalidate(authSessionProvider),
@@ -173,8 +198,13 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
                   () => setState(() {
                     _isAuthenticating = false;
                     _bioTriggered = false;
+                    _bioMessage = null;
                   }),
+              onUsePassword: () {
+                ref.read(authControllerProvider).signOut();
+              },
               isAuthenticating: _isAuthenticating,
+              message: _bioMessage,
             );
           }
 
@@ -187,12 +217,6 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
 
           if (session.role == AppRole.fieldOfficer) {
             return const FieldOfficerShell();
-          }
-          if (session.role == AppRole.admin) {
-            return const AdminShell();
-          }
-          if (session.role == AppRole.client) {
-            return const ClientShell();
           }
 
           return const GuardShell();
@@ -247,18 +271,14 @@ class _AppLoadingScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Brand mark with gradient ring
+                // Brand mark with solid ring
                 Container(
                   width: 84,
                   height: 84,
                   padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [tokens.primary, tokens.primaryStrong],
-                    ),
+                    color: tokens.primary,
                   ),
                   child: Container(
                     padding: const EdgeInsets.all(16),
@@ -301,11 +321,15 @@ class _AppLoadingScreen extends StatelessWidget {
 class _BiometricLockScreen extends StatelessWidget {
   const _BiometricLockScreen({
     required this.onRetry,
+    required this.onUsePassword,
     required this.isAuthenticating,
+    this.message,
   });
 
   final VoidCallback onRetry;
+  final VoidCallback onUsePassword;
   final bool isAuthenticating;
+  final String? message;
 
   @override
   Widget build(BuildContext context) {
@@ -320,29 +344,17 @@ class _BiometricLockScreen extends StatelessWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Lock icon with gradient background
+                  // Lock icon on solid background
                   Container(
                     width: 100,
                     height: 100,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [tokens.primary, tokens.primaryStrong],
-                      ),
+                      color: tokens.primary,
                       shape: BoxShape.circle,
-                      boxShadow: <BoxShadow>[
-                        BoxShadow(
-                          color: tokens.primary.withValues(alpha: 0.25),
-                          blurRadius: 32,
-                          spreadRadius: 4,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
                     ),
                     child: const Icon(
-                      Icons.lock_outline_rounded,
-                      size: 44,
+                      Icons.fingerprint_rounded,
+                      size: 48,
                       color: Colors.white,
                     ),
                   ),
@@ -358,10 +370,12 @@ class _BiometricLockScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'Unlock with biometrics to continue accessing your workspace',
+                    message ??
+                        'Place your finger on the scanner to continue '
+                            'accessing your workspace',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: tokens.inkMuted,
+                      color: message == null ? tokens.inkMuted : tokens.warning,
                       height: 1.4,
                     ),
                   ),
@@ -375,7 +389,7 @@ class _BiometricLockScreen extends StatelessWidget {
                         color: tokens.primary,
                       ),
                     )
-                  else
+                  else ...[
                     SizedBox(
                       width: double.infinity,
                       height: 52,
@@ -393,10 +407,16 @@ class _BiometricLockScreen extends StatelessWidget {
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        icon: const Icon(Icons.fingerprint_rounded),
-                        label: const Text('Unlock App'),
+                        icon: const Icon(Icons.fingerprint_rounded, size: 20),
+                        label: const Text('Try fingerprint again'),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: onUsePassword,
+                      child: const Text('Sign in with PIN or password'),
+                    ),
+                  ],
                 ],
               ),
             ),

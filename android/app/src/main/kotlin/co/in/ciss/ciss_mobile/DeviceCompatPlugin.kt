@@ -58,6 +58,9 @@ class DeviceCompatPlugin : FlutterPlugin, MethodCallHandler {
             "openBrandAutostartSettings" -> {
                 result.success(openBrandAutostartSettings())
             }
+            "openFingerprintEnrollSettings" -> {
+                result.success(openFingerprintEnrollSettings())
+            }
             "getManufacturer" -> {
                 result.success(manufacturer())
             }
@@ -154,6 +157,43 @@ class DeviceCompatPlugin : FlutterPlugin, MethodCallHandler {
         } catch (_: Exception) {
             false
         }
+    }
+
+    /**
+     * Opens the OS fingerprint enrollment screen (Android 6.0+). Falls back to
+     * the biometric enrollment screen (Android 9+) and then the security
+     * settings page when the OEM blocks the direct activity.
+     */
+    private fun openFingerprintEnrollSettings(): Boolean {
+        val candidates = mutableListOf<Intent>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            candidates.add(
+                Intent(Settings.ACTION_FINGERPRINT_ENROLL).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                },
+            )
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            candidates.add(
+                Intent(Settings.ACTION_BIOMETRIC_ENROLL).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                },
+            )
+        }
+        candidates.add(
+            Intent(Settings.ACTION_SECURITY_SETTINGS).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            },
+        )
+        for (intent in candidates) {
+            try {
+                context.startActivity(intent)
+                return true
+            } catch (_: Exception) {
+                // Try the next fallback.
+            }
+        }
+        return false
     }
 
     private fun manufacturer(): String = Build.MANUFACTURER ?: "unknown"

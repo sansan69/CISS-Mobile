@@ -5,6 +5,42 @@ import 'package:local_auth_android/local_auth_android.dart';
 import 'package:local_auth_darwin/local_auth_darwin.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+/// Whether this device can be used for fingerprint unlock.
+///
+/// The user requirement is fingerprint sensors only (optical or ultrasonic).
+/// On Android, fingerprint sensors report as [BiometricType.fingerprint] or
+/// [BiometricType.strong] (Class 3). Face-only and iris-only devices do NOT
+/// qualify — [BiometricType.face] / [BiometricType.weak] are rejected.
+enum FingerprintAvailability { supported, noSensor, notEnrolled, unknown }
+
+/// Typed outcome of a biometric prompt so UI can react to the OS error codes
+/// (per local_auth docs: NotAvailable=13, NotEnrolled=11, LockedOut=7,
+/// PermanentlyLockedOut=9).
+enum BiometricAuthOutcome {
+  success,
+  failed,
+  notAvailable,
+  notEnrolled,
+  lockedOut,
+  permanentlyLockedOut,
+  error,
+}
+
+class FingerprintSupport {
+  const FingerprintSupport({
+    required this.availability,
+    required this.enrolledBiometrics,
+  });
+
+  final FingerprintAvailability availability;
+  final List<BiometricType> enrolledBiometrics;
+
+  static const unknown = FingerprintSupport(
+    availability: FingerprintAvailability.unknown,
+    enrolledBiometrics: <BiometricType>[],
+  );
+}
+
 class BiometricService {
   final LocalAuthentication _auth = LocalAuthentication();
 
@@ -25,6 +61,58 @@ class BiometricService {
 
   Future<List<BiometricType>> getAvailableBiometrics() async {
     return await _auth.getAvailableBiometrics();
+  }
+
+  /// Industry-standard capability probe for fingerprint unlock:
+  /// 1. `isDeviceSupported` — does the platform expose any biometric API.
+  /// 2. `getAvailableBiometrics` — which types are ENROLLED right now.
+  /// 3. `canCheckBiometrics` — distinguishes "no sensor" from "sensor
+  ///    present but nothing enrolled" (canCheckBiometrics is hardware-only).
+  ///
+  /// Fingerprint = [BiometricType.fingerprint] or [BiometricType.strong]
+  /// (Android Class 3 — covers optical and ultrasonic sensors). Face and
+  /// weak-class devices are deliberately excluded.
+  Future<FingerprintSupport> checkFingerprintSupport() async {
+    var deviceSupported = false;
+    try {
+      deviceSupported = await _auth.isDeviceSupported();
+    } catch (_) {}
+    if (!deviceSupported) {
+      return FingerprintSupport(
+        availability: FingerprintAvailability.unknown,
+        enrolledBiometrics: const <BiometricType>[],
+      );
+    }
+
+    List<BiometricType> available = const <BiometricType>[];
+    try {
+      available = await _auth.getAvailableBiometrics();
+    } catch (_) {}
+
+    final hasFingerprint =
+        available.contains(BiometricType.fingerprint) ||
+        available.contains(BiometricType.strong);
+    if (hasFingerprint) {
+      return FingerprintSupport(
+        availability: FingerprintAvailability.supported,
+        enrolledBiometrics: available,
+      );
+    }
+
+    var canCheck = false;
+    try {
+      canCheck = await _auth.canCheckBiometrics;
+    } catch (_) {}
+    if (!canCheck) {
+      return FingerprintSupport(
+        availability: FingerprintAvailability.noSensor,
+        enrolledBiometrics: available,
+      );
+    }
+    return FingerprintSupport(
+      availability: FingerprintAvailability.notEnrolled,
+      enrolledBiometrics: available,
+    );
   }
 
   /// Authenticate with biometrics, falling back to device credentials
@@ -100,6 +188,44 @@ class BiometricService {
     } catch (e) {
       debugPrint('Biometric-only auth error: $e');
       return false;
+    }
+  }
+
+  /// Fingerprint-gated authentication with a typed outcome so the UI can
+  /// guide the user through OS error states (per local_auth error codes).
+  Future<BiometricAuthOutcome> authenticateFingerprint({
+    required String localizedReason,
+  }) async {
+    try {
+      final didAuthenticate = await _auth.authenticate(
+        localizedReason: localizedReason,
+        options: const AuthenticationOptions(
+          useErrorDialogs: true,
+          stickyAuth: true,
+          sensitiveTransaction: true,
+          biometricOnly: true,
+        ),
+      );
+      return didAuthenticate
+          ? BiometricAuthOutcome.success
+          : BiometricAuthOutcome.failed;
+    } on PlatformException catch (e) {
+      debugPrint('Fingerprint auth PlatformException: ${e.message}');
+      switch (e.code) {
+        case 'NotAvailable':
+          return BiometricAuthOutcome.notAvailable;
+        case 'NotEnrolled':
+          return BiometricAuthOutcome.notEnrolled;
+        case 'LockedOut':
+          return BiometricAuthOutcome.lockedOut;
+        case 'PermanentlyLockedOut':
+          return BiometricAuthOutcome.permanentlyLockedOut;
+        default:
+          return BiometricAuthOutcome.error;
+      }
+    } catch (e) {
+      debugPrint('Fingerprint auth error: $e');
+      return BiometricAuthOutcome.error;
     }
   }
 }
