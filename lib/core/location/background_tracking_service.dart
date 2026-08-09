@@ -11,6 +11,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:battery_plus/battery_plus.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 
 import '../network/mobile_repository.dart';
 import '../region/region_service.dart';
@@ -195,6 +197,33 @@ void onStart(ServiceInstance service) async {
     });
   }
 
+  // Reads device state for telemetry attached to every heartbeat: battery
+  // level (0..1), WiFi connectivity, and the active network type. All reads
+  // are best-effort — a plugin failure must never block a heartbeat.
+  Future<Map<String, dynamic>> readDeviceTelemetry() async {
+    var batteryLevel = 0.0;
+    var wifiConnected = false;
+    var networkType = 'unknown';
+    try {
+      final level = await Battery().batteryLevel;
+      batteryLevel = ((level.isFinite ? level : 0) / 100).clamp(0.0, 1.0);
+    } catch (_) {}
+    try {
+      final results = await Connectivity().checkConnectivity();
+      wifiConnected = results.contains(ConnectivityResult.wifi);
+      networkType = results
+          .map((result) => result.name)
+          .where((name) => name.isNotEmpty)
+          .join(',');
+      if (networkType.isEmpty) networkType = 'none';
+    } catch (_) {}
+    return {
+      'batteryLevel': batteryLevel,
+      'wifiConnected': wifiConnected,
+      'networkType': networkType,
+    };
+  }
+
   Future<void> sendHeartbeat() async {
     if (siteContext == null) return;
 
@@ -326,6 +355,8 @@ void onStart(ServiceInstance service) async {
       String? token = await user?.getIdToken(false);
       var heartbeatSucceeded = false;
 
+      final telemetry = await readDeviceTelemetry();
+
       try {
         http.Response response = await http
             .post(
@@ -339,8 +370,10 @@ void onStart(ServiceInstance service) async {
                 'lat': position.latitude,
                 'lng': position.longitude,
                 'accuracy': accuracy,
-                'batteryLevel': null,
+                'batteryLevel': telemetry['batteryLevel'],
                 'speed': position.speed >= 0 ? position.speed : null,
+                'wifiConnected': telemetry['wifiConnected'],
+                'networkType': telemetry['networkType'],
                 'capturedAt': DateTime.now().toUtc().toIso8601String(),
               }),
             )
@@ -362,8 +395,10 @@ void onStart(ServiceInstance service) async {
                     'lat': position.latitude,
                     'lng': position.longitude,
                     'accuracy': accuracy,
-                    'batteryLevel': null,
+                    'batteryLevel': telemetry['batteryLevel'],
                     'speed': position.speed >= 0 ? position.speed : null,
+                    'wifiConnected': telemetry['wifiConnected'],
+                    'networkType': telemetry['networkType'],
                     'capturedAt': DateTime.now().toUtc().toIso8601String(),
                   }),
                 )

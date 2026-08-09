@@ -9,6 +9,7 @@ import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import 'field_officer_guard_detail_screen.dart';
+import 'field_officer_live_map_screen.dart';
 
 final FutureProvider<List<GuardProfileModel>> fieldOfficerGuardsProvider =
     FutureProvider<List<GuardProfileModel>>((Ref ref) {
@@ -77,6 +78,17 @@ class _FieldOfficerGuardsScreenState
                         'Guards',
                         style: AppTypography.display(context).copyWith(fontSize: 22),
                       ),
+                    ),
+                    IconButton(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const FieldOfficerLiveMapScreen(),
+                          ),
+                        );
+                      },
+                      icon: Icon(Icons.map_rounded, color: tokens.primary, size: 22),
+                      tooltip: 'Live map',
                     ),
                     IconButton(
                       onPressed: () => ref.invalidate(fieldOfficerGuardsProvider),

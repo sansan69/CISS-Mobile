@@ -7,7 +7,9 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/location/live_location_service.dart';
+import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../shared/widgets/modern_card.dart';
+import 'guard_day_timeline_screen.dart';
 
 class FieldOfficerGuardDetailScreen extends StatefulWidget {
   const FieldOfficerGuardDetailScreen({
@@ -15,11 +17,13 @@ class FieldOfficerGuardDetailScreen extends StatefulWidget {
     required this.employeeId,
     required this.guardName,
     required this.siteName,
+    this.attendanceEntry,
   });
 
   final String employeeId;
   final String guardName;
   final String siteName;
+  final FieldOfficerAttendanceEntry? attendanceEntry;
 
   @override
   State<FieldOfficerGuardDetailScreen> createState() =>
@@ -38,9 +42,9 @@ class _FieldOfficerGuardDetailScreenState
   @override
   void initState() {
     super.initState();
-    _sub = LiveLocationService()
-        .streamGuardLocation(widget.employeeId)
-        .listen((data) {
+    _sub = LiveLocationService().streamGuardLocation(widget.employeeId).listen((
+      data,
+    ) {
       if (!mounted) return;
       setState(() {
         _location = data;
@@ -107,9 +111,10 @@ class _FieldOfficerGuardDetailScreenState
               child: FlutterMap(
                 mapController: _mapController,
                 options: MapOptions(
-                  initialCenter: hasCoords
-                      ? LatLng(guardLat, guardLng)
-                      : const LatLng(10.0, 76.0),
+                  initialCenter:
+                      hasCoords
+                          ? LatLng(guardLat, guardLng)
+                          : const LatLng(10.0, 76.0),
                   initialZoom: 17,
                   onMapEvent: (event) {
                     if (event is MapEventMoveStart ||
@@ -137,7 +142,9 @@ class _FieldOfficerGuardDetailScreenState
                           point: LatLng(guardLat, guardLng),
                           width: 60,
                           height: 60,
-                          child: _GuardMarker(isOutOfZone: loc?.isOutOfZone ?? false),
+                          child: _GuardMarker(
+                            isOutOfZone: loc?.isOutOfZone ?? false,
+                          ),
                         ),
                       ],
                     ),
@@ -161,9 +168,13 @@ class _FieldOfficerGuardDetailScreenState
                         CircleMarker(
                           point: LatLng(guardLat, guardLng),
                           radius: loc!.accuracy,
-                          color: (loc.isOutOfZone ? tokens.danger : tokens.success)
+                          color: (loc.isOutOfZone
+                                  ? tokens.danger
+                                  : tokens.success)
                               .withValues(alpha: 0.06),
-                          borderColor: (loc.isOutOfZone ? tokens.danger : tokens.success)
+                          borderColor: (loc.isOutOfZone
+                                  ? tokens.danger
+                                  : tokens.success)
                               .withValues(alpha: 0.25),
                           borderStrokeWidth: 1,
                         ),
@@ -182,7 +193,11 @@ class _FieldOfficerGuardDetailScreenState
               color: tokens.warningSoft,
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, size: 18, color: tokens.warning),
+                  Icon(
+                    Icons.warning_amber_rounded,
+                    size: 18,
+                    color: tokens.warning,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -214,11 +229,12 @@ class _FieldOfficerGuardDetailScreenState
                     // Status badge
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
-                        color: isActive
-                            ? tokens.successSoft
-                            : tokens.dangerSoft,
+                        color:
+                            isActive ? tokens.successSoft : tokens.dangerSoft,
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
@@ -252,33 +268,49 @@ class _FieldOfficerGuardDetailScreenState
                 _infoRow(tokens, 'Site', widget.siteName),
                 if (loc != null) ...[
                   _infoRow(tokens, 'Status', loc.status),
-                  _infoRow(
-                    tokens,
-                    'Last update',
-                    _formatSince(loc.updatedAt),
-                  ),
+                  _infoRow(tokens, 'Last update', _formatSince(loc.updatedAt)),
                   if (hasCoords && siteLat != null && siteLng != null) ...[
                     _infoRow(
                       tokens,
                       'Distance from site',
-                      '${_calculateDistance(
-                            guardLat,
-                            guardLng,
-                            siteLat,
-                            siteLng,
-                          ).toStringAsFixed(0)} m',
+                      '${_calculateDistance(guardLat, guardLng, siteLat, siteLng).toStringAsFixed(0)} m',
                     ),
                   ],
-                  _infoRow(
-                    tokens,
-                    'In zone',
-                    loc.isOutOfZone ? '✗ OUTSIDE' : '✓ Inside',
-                  ),
+                  _DeviceStatusRow(location: loc),
                 ] else
                   _infoRow(tokens, 'Status', 'No location data'),
+
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => GuardDayTimelineScreen(
+                            employeeDocId: loc?.employeeDocId ?? widget.employeeId,
+                            guardName: widget.guardName,
+                            employeeId: loc?.employeeId ?? widget.employeeId,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.route_rounded, size: 18),
+                    label: Text(
+                      'VIEW DAY TIMELINE',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
+
+          if (widget.attendanceEntry != null)
+            _AttendanceEvidenceCard(entry: widget.attendanceEntry!),
 
           // Recenter button
           if (!_followGuard && hasCoords)
@@ -295,7 +327,9 @@ class _FieldOfficerGuardDetailScreenState
                   label: Text(
                     'RECENTER ON GUARD',
                     style: TextStyle(
-                        fontWeight: FontWeight.w700, letterSpacing: 1),
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 1,
+                    ),
                   ),
                 ),
               ),
@@ -345,16 +379,194 @@ class _FieldOfficerGuardDetailScreenState
   }
 
   double _calculateDistance(
-      double lat1, double lng1, double lat2, double lng2) {
+    double lat1,
+    double lng1,
+    double lat2,
+    double lng2,
+  ) {
     const r = 6371000; // Earth radius in meters
     final dLat = (lat2 - lat1) * math.pi / 180;
     final dLng = (lng2 - lng1) * math.pi / 180;
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
         math.cos(lat1 * math.pi / 180) *
             math.cos(lat2 * math.pi / 180) *
             math.sin(dLng / 2) *
             math.sin(dLng / 2);
     return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+}
+
+/// Device telemetry strip — battery level, network state, GPS reliability.
+class _DeviceStatusRow extends StatelessWidget {
+  const _DeviceStatusRow({required this.location});
+
+  final GuardLocationData location;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    final battery = location.batteryLevel;
+    final batteryColor = battery == null
+        ? tokens.inkMuted
+        : battery < 0.15
+        ? tokens.danger
+        : battery < 0.5
+        ? tokens.warning
+        : tokens.success;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          _telemetryItem(
+            tokens,
+            icon: Icons.battery_5_bar_rounded,
+            label: battery == null
+                ? 'Battery —'
+                : 'Battery ${(battery * 100).round()}%',
+            color: batteryColor,
+          ),
+          _telemetryDivider(tokens),
+          _telemetryItem(
+            tokens,
+            icon: location.wifiConnected == true
+                ? Icons.wifi_rounded
+                : Icons.wifi_off_rounded,
+            label: location.wifiConnected == true
+                ? (location.networkType?.toUpperCase() ?? 'WIFI')
+                : 'DATA',
+            color: location.wifiConnected == true
+                ? tokens.success
+                : tokens.inkMuted,
+          ),
+          _telemetryDivider(tokens),
+          _telemetryItem(
+            tokens,
+            icon: location.gpsReliable == true
+                ? Icons.gps_fixed_rounded
+                : Icons.gps_off_rounded,
+            label: location.gpsReliable == true
+                ? 'GPS ${location.accuracy.round()} m'
+                : 'GPS weak',
+            color: location.gpsReliable == true
+                ? tokens.success
+                : tokens.danger,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _telemetryItem(
+    CissThemeTokens tokens, {
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Expanded(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 5),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _telemetryDivider(CissThemeTokens tokens) {
+    return Container(
+      width: 1,
+      height: 20,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      color: tokens.border,
+    );
+  }
+}
+
+class _AttendanceEvidenceCard extends StatelessWidget {
+  const _AttendanceEvidenceCard({required this.entry});
+
+  final FieldOfficerAttendanceEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    final evidence = <String>[
+      if (entry.distanceMeters != null)
+        'Distance from site: ${entry.distanceMeters!.round()} m',
+      if (entry.gpsAccuracyMeters != null)
+        'GPS accuracy: ${entry.gpsAccuracyMeters!.round()} m',
+      if (entry.geofenceRadiusAtTime != null)
+        'Geofence: ${entry.geofenceRadiusAtTime!.round()} m',
+      if (entry.isMockLocationSuspected)
+        'Mock location suspected${entry.mockLocationReason == null ? '' : ': ${entry.mockLocationReason}'}',
+      if (entry.reviewStatus != null) 'Review: ${entry.reviewStatus}',
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+      child: ModernCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Attendance evidence',
+              style: TextStyle(fontWeight: FontWeight.w800, color: tokens.ink),
+            ),
+            const SizedBox(height: 8),
+            if (evidence.isEmpty)
+              Text(
+                'No additional evidence available.',
+                style: TextStyle(color: tokens.inkMuted),
+              )
+            else
+              ...evidence.map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 5),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline_rounded,
+                        size: 15,
+                        color:
+                            entry.isMockLocationSuspected
+                                ? tokens.danger
+                                : tokens.inkMuted,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          item,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color:
+                                entry.isMockLocationSuspected
+                                    ? tokens.danger
+                                    : tokens.ink,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -386,11 +598,7 @@ class _GuardMarker extends StatelessWidget {
           ),
           child: Icon(Icons.person, color: tokens.surface, size: 14),
         ),
-        Container(
-          width: 2,
-          height: 10,
-          color: color.withValues(alpha: 0.6),
-        ),
+        Container(width: 2, height: 10, color: color.withValues(alpha: 0.6)),
         Icon(Icons.arrow_drop_down, color: color, size: 20),
       ],
     );

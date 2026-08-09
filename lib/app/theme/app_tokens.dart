@@ -6,7 +6,6 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
     required this.surface,
     required this.surfaceMuted,
     required this.surfaceStrong,
-    required this.surfaceGlass,
     required this.surfaceAlt,
     required this.border,
     required this.borderStrong,
@@ -28,7 +27,6 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
   final Color surface;
   final Color surfaceMuted;
   final Color surfaceStrong;
-  final Color surfaceGlass;
   final Color surfaceAlt;
   final Color border;
   final Color borderStrong;
@@ -51,16 +49,15 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
       surface: Color(0xFFFFFFFF),
       surfaceMuted: Color(0xFFF5F8FA),
       surfaceStrong: Color(0xFFE1E8ED),
-      surfaceGlass: Color(0xB2FFFFFF),
       surfaceAlt: Color(0xFFF8FAFC),
       border: Color(0xFFD3DFE9),
       borderStrong: Color(0xFFA2B6C7),
       ink: Color(0xFF0F1F31),
       inkMuted: Color(0xFF536A80),
-      primary: Color(0xFF1B3D6D),
-      primaryStrong: Color(0xFF0E2342),
+      primary: Color(0xFF014C85),
+      primaryStrong: Color(0xFF013A6B),
       primarySoft: Color(0xFFE3EDF7),
-      accent: Color(0xFFE08D23),
+      accent: Color(0xFFBD9C55),
       success: Color(0xFF1B825E),
       successSoft: Color(0xFFE3F5EE),
       warning: Color(0xFFB86618),
@@ -76,7 +73,6 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
       surface: Color(0xFF0F1622),
       surfaceMuted: Color(0xFF141D2D),
       surfaceStrong: Color(0xFF1A263B),
-      surfaceGlass: Color(0x990F1622),
       surfaceAlt: Color(0xFF141D2D),
       border: Color(0xFF1E2E44),
       borderStrong: Color(0xFF334B68),
@@ -85,7 +81,7 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
       primary: Color(0xFF5C9DD6),
       primaryStrong: Color(0xFF8AC1EB),
       primarySoft: Color(0xFF14243A),
-      accent: Color(0xFFF5B041),
+      accent: Color(0xFFD8B96C),
       success: Color(0xFF46C289),
       successSoft: Color(0xFF0E2E20),
       warning: Color(0xFFE89A38),
@@ -106,7 +102,6 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
     Color? surface,
     Color? surfaceMuted,
     Color? surfaceStrong,
-    Color? surfaceGlass,
     Color? surfaceAlt,
     Color? border,
     Color? borderStrong,
@@ -128,7 +123,6 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
       surface: surface ?? this.surface,
       surfaceMuted: surfaceMuted ?? this.surfaceMuted,
       surfaceStrong: surfaceStrong ?? this.surfaceStrong,
-      surfaceGlass: surfaceGlass ?? this.surfaceGlass,
       surfaceAlt: surfaceAlt ?? this.surfaceAlt,
       border: border ?? this.border,
       borderStrong: borderStrong ?? this.borderStrong,
@@ -155,7 +149,6 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
       surface: Color.lerp(surface, other.surface, t)!,
       surfaceMuted: Color.lerp(surfaceMuted, other.surfaceMuted, t)!,
       surfaceStrong: Color.lerp(surfaceStrong, other.surfaceStrong, t)!,
-      surfaceGlass: Color.lerp(surfaceGlass, other.surfaceGlass, t)!,
       surfaceAlt: Color.lerp(surfaceAlt, other.surfaceAlt, t)!,
       border: Color.lerp(border, other.border, t)!,
       borderStrong: Color.lerp(borderStrong, other.borderStrong, t)!,
@@ -200,15 +193,6 @@ abstract final class AppShadows {
   static const List<BoxShadow> subtle = <BoxShadow>[
     BoxShadow(color: Color(0x06060E18), blurRadius: 10, offset: Offset(0, 4)),
   ];
-
-  static const List<BoxShadow> elevated = <BoxShadow>[
-    BoxShadow(
-      color: Color(0x0F060E18),
-      blurRadius: 28,
-      offset: Offset(0, 12),
-      spreadRadius: -4,
-    ),
-  ];
 }
 
 /// Pre-defined typography scale for consistent dashboard text.
@@ -240,12 +224,12 @@ abstract final class AppTypography {
   static TextStyle body(BuildContext context) =>
       Theme.of(context).textTheme.bodyMedium!.copyWith(height: 1.5);
 
-  /// Small labels — 12px, bold, muted
+  /// Small labels — 13px, bold, muted
   static TextStyle label(BuildContext context) =>
       Theme.of(context).textTheme.labelSmall!.copyWith(
         fontWeight: FontWeight.w700,
-        fontSize: 12,
-        letterSpacing: 0.3,
+        fontSize: 13,
+        letterSpacing: 0.2,
         height: 1.3,
       );
 
@@ -258,9 +242,9 @@ abstract final class AppTypography {
         letterSpacing: 0,
       );
 
-  /// Micro text — 11px, medium
+  /// Micro text — 12px, medium. Minimum size for functional secondary text.
   static TextStyle micro(BuildContext context) => Theme.of(context)
       .textTheme
       .labelSmall!
-      .copyWith(fontSize: 11, fontWeight: FontWeight.w500, height: 1.3);
+      .copyWith(fontSize: 12, fontWeight: FontWeight.w500, height: 1.3);
 }

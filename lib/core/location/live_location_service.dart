@@ -26,6 +26,13 @@ class GuardLocationData {
     this.siteLat,
     this.siteLng,
     this.geofenceRadius,
+    this.batteryLevel,
+    this.speed,
+    this.wifiConnected,
+    this.networkType,
+    this.gpsReliable,
+    this.zoneStatus,
+    this.distanceFromSite,
   });
 
   /// Firestore doc ID (no slashes)
@@ -48,6 +55,15 @@ class GuardLocationData {
   final double? siteLat;
   final double? siteLng;
   final double? geofenceRadius;
+
+  // ── Device telemetry (0..1, matching the web heartbeat payload) ──────────
+  final double? batteryLevel;
+  final double? speed;
+  final bool? wifiConnected;
+  final String? networkType;
+  final bool? gpsReliable;
+  final String? zoneStatus; // 'in_zone' | 'out_of_zone' | 'unreliable'
+  final double? distanceFromSite;
 
   /// Returns null if the document has no data (e.g. race during concurrent
   /// delete). Callers must handle null.
@@ -102,6 +118,13 @@ class GuardLocationData {
       siteLat: (d['siteLat'] as num?)?.toDouble(),
       siteLng: (d['siteLng'] as num?)?.toDouble(),
       geofenceRadius: (d['geofenceRadius'] as num?)?.toDouble(),
+      batteryLevel: (d['batteryLevel'] as num?)?.toDouble(),
+      speed: (d['speed'] as num?)?.toDouble(),
+      wifiConnected: d['wifiConnected'] as bool?,
+      networkType: d['networkType'] as String?,
+      gpsReliable: d['gpsReliable'] as bool?,
+      zoneStatus: d['zoneStatus'] as String?,
+      distanceFromSite: (d['distanceFromSite'] as num?)?.toDouble(),
     );
   }
 }

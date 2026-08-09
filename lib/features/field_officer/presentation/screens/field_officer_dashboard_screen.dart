@@ -8,6 +8,7 @@ import '../../../../../core/network/providers.dart';
 import '../../../../../shared/widgets/modern_hero.dart';
 import '../../../../../shared/widgets/metric_card.dart';
 import '../../../../../shared/widgets/modern_card.dart';
+import 'field_officer_live_map_screen.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
 import '../../../../../shared/widgets/state_block.dart';
@@ -119,35 +120,35 @@ class _DashboardBody extends ConsumerWidget {
               // Metric Cards
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: <Widget>[
-                      MetricCard(
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: MetricCard(
                         label: 'My Guards',
                         value: '${data.totalGuards}',
                         color: tokens.primary,
                         backgroundColor: tokens.primarySoft,
-                        width: 140,
                       ),
-                      const SizedBox(width: AppSpacing.sm),
-                      MetricCard(
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: MetricCard(
                         label: 'On Duty',
                         value: '$onDuty',
                         color: tokens.success,
                         backgroundColor: tokens.successSoft,
-                        width: 140,
                       ),
-                      const SizedBox(width: AppSpacing.sm),
-                      MetricCard(
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: MetricCard(
                         label: 'Check-ins',
                         value: '$checkedIn',
                         color: tokens.accent,
                         backgroundColor: tokens.warningSoft,
-                        width: 140,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -238,6 +239,72 @@ class _DashboardBody extends ConsumerWidget {
                       ),
                     ),
                   ],
+                ),
+              ),
+
+              const SizedBox(height: AppSpacing.sm),
+
+              // Live Map — realtime guard positions (CISS-AMS tracking parity)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                child: ModernCard(
+                  padding: EdgeInsets.zero,
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const FieldOfficerLiveMapScreen(),
+                      ),
+                    );
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Row(
+                      children: <Widget>[
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: tokens.primarySoft,
+                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                          ),
+                          child: Icon(
+                            Icons.map_rounded,
+                            color: tokens.primary,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              Text(
+                                'Live Map',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: tokens.ink,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Realtime positions of guards on duty, '
+                                'battery and network status',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: tokens.inkMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          color: tokens.inkMuted,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
 
@@ -391,13 +458,6 @@ class _DashboardBody extends ConsumerWidget {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {},
-        backgroundColor: tokens.success,
-        foregroundColor: tokens.surface,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('New Report'),
-      ),
     );
   }
 }
@@ -456,7 +516,7 @@ Widget _tile({
   required Color color,
 }) {
   return SizedBox(
-    width: 56,
+    width: 76,
     child: Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
@@ -472,8 +532,10 @@ Widget _tile({
         ),
         Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: FontWeight.w600,
             color: color.withValues(alpha: 0.7),
           ),

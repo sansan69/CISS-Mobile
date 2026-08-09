@@ -12,7 +12,7 @@ ThemeData buildCissTheme(Brightness brightness) {
   final isDark = brightness == Brightness.dark;
 
   final ColorScheme colorScheme = ColorScheme.fromSeed(
-    seedColor: const Color(0xFF1B3D6D),
+    seedColor: const Color(0xFF014C85),
     brightness: brightness,
     primary: tokens.primary,
     secondary: tokens.accent,
