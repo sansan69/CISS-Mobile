@@ -5,9 +5,11 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/location/background_tracking_service.dart';
+import '../../../core/location/device_compat_service.dart';
 import '../../../shared/widgets/brand_banner.dart';
 import '../../../shared/widgets/screen_scaffold.dart';
 import '../../../shared/widgets/state_block.dart';
+import '../../../shared/widgets/status_chip.dart';
 
 /// Comprehensive permission onboarding for first install.
 ///
@@ -38,6 +40,40 @@ class _PermissionOnboardingScreenState
     extends ConsumerState<PermissionOnboardingScreen> {
   bool _isProcessing = false;
   List<_PermissionResult> _results = <_PermissionResult>[];
+
+  // Background-running compatibility (battery optimization + OEM auto-start).
+  final DeviceCompatService _deviceCompat = DeviceCompatService();
+  bool _checkingCompat = true;
+  bool _batteryExempt = true;
+  bool _aggressiveOem = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCompatState();
+  }
+
+  Future<void> _loadCompatState() async {
+    final exempt = await _deviceCompat.isIgnoringBatteryOptimizations();
+    final aggressive = await _deviceCompat.isAggressiveOem();
+    if (!mounted) return;
+    setState(() {
+      _batteryExempt = exempt;
+      _aggressiveOem = aggressive;
+      _checkingCompat = false;
+    });
+  }
+
+  Future<void> _openBatterySettings() async {
+    await _deviceCompat.openBatteryOptimizationSettings();
+    final exempt = await _deviceCompat.isIgnoringBatteryOptimizations();
+    if (!mounted) return;
+    setState(() => _batteryExempt = exempt);
+  }
+
+  Future<void> _openBrandAutostart() async {
+    await _deviceCompat.openBrandAutostartSettings();
+  }
 
   static const List<_PermissionItem> _permissionItems = <_PermissionItem>[
     _PermissionItem(
@@ -180,6 +216,13 @@ class _PermissionOnboardingScreenState
             status: _statusFor(item.permission),
           ),
         ),
+        if (!_checkingCompat && (!_batteryExempt || _aggressiveOem))
+          _BackgroundCompatCard(
+            batteryExempt: _batteryExempt,
+            aggressiveOem: _aggressiveOem,
+            onOpenBattery: _openBatterySettings,
+            onOpenAutostart: _openBrandAutostart,
+          ),
         if (_results.isNotEmpty) ...<Widget>[
           const SizedBox(height: 12),
           _ResultsSummary(results: _results),
@@ -232,6 +275,127 @@ class _PermissionOnboardingScreenState
 }
 
 enum _PermissionStatus { pending, granted, denied }
+
+/// Battery-optimization + OEM auto-start guidance. Some manufacturers
+/// (Xiaomi, Oppo, Vivo, Realme, OnePlus, Huawei) kill background services by
+/// default; the guard needs to exempt the app so duty tracking keeps running.
+class _BackgroundCompatCard extends StatelessWidget {
+  const _BackgroundCompatCard({
+    required this.batteryExempt,
+    required this.aggressiveOem,
+    required this.onOpenBattery,
+    required this.onOpenAutostart,
+  });
+
+  final bool batteryExempt;
+  final bool aggressiveOem;
+  final VoidCallback onOpenBattery;
+  final VoidCallback onOpenAutostart;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: tokens.warningSoft,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: tokens.warning.withValues(alpha: 0.4)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(
+                  Icons.battery_saver_rounded,
+                  color: tokens.warning,
+                  size: 22,
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'Background running',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: tokens.ink,
+                    ),
+                  ),
+                ),
+                if (batteryExempt && !aggressiveOem)
+                  StatusChip(
+                    label: 'ALLOWED',
+                    tone: StatusChipTone.success,
+                  ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              batteryExempt
+                  ? aggressiveOem
+                        ? 'Your device restricts background apps. Enable '
+                            'auto-start so duty tracking keeps running after '
+                            'you leave this screen.'
+                        : 'Background running is already allowed.'
+                  : 'Allow CISS to run in the background so duty tracking '
+                      'continues while the screen is off. Without this, '
+                      'location updates stop and the site may think you '
+                      'left the zone.',
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                color: tokens.inkMuted,
+              ),
+            ),
+            if (!batteryExempt) ...<Widget>[
+              const SizedBox(height: AppSpacing.sm),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onOpenBattery,
+                  icon: const Icon(Icons.power_settings_new_rounded, size: 18),
+                  label: const Text('OPEN BATTERY SETTINGS'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                    foregroundColor: tokens.warning,
+                    side: BorderSide(
+                      color: tokens.warning.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Set CISS Workforce to "Don\'t optimize" in the list that '
+                'opens. Tracking pauses when the OS restricts it.',
+                style: TextStyle(fontSize: 12, color: tokens.inkMuted),
+              ),
+            ],
+            if (aggressiveOem) ...<Widget>[
+              const SizedBox(height: AppSpacing.xs),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: onOpenAutostart,
+                  icon: const Icon(Icons.bolt_rounded, size: 18),
+                  label: const Text('OPEN AUTO-START SETTINGS'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(48),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _PermissionItem {
   const _PermissionItem({

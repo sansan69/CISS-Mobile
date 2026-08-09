@@ -9,6 +9,7 @@ import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/location/live_location_service.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../shared/widgets/modern_card.dart';
+import 'guard_attendance_logs_screen.dart';
 import 'guard_day_timeline_screen.dart';
 
 class FieldOfficerGuardDetailScreen extends StatefulWidget {
@@ -281,29 +282,59 @@ class _FieldOfficerGuardDetailScreenState
                   _infoRow(tokens, 'Status', 'No location data'),
 
                 const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => GuardDayTimelineScreen(
-                            employeeDocId: loc?.employeeDocId ?? widget.employeeId,
-                            guardName: widget.guardName,
-                            employeeId: loc?.employeeId ?? widget.employeeId,
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => GuardDayTimelineScreen(
+                                employeeDocId:
+                                    loc?.employeeDocId ?? widget.employeeId,
+                                guardName: widget.guardName,
+                                employeeId:
+                                    loc?.employeeId ?? widget.employeeId,
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.route_rounded, size: 18),
+                        label: Text(
+                          'TIMELINE',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1,
                           ),
                         ),
-                      );
-                    },
-                    icon: const Icon(Icons.route_rounded, size: 18),
-                    label: Text(
-                      'VIEW DAY TIMELINE',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1,
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => GuardAttendanceLogsScreen(
+                                employeeId:
+                                    loc?.employeeId ?? widget.employeeId,
+                                guardId: loc?.employeeDocId ?? widget.employeeId,
+                                guardName: widget.guardName,
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.history_rounded, size: 18),
+                        label: Text(
+                          'ATTENDANCE',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

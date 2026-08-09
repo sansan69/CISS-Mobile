@@ -77,7 +77,8 @@ Dark mode: same hue families shifted for dark canvas (`#070B11` base); Brand Nav
 - **Guard:** dashboard, attendance (QR/GPS/geofence, offline queue), training + quizzes, payslips, leave, evaluations, incidents, patrol, profile, Aadhaar correction, document upload, PIN setup/forgot
 - **Field Officer:** dashboard (duty coverage, quick actions, Live Map entry), work orders, guards directory, **Live Map** (realtime positions + device telemetry), guard detail (live map, telemetry strip, **day timeline**), day timeline (polyline route, stay markers, activity classification, battery/WiFi per point), visit/training reports (photo-stamped, offline), training assignments
 - **Public:** QR attendance (no-login), public attendance, enrollment
-- **Tracking pipeline:** background service (5-min heartbeats + geofence) → `POST /api/guard/tracking/heartbeat` (server stores `guardLocations` + 5-min `locationHistory` buckets with battery/speed/WiFi, 30-day retention) → FO streams `guardLocations` via Firestore rules (district-scoped)
+- **Tracking pipeline:** background service with **adaptive heartbeat cadence** (2 min out-of-zone / 5 min moving / 10 min stable in-zone / 15 min stable + low battery) → `POST /api/guard/tracking/heartbeat` (server stores `guardLocations` + 5-min `locationHistory` buckets with battery/speed/WiFi, 30-day retention) → FO streams `guardLocations` via Firestore rules (district-scoped). Battery is the constraint: fewer GPS locks, zone alerts stay responsive.
+- **Device compatibility:** battery-optimization exemption (via generic settings screen — the direct dialog needs a Play-restricted permission, deliberately avoided) and OEM auto-start deep links for Xiaomi/Redmi/Poco, Oppo/Realme, Vivo/iQOO, Huawei/Honor, OnePlus, wired into the permission-onboarding flow. minSdk 24 (Android 7.0; local_auth and mobile_scanner hard-require it).
 
 ## Known scope notes
 
