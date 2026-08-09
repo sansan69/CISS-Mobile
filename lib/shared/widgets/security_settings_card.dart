@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme/app_tokens.dart';
 import '../../core/auth/biometric_service.dart';
+import '../../core/models/auth_session.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/application/biometric_setup_controller.dart';
 import 'biometric_setup_sheet.dart';
@@ -31,14 +32,12 @@ class _SecuritySettingsCardState extends ConsumerState<SecuritySettingsCard> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final session = ref.read(authSessionProvider).value;
       if (session != null) {
-        ref
-            .read(biometricSetupProvider.notifier)
-            .load(role: session.role.name, loginId: session.primaryId);
+        ref.read(biometricSetupProvider.notifier).load(session: session);
       }
     });
   }
 
-  void _openSheet(String role, String loginId, String displayName) {
+  void _openSheet(AuthSession session) {
     final tokens = CissThemeTokens.of(context);
     showModalBottomSheet<void>(
       context: context,
@@ -48,14 +47,8 @@ class _SecuritySettingsCardState extends ConsumerState<SecuritySettingsCard> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (sheetContext) {
-        ref
-            .read(biometricSetupProvider.notifier)
-            .load(role: role, loginId: loginId);
-        return BiometricSetupSheet(
-          role: role,
-          loginId: loginId,
-          displayName: displayName,
-        );
+        ref.read(biometricSetupProvider.notifier).load(session: session);
+        return BiometricSetupSheet(session: session);
       },
     );
   }
@@ -85,10 +78,6 @@ class _SecuritySettingsCardState extends ConsumerState<SecuritySettingsCard> {
     final bool actionable =
         availability == FingerprintAvailability.supported ||
         availability == FingerprintAvailability.notEnrolled;
-
-    final role = session?.role.name;
-    final loginId = session?.primaryId;
-    final displayName = session?.displayName ?? 'Account';
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -123,15 +112,13 @@ class _SecuritySettingsCardState extends ConsumerState<SecuritySettingsCard> {
             trailing: actionable
                 ? Switch(
                     value: enabled,
-                    onChanged: role != null && loginId != null
-                        ? (_) => _openSheet(role, loginId, displayName)
-                        : null,
+                    onChanged:
+                        session != null ? (_) => _openSheet(session) : null,
                     activeTrackColor: tokens.primary,
                   )
                 : const Icon(Icons.chevron_right_rounded, size: 20),
-            onTap:
-                actionable && role != null && loginId != null
-                ? () => _openSheet(role, loginId, displayName)
+            onTap: actionable && session != null
+                ? () => _openSheet(session)
                 : null,
           ),
           if (availability == FingerprintAvailability.notEnrolled) ...[

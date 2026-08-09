@@ -4,6 +4,8 @@ import '../../../app/theme/theme_mode_controller.dart';
 import '../../../core/auth/biometric_credential_store.dart';
 import '../../../core/auth/biometric_service.dart';
 import '../../../core/auth/saved_accounts_service.dart';
+import '../../../core/models/app_role.dart';
+import '../../../core/models/auth_session.dart';
 import '../../../core/network/mobile_repository.dart';
 import '../../../core/network/providers.dart';
 
@@ -53,6 +55,13 @@ class BiometricSetupState {
 
 /// Enrollment + lifecycle for fingerprint unlock on one saved account.
 ///
+/// Credentials are keyed by the SAME login identifier the user typed at
+/// sign-in (saved-account loginId — phone or employeeId for guards, email
+/// for field officers), NOT by `session.primaryId` (employeeId / Firebase
+/// uid) — otherwise the quick-login chip can never find the stored PIN.
+/// The canonical key is written as a second copy so employeeId-keyed
+/// accounts keep working too.
+///
 /// Industry-standard flow:
 /// - Enable:  verify the account's PIN/password against the backend (the
 ///   credential we will store must be a real one), then prompt a fingerprint
@@ -73,29 +82,59 @@ class BiometricSetupController extends StateNotifier<BiometricSetupState> {
       _ref.read(savedAccountsServiceProvider);
   MobileRepository get _repository => _ref.read(mobileRepositoryProvider);
 
+  /// Resolve the saved-account loginId for this session. The user may have
+  /// signed in with a phone number (guards) or a different identifier than
+  /// the canonical ids the backend returns, so match against the session's
+  /// canonical ids plus (for guards) the profile phone.
+  Future<String?> _resolveLoginId(AuthSession session) async {
+    final accounts = await _accounts.loadForRole(session.role.name);
+
+    SavedAccount? match(String candidate) {
+      for (final account in accounts) {
+        if (account.loginId == candidate) return account;
+      }
+      return null;
+    }
+
+    if (match(session.primaryId) != null) return session.primaryId;
+
+    if (session.role == AppRole.guard) {
+      try {
+        final phone = (await _repository.fetchGuardProfile()).phoneNumber;
+        if (phone.isNotEmpty && match(phone) != null) return phone;
+      } catch (_) {}
+    } else if (session.email != null && match(session.email!) != null) {
+      return session.email;
+    }
+
+    // Last resort: a single saved account for this role is unambiguous.
+    if (accounts.length == 1) return accounts.first.loginId;
+    return null;
+  }
+
+  Future<bool> _accountBiometricEnabled(String role, String loginId) async {
+    final accounts = await _accounts.loadForRole(role);
+    for (final account in accounts) {
+      if (account.loginId == loginId) return account.biometricEnabled;
+    }
+    return false;
+  }
+
   /// Refresh capability + per-account state. Call when the settings surface
   /// opens so the status reflects the current device and account.
-  Future<void> load({
-    required String role,
-    required String loginId,
-  }) async {
+  Future<void> load({required AuthSession session}) async {
     final support = await _biometrics.checkFingerprintSupport();
+    final loginId = await _resolveLoginId(session);
     final hasStoredCredential = await _store.hasCredentials(
-      role: role,
-      loginId: loginId,
+      role: session.role.name,
+      loginId: loginId ?? session.primaryId,
     );
-    final accounts = await _accounts.loadForRole(role);
-    SavedAccount? account;
-    for (final candidate in accounts) {
-      if (candidate.loginId == loginId) {
-        account = candidate;
-        break;
-      }
-    }
     state = BiometricSetupState(
       support: support,
       hasStoredCredential: hasStoredCredential,
-      accountEnabled: account?.biometricEnabled ?? false,
+      accountEnabled:
+          loginId != null &&
+          await _accountBiometricEnabled(session.role.name, loginId),
     );
   }
 
@@ -103,8 +142,7 @@ class BiometricSetupController extends StateNotifier<BiometricSetupState> {
   /// change — repository call only), then require a fingerprint gesture and
   /// bind the verified credential.
   Future<BiometricSetupResult> enable({
-    required String role,
-    required String loginId,
+    required AuthSession session,
     required String password,
   }) async {
     if (state.support.availability != FingerprintAvailability.supported) {
@@ -114,17 +152,20 @@ class BiometricSetupController extends StateNotifier<BiometricSetupState> {
       );
     }
     state = state.copyWith(busy: true);
+    final role = session.role.name;
+    final loginId = await _resolveLoginId(session);
+    final verifyWith = loginId ?? session.primaryId;
 
     try {
       // 1. Server-verify the credential we are about to store.
       if (role == 'guard') {
         await _repository.signInGuard(
-          loginIdOrPhone: loginId,
+          loginIdOrPhone: verifyWith,
           pin: password,
         );
       } else {
         await _repository.signInFieldOfficer(
-          email: loginId,
+          email: session.email ?? verifyWith,
           password: password,
         );
       }
@@ -150,13 +191,27 @@ class BiometricSetupController extends StateNotifier<BiometricSetupState> {
       );
     }
 
-    // 3. Bind: store credential + flip flags.
-    await _store.saveCredentials(role: role, loginId: loginId, password: password);
-    await _accounts.setBiometricEnabled(
+    // 3. Bind: store under the typed login id (primary) plus the canonical
+    //    id (backup), and flip the flags on the matched account.
+    await _store.saveCredentials(
       role: role,
-      loginId: loginId,
-      enabled: true,
+      loginId: loginId ?? session.primaryId,
+      password: password,
     );
+    if (loginId != null && loginId != session.primaryId) {
+      await _store.saveCredentials(
+        role: role,
+        loginId: session.primaryId,
+        password: password,
+      );
+    }
+    if (loginId != null) {
+      await _accounts.setBiometricEnabled(
+        role: role,
+        loginId: loginId,
+        enabled: true,
+      );
+    }
     await _ref
         .read(appSettingsControllerProvider.notifier)
         .setBiometricsEnabled(true);
@@ -170,10 +225,7 @@ class BiometricSetupController extends StateNotifier<BiometricSetupState> {
   }
 
   /// Confirm with a fingerprint gesture, then remove the binding.
-  Future<BiometricSetupResult> disable({
-    required String role,
-    required String loginId,
-  }) async {
+  Future<BiometricSetupResult> disable({required AuthSession session}) async {
     final outcome = await _biometrics.authenticateFingerprint(
       localizedReason: 'Confirm with your fingerprint to disable unlock',
     );
@@ -185,12 +237,17 @@ class BiometricSetupController extends StateNotifier<BiometricSetupState> {
       );
     }
 
-    await _store.deleteCredentials(role: role, loginId: loginId);
-    await _accounts.setBiometricEnabled(
-      role: role,
-      loginId: loginId,
-      enabled: false,
-    );
+    final role = session.role.name;
+    final loginId = await _resolveLoginId(session);
+    if (loginId != null) {
+      await _store.deleteCredentials(role: role, loginId: loginId);
+      await _accounts.setBiometricEnabled(
+        role: role,
+        loginId: loginId,
+        enabled: false,
+      );
+    }
+    await _store.deleteCredentials(role: role, loginId: session.primaryId);
     // Global flag only drops when no other saved account uses biometrics.
     if (!await _accounts.anyBiometricEnabled()) {
       await _ref

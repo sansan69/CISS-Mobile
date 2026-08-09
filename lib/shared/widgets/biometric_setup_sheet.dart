@@ -5,6 +5,8 @@ import '../../../app/theme/app_tokens.dart';
 import '../../../core/auth/biometric_service.dart';
 import '../../../core/location/device_compat_service.dart';
 import '../../../core/haptics.dart';
+import '../../../core/models/app_role.dart';
+import '../../../core/models/auth_session.dart';
 import '../../features/auth/application/biometric_setup_controller.dart';
 import '../../../shared/widgets/status_chip.dart';
 
@@ -17,20 +19,12 @@ import '../../../shared/widgets/status_chip.dart';
 /// 2. If no fingerprint is enrolled on the device, deep-link to the OS
 ///    fingerprint enrollment screen.
 /// 3. Enable: verify PIN/password against the backend, then a fingerprint
-///    gesture, then bind the credential.
+///    gesture, then bind the credential to the saved account.
 /// 4. Disable: confirm with a fingerprint gesture, then remove the binding.
 class BiometricSetupSheet extends ConsumerStatefulWidget {
-  const BiometricSetupSheet({
-    super.key,
-    required this.role,
-    required this.loginId,
-    required this.displayName,
-  });
+  const BiometricSetupSheet({super.key, required this.session});
 
-  /// 'guard' | 'fieldOfficer'
-  final String role;
-  final String loginId;
-  final String displayName;
+  final AuthSession session;
 
   @override
   ConsumerState<BiometricSetupSheet> createState() =>
@@ -44,7 +38,7 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
   String? _message;
   bool _messageIsError = false;
 
-  bool get _isGuard => widget.role == 'guard';
+  bool get _isGuard => widget.session.role == AppRole.guard;
 
   @override
   void initState() {
@@ -52,7 +46,7 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref
           .read(biometricSetupProvider.notifier)
-          .load(role: widget.role, loginId: widget.loginId);
+          .load(session: widget.session);
     });
   }
 
@@ -81,11 +75,7 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
 
     final result = await ref
         .read(biometricSetupProvider.notifier)
-        .enable(
-          role: widget.role,
-          loginId: widget.loginId,
-          password: password,
-        );
+        .enable(session: widget.session, password: password);
 
     if (!mounted) return;
     setState(() {
@@ -106,7 +96,7 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
     });
     final result = await ref
         .read(biometricSetupProvider.notifier)
-        .disable(role: widget.role, loginId: widget.loginId);
+        .disable(session: widget.session);
     if (!mounted) return;
     setState(() {
       _verifying = false;
@@ -177,7 +167,7 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          widget.displayName,
+                          widget.session.displayName,
                           style: TextStyle(
                             fontSize: 13,
                             color: tokens.inkMuted,
