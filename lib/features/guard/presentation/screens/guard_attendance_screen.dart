@@ -8,13 +8,19 @@ import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
+import '../../../../../core/attendance/attendance_session.dart';
+import '../../../../../core/attendance/attendance_validation.dart';
+import '../../../../../core/attendance/early_checkout.dart';
 import '../../../../../core/haptics.dart';
 import '../../../../../core/models/attendance_models.dart';
 import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/network/providers.dart';
+import '../../../../../core/settings/module_gate.dart';
+import '../../../../../core/settings/remote_config_provider.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/location/background_tracking_service.dart';
+import '../../../../../core/location/public_ip.dart';
 import '../../../../../core/fcm/providers.dart';
 import '../../../../../shared/widgets/camera_capture_screen.dart';
 import '../../../../../shared/widgets/modern_card.dart';
@@ -45,6 +51,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   String? _clientRequestId; // Stable across retries for idempotency
   Position? _position;
 
+  final AttendanceSession _breakSession = AttendanceSession();
+  Timer? _breakTicker;
+  bool _breakBusy = false;
+  bool _checkedIn = false;
+
   @override
   void initState() {
     super.initState();
@@ -52,6 +63,12 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       _initLocationCheck();
       _initStatusFromHistory();
     });
+  }
+
+  @override
+  void dispose() {
+    _breakTicker?.cancel();
+    super.dispose();
   }
 
   /// Determine default IN/OUT status from attendance history.
@@ -69,6 +86,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       // If latest is OUT, the guard probably wants to IN now
       setState(() {
         _status = latest.status == 'In' ? 'Out' : 'In';
+        _checkedIn = latest.status == 'In';
       });
     } catch (e) {
       // Silently ignore — default IN is fine
@@ -323,7 +341,268 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     return nearest;
   }
 
+  bool _isOffline(Object error) {
+    return error is DioException &&
+        (error.type == DioExceptionType.connectionTimeout ||
+            error.type == DioExceptionType.sendTimeout ||
+            error.type == DioExceptionType.receiveTimeout ||
+            error.type == DioExceptionType.connectionError);
+  }
+
+  /// True when the submit response asks the client to supply a reason for an
+  /// early checkout.
+  bool _requiresEarlyCheckoutReason(Map<String, dynamic> response) {
+    return response['requiresEarlyCheckOutReason'] == true ||
+        response['requiresReason'] == true;
+  }
+
+  String _formatBreakElapsed() {
+    final started = _breakSession.breakStartedAt;
+    if (started == null) return '00:00';
+    final elapsed = DateTime.now().difference(started);
+    final minutes = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return elapsed.inHours > 0
+        ? '${elapsed.inHours.toString().padLeft(2, '0')}:$minutes:$seconds'
+        : '$minutes:$seconds';
+  }
+
+  void _syncBreakTicker() {
+    _breakTicker?.cancel();
+    if (_breakSession.onBreak) {
+      _breakTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
+  Future<void> _toggleBreak() async {
+    if (_breakBusy) return;
+    final action = _breakSession.onBreak ? BreakAction.stop : BreakAction.start;
+    final lat = _position?.latitude;
+    final lng = _position?.longitude;
+    final accuracy = _position?.accuracy;
+
+    setState(() {
+      _breakBusy = true;
+      _error = null;
+    });
+
+    try {
+      final response = await ref
+          .read(mobileRepositoryProvider)
+          .attendanceBreak(
+            action: action.name,
+            lat: lat,
+            lng: lng,
+            accuracy: accuracy,
+          );
+      if (!mounted) return;
+      setState(() => _breakSession.applyBreakResponse(response));
+      _syncBreakTicker();
+      Haptics.light();
+    } catch (error) {
+      if (_isOffline(error)) {
+        await ref
+            .read(offlineQueueProvider)
+            .enqueue(
+              path: '/api/mobile/attendance/break',
+              method: 'POST',
+              body: <String, dynamic>{
+                'action': action.name,
+                'lat': lat,
+                'lng': lng,
+                'accuracy': accuracy,
+                'capturedAt': DateTime.now().toUtc().toIso8601String(),
+              },
+            );
+        if (!mounted) return;
+        // Server state is unavailable offline — reflect the intent locally so
+        // the timer and button stay in sync until the queue syncs.
+        setState(() {
+          _breakSession.onBreak = action == BreakAction.start;
+          _breakSession.breakStartedAt =
+              action == BreakAction.start ? DateTime.now().toUtc() : null;
+          _breakSession.canCheckOut = action == BreakAction.stop;
+        });
+        _syncBreakTicker();
+        Haptics.medium();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Offline: break change queued for sync.'),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          setState(() => _error = CissError.parse(error));
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _breakBusy = false);
+      }
+    }
+  }
+
+  Widget _buildBreakPanel(CissThemeTokens tokens) {
+    final onBreak = _breakSession.onBreak;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: ModernCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(
+                  onBreak
+                      ? Icons.pause_circle_filled_rounded
+                      : Icons.free_breakfast_rounded,
+                  color: onBreak ? tokens.warning : tokens.primary,
+                  size: 22,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text('Break', style: AppTypography.bodyStrong(context)),
+                      Text(
+                        onBreak
+                            ? 'On break • ${_formatBreakElapsed()}'
+                            : 'Take a short break during your shift',
+                        style: AppTypography.micro(
+                          context,
+                        ).copyWith(color: tokens.inkMuted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _breakBusy ? null : _toggleBreak,
+                icon:
+                    _breakBusy
+                        ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator.adaptive(
+                            strokeWidth: 2,
+                          ),
+                        )
+                        : Icon(
+                          onBreak
+                              ? Icons.stop_rounded
+                              : Icons.play_arrow_rounded,
+                        ),
+                label: Text(onBreak ? 'End break' : 'Start break'),
+              ),
+            ),
+            if (!_breakSession.canCheckOut) ...<Widget>[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: tokens.warningSoft,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color: tokens.warning,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Checkout is disabled until the break is ended.',
+                        style: TextStyle(color: tokens.warning, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Server-authoritative geo + IP pre-check before check-in/out.
+  ///
+  /// Opt-in behind the `ipAttendance` module flag only (default OFF) per the
+  /// controller ruling: by default the check-in/out path is unchanged (no
+  /// `fetchPublicIp()` + `/attendance/validate` round trip) and the server
+  /// still enforces geo + IP on submit. Returns true when the submit must be
+  /// aborted because the server said the guard is not allowed. Fails open on
+  /// any error — an unreachable pre-check must never block.
+  Future<bool> _validateBeforeSubmit(GuardProfileModel profile) async {
+    if (!mounted) return false;
+
+    if (!shouldRunAttendancePreCheck(ref.read(remoteConfigProvider).modules)) {
+      return false;
+    }
+
+    final position = _position;
+    final site = _site;
+    if (position == null || site == null) return false;
+
+    if (position.accuracy > 100 && mounted) {
+      final accuracy = position.accuracy.toStringAsFixed(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Low GPS accuracy (±$accuracy m). Your location may be imprecise.',
+          ),
+        ),
+      );
+    }
+
+    // Best-effort public IP hint; never fatal. Only fetched when the IP-based
+    // pre-check is enabled, so the default path adds no latency.
+    final publicIp = await fetchPublicIp();
+
+    try {
+      final result = await ref
+          .read(mobileRepositoryProvider)
+          .validateAttendance(
+            employeeDocId: profile.id,
+            siteId: site.id,
+            lat: position.latitude,
+            lon: position.longitude,
+            status: _status,
+            publicIp: publicIp,
+          );
+      if (!result.blocksSubmit) return false;
+
+      if (mounted) {
+        final reason =
+            result.reason ?? 'Attendance blocked by server validation.';
+        setState(() => _error = reason);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(reason)));
+      }
+      return true;
+    } catch (_) {
+      // Fail-open: offline or validation endpoint unavailable.
+      return false;
+    }
+  }
+
   Future<void> _submitAttendance(GuardProfileModel profile) async {
+    if (_status == 'Out' && !_breakSession.canCheckOut) {
+      setState(() => _error = 'Please end your break before checking out.');
+      return;
+    }
     if (_site == null) {
       setState(() => _error = 'Please select a site.');
       return;
@@ -351,6 +630,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         return;
       }
     }
+
+    // Server-authoritative geo + IP pre-check (module-gated). Aborts the submit
+    // when the server says the guard is not allowed; otherwise the submit
+    // endpoint re-enforces the same checks server-side.
+    if (await _validateBeforeSubmit(profile)) return;
 
     setState(() {
       _busy = true;
@@ -416,6 +700,18 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         'clientRequestId': _clientRequestId ??= _uuid.v4(),
       };
 
+      // Local pre-check: if the guard is checking out before the selected
+      // shift's scheduled end, capture the reason now. If the server also asks
+      // via the submit response we reuse this value instead of double-prompting.
+      if (_status == 'Out' &&
+          payload['earlyCheckOutReason'] == null &&
+          isEarlyCheckoutForShift(shift)) {
+        if (!mounted) return;
+        final reason = await showEarlyCheckoutReasonSheet(context);
+        if (!mounted) return;
+        if (reason != null) payload['earlyCheckOutReason'] = reason;
+      }
+
       try {
         final uploadPath =
             'employees/${profile.id.isNotEmpty ? profile.id : profile.employeeId}/attendance/${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -427,10 +723,48 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
               siteId: _site!.id,
             );
 
-        await ref.read(mobileRepositoryProvider).submitAttendance({
-          ...payload,
-          'photoUrl': uploadResult['url'],
-        });
+        // Server-driven signal: the submit response may demand a reason for an
+        // early checkout. Prompt (only if we don't already have one) and
+        // re-submit exactly once with the reason attached.
+        final response = await ref.read(mobileRepositoryProvider).submitAttendance(
+          <String, dynamic>{...payload, 'photoUrl': uploadResult['url']},
+        );
+        if (_status == 'Out' &&
+            payload['earlyCheckOutReason'] == null &&
+            _requiresEarlyCheckoutReason(response)) {
+          if (!mounted) return;
+          final reason = await showEarlyCheckoutReasonSheet(context);
+          if (!mounted) return;
+          if (reason != null) {
+            payload['earlyCheckOutReason'] = reason;
+            // Rotate the idempotency key so the re-submit is a genuinely
+            // distinct request. A server deduping on clientRequestId must not
+            // treat the retry as a replay and drop the reason. The original id
+            // stays on the first attempt (and on `_clientRequestId`).
+            payload['clientRequestId'] = _uuid.v4();
+            final retryResponse =
+                await ref
+                    .read(mobileRepositoryProvider)
+                    .submitAttendance(
+                      <String, dynamic>{
+                        ...payload,
+                        'photoUrl': uploadResult['url'],
+                      },
+                    );
+            if (_requiresEarlyCheckoutReason(retryResponse)) {
+              // The server still wants a reason. Do NOT loop — surface the
+              // existing error path and abort this submit attempt.
+              if (mounted) {
+                setState(
+                  () =>
+                      _error =
+                          'The server still requires an early-checkout reason.',
+                );
+              }
+              return;
+            }
+          }
+        }
 
         if (_status == 'In') {
           if (_site!.lat != null && _site!.lng != null) {
@@ -470,6 +804,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           Haptics.heavy();
           setState(() {
             _photoPath = null;
+            _checkedIn = _status == 'In';
             _error = 'Attendance submitted successfully.';
           });
           ref.invalidate(attendanceHistoryProvider);
@@ -498,6 +833,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
             if (mounted) {
               setState(() {
                 _photoPath = null;
+                _checkedIn = _status == 'In';
                 _error = 'Offline: Attendance queued for sync.';
               });
               ref.invalidate(attendanceHistoryProvider);
@@ -723,6 +1059,8 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                     ],
                     // ── Stale session warning ──────────────────────────────
                     _StaleSessionBanner(),
+                    if (moduleEnabled(ref, 'break') && _checkedIn)
+                      _buildBreakPanel(tokens),
                     GuardFormCard(
                       children: <Widget>[
                         InkWell(
@@ -873,7 +1211,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                           width: double.infinity,
                           child: FilledButton(
                             onPressed:
-                                _busy ? null : () => _submitAttendance(profile),
+                                _busy ||
+                                        (_status == 'Out' &&
+                                            !_breakSession.canCheckOut)
+                                    ? null
+                                    : () => _submitAttendance(profile),
                             child:
                                 _busy
                                     ? const SizedBox(
@@ -888,6 +1230,15 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                                     ),
                           ),
                         ),
+                        if (_status == 'Out' && !_breakSession.canCheckOut) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Checkout is disabled until the break is ended.',
+                            style: AppTypography.micro(
+                              context,
+                            ).copyWith(color: tokens.warning),
+                          ),
+                        ],
                         const SizedBox(height: 16),
                       ],
                     ),

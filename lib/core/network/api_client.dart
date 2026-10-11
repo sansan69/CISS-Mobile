@@ -1,11 +1,16 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'api_config.dart';
 
 class ApiClient {
-  ApiClient({required this.authTokenProvider, String? baseUrl})
-    : dio = Dio(
+  ApiClient({
+    required this.authTokenProvider,
+    String? baseUrl,
+    this.onModuleDisabled,
+  }) : dio = Dio(
         BaseOptions(
           baseUrl: baseUrl ?? ApiConfig.baseUrl,
           connectTimeout: const Duration(seconds: 30),
@@ -43,6 +48,15 @@ class ApiClient {
                   // original error so callers can handle it normally.
                 }
               }
+              // 403 — a module may have been disabled server-side: re-fetch
+              // settings so the UI can hard-hide the affected module. Best
+              // effort and fire-and-forget; never delays or alters the error.
+              if (error.response?.statusCode == 403) {
+                final callback = onModuleDisabled;
+                if (callback != null) {
+                  unawaited(callback().catchError((Object _) {}));
+                }
+              }
               handler.next(error);
             },
       ),
@@ -51,4 +65,8 @@ class ApiClient {
 
   final Dio dio;
   final Future<String?> Function() authTokenProvider;
+
+  /// Invoked (fire-and-forget) when a request fails with HTTP 403, giving the
+  /// app a chance to refresh server-driven module settings.
+  final Future<void> Function()? onModuleDisabled;
 }

@@ -31,7 +31,7 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     await tester.pump(const Duration(seconds: 1));
 
-    expect(find.text('GUARD ACCESS'), findsOneWidget);
+    expect(find.text('GUARD'), findsOneWidget);
     expect(find.text('Employee ID or phone'), findsOneWidget);
     expect(find.text('Duty PIN'), findsOneWidget);
     expect(find.text('Set up PIN for first-time login'), findsOneWidget);
@@ -50,7 +50,7 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     await tester.pump(const Duration(seconds: 1));
 
-    expect(find.text('OFFICER ACCESS'), findsOneWidget);
+    expect(find.text('FIELD OFFICER'), findsOneWidget);
     expect(find.text('Official email'), findsOneWidget);
     expect(find.text('Account password'), findsOneWidget);
   },

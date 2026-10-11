@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../core/network/providers.dart';
+import '../../../../../core/settings/module_gate.dart';
+import '../../../../../core/settings/remote_config_provider.dart';
 import '../../../../../shared/widgets/modern_hero.dart';
 import '../../../../../shared/widgets/metric_card.dart';
 import '../../../../../shared/widgets/modern_card.dart';
@@ -91,7 +93,10 @@ class _DashboardBody extends ConsumerWidget {
       backgroundColor: tokens.canvas,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () async => ref.invalidate(guardDashboardProvider),
+          onRefresh: () async {
+            await ref.read(remoteConfigProvider.notifier).refresh(force: true);
+            ref.invalidate(guardDashboardProvider);
+          },
           child: ListView(
             padding: const EdgeInsets.only(bottom: AppSpacing.xxl + 80),
             children: <Widget>[
@@ -215,7 +220,8 @@ class _DashboardBody extends ConsumerWidget {
               const SizedBox(height: AppSpacing.xl),
 
               // Eval Score + Payslip Card
-              if (data.latestEvalScore != null) ...[
+              if (moduleEnabled(ref, 'evaluations') &&
+                  data.latestEvalScore != null) ...[
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                   child: ModernCard(
@@ -273,7 +279,7 @@ class _DashboardBody extends ConsumerWidget {
                 const SizedBox(height: AppSpacing.md),
               ],
 
-              if (data.leaveBalance != null) ...[
+              if (moduleEnabled(ref, 'leave') && data.leaveBalance != null) ...[
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                   child: ModernCard(
@@ -331,68 +337,77 @@ class _DashboardBody extends ConsumerWidget {
                     const SizedBox(height: AppSpacing.sm),
                     Row(
                       children: <Widget>[
-                        Expanded(
-                          child: ModernCard(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const GuardPayslipsScreen(),
+                        if (moduleEnabled(ref, 'payslips')) ...[
+                          Expanded(
+                            child: ModernCard(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const GuardPayslipsScreen(),
+                                ),
+                              ),
+                              child: Column(
+                                children: <Widget>[
+                                  Icon(Icons.receipt_long_rounded,
+                                      color: tokens.primary, size: 28),
+                                  const SizedBox(height: 8),
+                                  Text('Payslips',
+                                      style: AppTypography.micro(context)
+                                          .copyWith(
+                                              fontWeight: FontWeight.w700)),
+                                ],
                               ),
                             ),
-                            child: Column(
-                              children: <Widget>[
-                                Icon(Icons.receipt_long_rounded,
-                                    color: tokens.primary, size: 28),
-                                const SizedBox(height: 8),
-                                Text('Payslips',
-                                    style: AppTypography.micro(context)
-                                        .copyWith(fontWeight: FontWeight.w700)),
-                              ],
-                            ),
                           ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: ModernCard(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const GuardPatrolScreen(),
+                        ],
+                        if (moduleEnabled(ref, 'patrol')) ...[
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: ModernCard(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const GuardPatrolScreen(),
+                                ),
+                              ),
+                              child: Column(
+                                children: <Widget>[
+                                  Icon(Icons.route_rounded,
+                                      color: tokens.accent, size: 28),
+                                  const SizedBox(height: 8),
+                                  Text('Patrol',
+                                      style: AppTypography.micro(context)
+                                          .copyWith(
+                                              fontWeight: FontWeight.w700)),
+                                ],
                               ),
                             ),
-                            child: Column(
-                              children: <Widget>[
-                                Icon(Icons.route_rounded,
-                                    color: tokens.accent, size: 28),
-                                const SizedBox(height: 8),
-                                Text('Patrol',
-                                    style: AppTypography.micro(context)
-                                        .copyWith(fontWeight: FontWeight.w700)),
-                              ],
-                            ),
                           ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: ModernCard(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const GuardIncidentsScreen(),
+                        ],
+                        if (moduleEnabled(ref, 'incidents')) ...[
+                          const SizedBox(width: AppSpacing.sm),
+                          Expanded(
+                            child: ModernCard(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const GuardIncidentsScreen(),
+                                ),
+                              ),
+                              child: Column(
+                                children: <Widget>[
+                                  Icon(Icons.report_gmailerrorred_rounded,
+                                      color: tokens.danger, size: 28),
+                                  const SizedBox(height: 8),
+                                  Text('Incident',
+                                      style: AppTypography.micro(context)
+                                          .copyWith(
+                                              fontWeight: FontWeight.w700)),
+                                ],
                               ),
                             ),
-                            child: Column(
-                              children: <Widget>[
-                                Icon(Icons.report_gmailerrorred_rounded,
-                                    color: tokens.danger, size: 28),
-                                const SizedBox(height: 8),
-                                Text('Incident',
-                                    style: AppTypography.micro(context)
-                                        .copyWith(fontWeight: FontWeight.w700)),
-                              ],
-                            ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ],

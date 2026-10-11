@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/settings/remote_config_provider.dart';
+import '../../core/settings/route_modules.dart';
+import '../../features/shared/module_unavailable_screen.dart';
 import '../../features/auth/presentation/role_login_screen.dart';
 import '../../features/auth/presentation/auth_gate_screen.dart';
 import '../../features/auth/presentation/guard_pin_setup_screen.dart';
@@ -54,123 +58,144 @@ Page<void> _buildPage({
   );
 }
 
-final GoRouter appRouter = GoRouter(
-  navigatorKey: rootNavigatorKey,
-  initialLocation: '/',
-  routes: <RouteBase>[
-    GoRoute(
-      path: '/',
-      pageBuilder: (BuildContext context, GoRouterState state) {
-        return _buildPage(
-          context: context,
-          state: state,
-          child: const AuthGateScreen(),
-        );
-      },
-    ),
-    GoRoute(
-      path: '/region-select',
-      pageBuilder: (BuildContext context, GoRouterState state) {
-        return _buildPage(
-          context: context,
-          state: state,
-          child: const RegionSelectorScreen(),
-        );
-      },
-    ),
-    GoRoute(
-      path: '/login',
-      pageBuilder: (BuildContext context, GoRouterState state) {
-        return _buildPage(
-          context: context,
-          state: state,
-          child: const LoginHubScreen(),
-        );
-      },
-    ),
-    GoRoute(
-      path: '/login/guard',
-      pageBuilder: (BuildContext context, GoRouterState state) {
-        return _buildPage(
-          context: context,
-          state: state,
-          child: const RoleLoginScreen.guard(),
-        );
-      },
-    ),
-    GoRoute(
-      path: '/login/guard/setup',
-      pageBuilder: (BuildContext context, GoRouterState state) {
-        final params = state.uri.queryParameters;
-        return _buildPage(
-          context: context,
-          state: state,
-          child: GuardPinSetupScreen(
-            initialEmployeeId: params['employeeId'],
-            initialPhoneNumber: params['phoneNumber'],
-          ),
-        );
-      },
-    ),
-    GoRoute(
-      path: '/login/field-officer',
-      pageBuilder: (BuildContext context, GoRouterState state) {
-        return _buildPage(
-          context: context,
-          state: state,
-          child: const RoleLoginScreen.fieldOfficer(),
-        );
-      },
-    ),
-    GoRoute(
-      path: '/login/admin',
-      pageBuilder: (BuildContext context, GoRouterState state) {
-        return _buildPage(
-          context: context,
-          state: state,
-          child: const AdminLoginScreen(),
-        );
-      },
-    ),
-    GoRoute(
-      path: '/permissions',
-      pageBuilder: (BuildContext context, GoRouterState state) {
-        return _buildPage(
-          context: context,
-          state: state,
-          child: const PermissionOnboardingScreen(),
-        );
-      },
-    ),
-    GoRoute(
-      path: '/qr-attendance',
-      pageBuilder: (BuildContext context, GoRouterState state) {
-        return _buildPage(
-          context: context,
-          state: state,
-          child: const QrAttendanceFlow(),
-        );
-      },
-    ),
-    GoRoute(
-      path: '/attendance',
-      pageBuilder: (BuildContext context, GoRouterState state) {
-        return _buildPage(
-          context: context,
-          state: state,
-          child: const PublicAttendanceScreen(),
-        );
-      },
-    ),
-    GoRoute(
-      path: '/enroll',
-      pageBuilder: (BuildContext context, GoRouterState state) {
-        return _buildPage(
-          context: context,
-          state: state,
-          child: const GuardEnrollmentScreen(),
-        );
-      },
-    ),
-  ],
-);
+final routerProvider = Provider<GoRouter>((ref) {
+  final refresh = ValueNotifier<int>(0);
+  ref.listen(remoteConfigProvider, (_, __) => refresh.value++);
+  ref.onDispose(refresh.dispose);
+
+  return GoRouter(
+    navigatorKey: rootNavigatorKey,
+    initialLocation: '/',
+    refreshListenable: refresh,
+    redirect: (BuildContext context, GoRouterState state) {
+      final flags = ref.read(remoteConfigProvider).modules;
+      return gatedRedirect(path: state.uri.path, flags: flags);
+    },
+    routes: <RouteBase>[
+      GoRoute(
+        path: '/',
+        pageBuilder: (BuildContext context, GoRouterState state) {
+          return _buildPage(
+            context: context,
+            state: state,
+            child: const AuthGateScreen(),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/region-select',
+        pageBuilder: (BuildContext context, GoRouterState state) {
+          return _buildPage(
+            context: context,
+            state: state,
+            child: const RegionSelectorScreen(),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/login',
+        pageBuilder: (BuildContext context, GoRouterState state) {
+          return _buildPage(
+            context: context,
+            state: state,
+            child: const LoginHubScreen(),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/login/guard',
+        pageBuilder: (BuildContext context, GoRouterState state) {
+          return _buildPage(
+            context: context,
+            state: state,
+            child: const RoleLoginScreen.guard(),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/login/guard/setup',
+        pageBuilder: (BuildContext context, GoRouterState state) {
+          final params = state.uri.queryParameters;
+          return _buildPage(
+            context: context,
+            state: state,
+            child: GuardPinSetupScreen(
+              initialEmployeeId: params['employeeId'],
+              initialPhoneNumber: params['phoneNumber'],
+            ),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/login/field-officer',
+        pageBuilder: (BuildContext context, GoRouterState state) {
+          return _buildPage(
+            context: context,
+            state: state,
+            child: const RoleLoginScreen.fieldOfficer(),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/login/admin',
+        pageBuilder: (BuildContext context, GoRouterState state) {
+          return _buildPage(
+            context: context,
+            state: state,
+            child: const AdminLoginScreen(),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/permissions',
+        pageBuilder: (BuildContext context, GoRouterState state) {
+          return _buildPage(
+            context: context,
+            state: state,
+            child: const PermissionOnboardingScreen(),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/qr-attendance',
+        pageBuilder: (BuildContext context, GoRouterState state) {
+          return _buildPage(
+            context: context,
+            state: state,
+            child: const QrAttendanceFlow(),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/attendance',
+        pageBuilder: (BuildContext context, GoRouterState state) {
+          return _buildPage(
+            context: context,
+            state: state,
+            child: const PublicAttendanceScreen(),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/enroll',
+        pageBuilder: (BuildContext context, GoRouterState state) {
+          return _buildPage(
+            context: context,
+            state: state,
+            child: const GuardEnrollmentScreen(),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/module-unavailable',
+        pageBuilder: (BuildContext context, GoRouterState state) {
+          return _buildPage(
+            context: context,
+            state: state,
+            child: const ModuleUnavailableScreen(),
+          );
+        },
+      ),
+    ],
+  );
+});

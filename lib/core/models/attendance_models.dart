@@ -59,6 +59,21 @@ ShiftTemplateModel? resolveActiveShiftTemplate(
   return shifts.first;
 }
 
+/// Returns true when [at] falls before the shift's scheduled end, i.e. a
+/// checkout now would be an early checkout.
+///
+/// Cross-midnight shifts and unparseable times return false so callers never
+/// prompt on an ambiguous schedule (avoids false positives).
+bool isEarlyCheckoutForShift(ShiftTemplateModel? shift, {DateTime? at}) {
+  if (shift == null) return false;
+  final start = _shiftMinutes(shift.startTime);
+  final end = _shiftMinutes(shift.endTime);
+  if (start == null || end == null) return false;
+  if (end <= start) return false;
+  final now = at ?? DateTime.now();
+  return (now.hour * 60 + now.minute) < end;
+}
+
 /// Resolve the shift a guard is reporting for based on punch time and status.
 ///
 /// This is DIFFERENT from [resolveActiveShiftTemplate] which answers

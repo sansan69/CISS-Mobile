@@ -12,6 +12,7 @@ import '../../features/guard/presentation/screens/guard_dashboard_screen.dart';
 import '../../features/guard/presentation/screens/guard_incidents_screen.dart';
 import '../../features/guard/presentation/screens/guard_leave_screen.dart';
 import '../../features/guard/presentation/screens/guard_profile_screen.dart';
+import '../settings/remote_config_provider.dart';
 
 /// Periodically invalidates key dashboard and list providers to keep data fresh.
 class RefreshController {
@@ -38,6 +39,9 @@ class RefreshController {
   }
 
   void _refreshAll() {
+    // Server-driven settings (TTL-gated: no-op when a fresh snapshot exists).
+    _ref.read(remoteConfigProvider.notifier).refresh();
+
     // Guard Portal
     _ref.invalidate(guardDashboardProvider);
     _ref.invalidate(attendanceSitesProvider);

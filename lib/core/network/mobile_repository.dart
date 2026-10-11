@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../attendance/attendance_validation.dart';
 import '../models/app_role.dart';
 import '../models/admin_models.dart';
 import '../models/attendance_models.dart';
@@ -33,6 +34,9 @@ class MobileRepository {
 
   static const String _mobileNotificationsPath = '/api/mobile/notifications';
   static const String _mobileTokenPath = '/api/mobile/token';
+  static const String _remoteConfigPath = '/api/mobile/settings';
+  static const String _attendanceBreakPath = '/api/mobile/attendance/break';
+  static const String _attendanceValidatePath = '/api/attendance/validate';
 
   Future<String?> _token() async => _auth.currentUser?.getIdToken(false);
 
@@ -935,8 +939,87 @@ class MobileRepository {
     return _postJson('/api/attendance/submit', payload);
   }
 
+  /// Server-authoritative geo + IP pre-check for check-in/out.
+  ///
+  /// The server derives the client IP from the request itself; [publicIp] is an
+  /// optional hint only. The attendance submit endpoint re-enforces the same
+  /// checks, so callers must treat an error here as fail-open rather than as
+  /// permission to bypass enforcement.
+  Future<AttendanceValidationResult> validateAttendance({
+    required String employeeDocId,
+    required String siteId,
+    required double lat,
+    required double lon,
+    required String status,
+    String? publicIp,
+    String? dutyPointId,
+  }) async {
+    final data = await _postJson(_attendanceValidatePath, <String, dynamic>{
+      'employeeDocId': employeeDocId,
+      'siteId': siteId,
+      'lat': lat,
+      'lon': lon,
+      'status': status,
+      'dutyPointId': dutyPointId,
+      'publicIp': publicIp,
+      'capturedAt': DateTime.now().toUtc().toIso8601String(),
+    });
+    return AttendanceValidationResult.fromJson(data);
+  }
+
+  /// Starts or stops a break for the guard's open attendance session.
+  ///
+  /// The backend is authoritative for the resulting state, so the response
+  /// (see `AttendanceSession.applyBreakResponse`) is returned to the caller.
+  Future<Map<String, dynamic>> attendanceBreak({
+    required String action,
+    double? lat,
+    double? lng,
+    double? accuracy,
+  }) async {
+    return _postJson(_attendanceBreakPath, <String, dynamic>{
+      'action': action,
+      'lat': lat,
+      'lng': lng,
+      'accuracy': accuracy,
+      'capturedAt': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  Future<Map<String, dynamic>> startBreak({
+    double? lat,
+    double? lng,
+    double? accuracy,
+  }) {
+    return attendanceBreak(
+      action: 'start',
+      lat: lat,
+      lng: lng,
+      accuracy: accuracy,
+    );
+  }
+
+  Future<Map<String, dynamic>> stopBreak({
+    double? lat,
+    double? lng,
+    double? accuracy,
+  }) {
+    return attendanceBreak(
+      action: 'stop',
+      lat: lat,
+      lng: lng,
+      accuracy: accuracy,
+    );
+  }
+
   Future<Map<String, dynamic>> fetchGuardTrackingStatus() {
     return _getJson('/api/guard/tracking/status');
+  }
+
+  Future<Map<String, dynamic>> fetchRemoteConfig() async {
+    final response = await _getJson(_remoteConfigPath);
+    final data = response['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : response;
   }
 
   Future<List<AttendanceRecordModel>> fetchAttendanceHistory({
@@ -1665,6 +1748,26 @@ class MobileRepository {
             as List<dynamic>? ??
         const <dynamic>[];
 
+    return entries
+        .whereType<Map<String, dynamic>>()
+        .map(FieldOfficerAttendanceEntry.fromJson)
+        .toList();
+  }
+
+  Future<List<FieldOfficerAttendanceEntry>> fetchFieldOfficerGuardAttendanceRange({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    String ymd(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final data = await _getJson(
+      '/api/field-officer/guard-attendance/range',
+      queryParameters: <String, dynamic>{'start': ymd(start), 'end': ymd(end)},
+    );
+    final entries =
+        (data['attendance'] ?? data['records'] ?? data['logs'] ?? data['data'])
+            as List<dynamic>? ??
+        const <dynamic>[];
     return entries
         .whereType<Map<String, dynamic>>()
         .map(FieldOfficerAttendanceEntry.fromJson)
