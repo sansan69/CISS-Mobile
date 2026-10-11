@@ -33,6 +33,7 @@ class MobileRepository {
 
   static const String _mobileNotificationsPath = '/api/mobile/notifications';
   static const String _mobileTokenPath = '/api/mobile/token';
+  static const String _remoteConfigPath = '/api/mobile/settings';
 
   Future<String?> _token() async => _auth.currentUser?.getIdToken(false);
 
@@ -937,6 +938,12 @@ class MobileRepository {
 
   Future<Map<String, dynamic>> fetchGuardTrackingStatus() {
     return _getJson('/api/guard/tracking/status');
+  }
+
+  Future<Map<String, dynamic>> fetchRemoteConfig() async {
+    final response = await _getJson(_remoteConfigPath);
+    final data = response['data'];
+    return data is Map ? Map<String, dynamic>.from(data) : response;
   }
 
   Future<List<AttendanceRecordModel>> fetchAttendanceHistory({
