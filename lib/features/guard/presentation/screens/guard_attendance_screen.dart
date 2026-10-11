@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/attendance/attendance_session.dart';
+import '../../../../../core/attendance/early_checkout.dart';
 import '../../../../../core/haptics.dart';
 import '../../../../../core/models/attendance_models.dart';
 import '../../../../../core/models/guard_profile.dart';
@@ -345,6 +346,13 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
             error.type == DioExceptionType.connectionError);
   }
 
+  /// True when the submit response asks the client to supply a reason for an
+  /// early checkout.
+  bool _requiresEarlyCheckoutReason(Map<String, dynamic> response) {
+    return response['requiresEarlyCheckOutReason'] == true ||
+        response['requiresReason'] == true;
+  }
+
   String _formatBreakElapsed() {
     final started = _breakSession.breakStartedAt;
     if (started == null) return '00:00';
@@ -622,6 +630,18 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         'clientRequestId': _clientRequestId ??= _uuid.v4(),
       };
 
+      // Local pre-check: if the guard is checking out before the selected
+      // shift's scheduled end, capture the reason now. If the server also asks
+      // via the submit response we reuse this value instead of double-prompting.
+      if (_status == 'Out' &&
+          payload['earlyCheckOutReason'] == null &&
+          isEarlyCheckoutForShift(shift)) {
+        if (!mounted) return;
+        final reason = await showEarlyCheckoutReasonSheet(context);
+        if (!mounted) return;
+        if (reason != null) payload['earlyCheckOutReason'] = reason;
+      }
+
       try {
         final uploadPath =
             'employees/${profile.id.isNotEmpty ? profile.id : profile.employeeId}/attendance/${DateTime.now().millisecondsSinceEpoch}.jpg';
@@ -633,10 +653,25 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
               siteId: _site!.id,
             );
 
-        await ref.read(mobileRepositoryProvider).submitAttendance({
-          ...payload,
-          'photoUrl': uploadResult['url'],
-        });
+        // Server-driven signal: the submit response may demand a reason for an
+        // early checkout. Prompt (only if we don't already have one) and
+        // re-submit exactly once with the reason attached.
+        final response = await ref.read(mobileRepositoryProvider).submitAttendance(
+          <String, dynamic>{...payload, 'photoUrl': uploadResult['url']},
+        );
+        if (_status == 'Out' &&
+            payload['earlyCheckOutReason'] == null &&
+            _requiresEarlyCheckoutReason(response)) {
+          if (!mounted) return;
+          final reason = await showEarlyCheckoutReasonSheet(context);
+          if (!mounted) return;
+          if (reason != null) {
+            payload['earlyCheckOutReason'] = reason;
+            await ref.read(mobileRepositoryProvider).submitAttendance(
+              <String, dynamic>{...payload, 'photoUrl': uploadResult['url']},
+            );
+          }
+        }
 
         if (_status == 'In') {
           if (_site!.lat != null && _site!.lng != null) {
