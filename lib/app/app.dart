@@ -14,13 +14,14 @@ class CissMobileApp extends ConsumerWidget {
     final themeMode = ref.watch(
       appSettingsControllerProvider.select((s) => s.themeMode),
     );
+    final router = ref.watch(routerProvider);
     return MaterialApp.router(
       title: 'CISS Workforce',
       debugShowCheckedModeBanner: false,
       theme: buildCissTheme(Brightness.light),
       darkTheme: buildCissTheme(Brightness.dark),
       themeMode: themeMode,
-      routerConfig: appRouter,
+      routerConfig: router,
       builder:
           (context, child) =>
               AppUpdateGate(child: child ?? const SizedBox.shrink()),

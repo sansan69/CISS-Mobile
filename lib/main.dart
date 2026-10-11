@@ -15,6 +15,7 @@ import 'core/offline/draft_service.dart';
 import 'core/sync/providers.dart';
 import 'core/sync/refresh_controller.dart';
 import 'core/region/region_service.dart';
+import 'core/settings/remote_config_provider.dart';
 import 'app/theme/theme_mode_controller.dart';
 import 'firebase_options.dart';
 
@@ -42,6 +43,7 @@ Future<void> main() async {
   await Hive.openBox<Map>(OfflineQueue.boxName, encryptionCipher: cipher);
   await Hive.openBox<Map>(DraftService.boxName); // Non-encrypted for high-frequency drafts
   await container.read(appSettingsControllerProvider.notifier).init(cipher);
+  await container.read(remoteConfigStoreProvider).init(cipher);
 
   try {
     await Firebase.initializeApp(
