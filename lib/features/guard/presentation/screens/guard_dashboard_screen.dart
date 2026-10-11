@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../../core/settings/module_gate.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../core/network/providers.dart';
@@ -520,6 +521,7 @@ class _DashboardBody extends ConsumerWidget {
                     const SizedBox(height: AppSpacing.sm),
                     Row(
                       children: <Widget>[
+                        if (moduleEnabled(ref, 'leave'))
                         Expanded(
                           child: SurfaceCard(
                             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
@@ -552,6 +554,7 @@ class _DashboardBody extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(width: AppSpacing.sm),
+                        if (moduleEnabled(ref, 'incidents'))
                         Expanded(
                           child: SurfaceCard(
                             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
@@ -588,6 +591,7 @@ class _DashboardBody extends ConsumerWidget {
                     const SizedBox(height: AppSpacing.xs),
                     Row(
                       children: <Widget>[
+                        if (moduleEnabled(ref, 'training'))
                         Expanded(
                           child: SurfaceCard(
                             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
@@ -620,6 +624,7 @@ class _DashboardBody extends ConsumerWidget {
                           ),
                         ),
                         const SizedBox(width: AppSpacing.sm),
+                        if (moduleEnabled(ref, 'payslips'))
                         Expanded(
                           child: SurfaceCard(
                             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),

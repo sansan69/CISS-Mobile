@@ -16,6 +16,7 @@ import 'core/offline/draft_service.dart';
 import 'core/sync/providers.dart';
 import 'core/sync/refresh_controller.dart';
 import 'core/region/region_service.dart';
+import 'core/settings/remote_config_provider.dart';
 import 'app/theme/theme_mode_controller.dart';
 import 'firebase_options.dart';
 
@@ -56,6 +57,19 @@ Future<void> main() async {
     DraftService.boxName,
   ); // Non-encrypted for high-frequency drafts
   await container.read(appSettingsControllerProvider.notifier).init(cipher);
+  // These new stores must never fail-closed: a corrupt or cipher-mismatched
+  // box would otherwise throw before runApp and blank the screen. Each init is
+  // isolated so a failure falls back to defaults / a no-op buffer.
+  try {
+    await container.read(remoteConfigStoreProvider).init(cipher);
+  } catch (e) {
+    debugPrint('RemoteConfigStore init failed — falling back to defaults: $e');
+  }
+  try {
+    await container.read(trackingBufferProvider).init();
+  } catch (e) {
+    debugPrint('TrackingBuffer init failed — offline buffering disabled: $e');
+  }
 
   try {
     await Firebase.initializeApp(

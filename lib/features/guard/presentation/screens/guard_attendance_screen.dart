@@ -13,7 +13,13 @@ import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
+import '../../../../../core/attendance/attendance_session.dart';
+import '../../../../../core/attendance/attendance_validation.dart';
+import '../../../../../core/attendance/early_checkout.dart';
 import '../../../../../core/location/background_tracking_service.dart';
+import '../../../../../core/location/public_ip.dart';
+import '../../../../../core/settings/module_gate.dart';
+import '../../../../../core/settings/remote_config_provider.dart';
 import '../../../../../core/fcm/providers.dart';
 import '../../../../../shared/widgets/camera_capture_screen.dart';
 import '../../../../../shared/widgets/modern_card.dart';
@@ -49,8 +55,13 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   final TextEditingController _notesController = TextEditingController();
   bool _showNotesField = false;
 
+  /// Server-authoritative break state for the open attendance session.
+  final AttendanceSession _attendance = AttendanceSession();
+  Timer? _breakTicker;
+
   @override
   void dispose() {
+    _breakTicker?.cancel();
     _notesController.dispose();
     super.dispose();
   }
@@ -333,6 +344,121 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     return nearest;
   }
 
+  /// Server-authoritative geo + IP pre-check before check-in/out.
+  ///
+  /// Opt-in behind the `ipAttendance` module flag only (default OFF); the
+  /// server still enforces geo + IP on submit. Fails open on any error.
+  Future<bool> _validateBeforeSubmit(GuardProfileModel profile) async {
+    if (!mounted) return false;
+    if (!shouldRunAttendancePreCheck(ref.read(remoteConfigProvider).modules)) {
+      return false;
+    }
+    final position = _position;
+    final site = _site;
+    if (position == null || site == null) return false;
+
+    if (position.accuracy > 100 && mounted) {
+      final accuracy = position.accuracy.toStringAsFixed(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Low GPS accuracy (±$accuracy m). Your location may be imprecise.',
+          ),
+        ),
+      );
+    }
+
+    final publicIp = await fetchPublicIp();
+    try {
+      final result = await ref
+          .read(mobileRepositoryProvider)
+          .validateAttendance(
+            employeeDocId:
+                profile.id.isNotEmpty ? profile.id : profile.employeeId,
+            siteId: site.id,
+            lat: position.latitude,
+            lon: position.longitude,
+            status: _status,
+            publicIp: publicIp,
+          );
+      if (!result.blocksSubmit) return false;
+      if (mounted) {
+        final reason = result.reason ?? 'Attendance blocked by server validation.';
+        setState(() => _error = reason);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(reason)));
+      }
+      return true;
+    } catch (_) {
+      // Fail-open: offline or validation endpoint unavailable.
+      return false;
+    }
+  }
+
+  Future<void> _toggleBreak() async {
+    final action = _attendance.onBreak ? BreakAction.stop : BreakAction.start;
+    final position = _position;
+    final body = <String, dynamic>{
+      'action': action.name,
+      'lat': position?.latitude,
+      'lng': position?.longitude,
+      'accuracy': position?.accuracy,
+      'capturedAt': DateTime.now().toUtc().toIso8601String(),
+    };
+    try {
+      final res = await ref
+          .read(mobileRepositoryProvider)
+          .attendanceBreak(
+            action: action.name,
+            lat: position?.latitude,
+            lng: position?.longitude,
+            accuracy: position?.accuracy,
+          );
+      if (!mounted) return;
+      setState(() => _attendance.applyBreakResponse(res));
+      _syncBreakTicker();
+    } catch (error) {
+      if (CissError.isRetryableNetworkError(error)) {
+        await ref
+            .read(offlineQueueProvider)
+            .enqueue(
+              path: '/api/mobile/attendance/break',
+              method: 'POST',
+              body: body,
+            );
+        if (!mounted) return;
+        final optimistic = <String, dynamic>{
+          'onBreak': action == BreakAction.start,
+          'breakSeconds': _attendance.totalBreakSeconds,
+          'canCheckOut': action != BreakAction.start,
+          if (action == BreakAction.start)
+            'breakStartedAt': DateTime.now().toUtc().toIso8601String(),
+        };
+        setState(() => _attendance.applyBreakResponse(optimistic));
+        _syncBreakTicker();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Offline: break saved and will sync.')),
+        );
+      } else if (mounted) {
+        setState(() => _error = CissError.parse(error));
+      }
+    }
+  }
+
+  void _syncBreakTicker() {
+    _breakTicker?.cancel();
+    if (_attendance.onBreak) {
+      _breakTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
+  bool _requiresEarlyCheckoutReason(Map<String, dynamic> response) =>
+      response['requiresEarlyCheckOutReason'] == true ||
+      response['requiresReason'] == true;
+
   Future<void> _submitAttendance(GuardProfileModel profile) async {
     setState(() => _isSuccess = false);
     if (_site == null) {
@@ -362,6 +488,8 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         return;
       }
     }
+
+    if (await _validateBeforeSubmit(profile)) return;
 
     setState(() {
       _busy = true;
@@ -444,11 +572,31 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
               attemptId: _clientRequestId,
             );
 
-        await ref.read(mobileRepositoryProvider).submitAttendance({
-          ...payload,
-          'photoUrl': uploadResult['url'],
-          'photoStoragePath': uploadResult['path'],
-        });
+        var submitResult = await ref
+            .read(mobileRepositoryProvider)
+            .submitAttendance({
+              ...payload,
+              'photoUrl': uploadResult['url'],
+              'photoStoragePath': uploadResult['path'],
+            });
+
+        if (_status == 'Out' &&
+            _requiresEarlyCheckoutReason(submitResult) &&
+            mounted) {
+          final reason = await showEarlyCheckoutReasonSheet(context);
+          if (reason != null && reason.isNotEmpty) {
+            _clientRequestId = _uuid.v4();
+            submitResult = await ref
+                .read(mobileRepositoryProvider)
+                .submitAttendance({
+                  ...payload,
+                  'photoUrl': uploadResult['url'],
+                  'photoStoragePath': uploadResult['path'],
+                  'clientRequestId': _clientRequestId,
+                  'earlyCheckOutReason': reason,
+                });
+          }
+        }
 
         if (_status == 'In') {
           // Start the background tracking service (best-effort — a failure
@@ -1045,10 +1193,21 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                               ),
                             ),
                           ),
+                        if (moduleEnabled(ref, 'break') && _status == 'Out') ...[
+                          const SizedBox(height: 8),
+                          _BreakPanel(
+                            onBreak: _attendance.onBreak,
+                            breakStartedAt: _attendance.breakStartedAt,
+                            onToggle: _busy ? null : _toggleBreak,
+                          ),
+                        ],
                         const SizedBox(height: 14),
                         // ── Tactile Glowing Submit Button ──
                         GestureDetector(
-                          onTap: _busy ? null : () => _submitAttendance(profile),
+                          onTap: (_busy ||
+                                  (_status == 'Out' && !_attendance.canCheckOut))
+                              ? null
+                              : () => _submitAttendance(profile),
                           child: Container(
                             width: double.infinity,
                             height: 52,
@@ -2156,6 +2315,63 @@ class _BiometricPhotoCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Compact break control shown while the guard is clocked in. Mirrors the
+/// server-authoritative [AttendanceSession] state.
+class _BreakPanel extends StatelessWidget {
+  const _BreakPanel({
+    required this.onBreak,
+    required this.breakStartedAt,
+    required this.onToggle,
+  });
+
+  final bool onBreak;
+  final DateTime? breakStartedAt;
+  final VoidCallback? onToggle;
+
+  String get _elapsed {
+    final started = breakStartedAt;
+    if (started == null) return '00:00';
+    final d = DateTime.now().toUtc().difference(started.toUtc());
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return d.inHours > 0 ? '${d.inHours}:$m:$s' : '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: tokens.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: tokens.border),
+      ),
+      child: Row(
+        children: <Widget>[
+          Icon(
+            onBreak
+                ? Icons.pause_circle_filled_rounded
+                : Icons.free_breakfast_rounded,
+            color: onBreak ? tokens.warning : tokens.inkMuted,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              onBreak ? 'On break · $_elapsed' : 'Take a break',
+              style: TextStyle(fontWeight: FontWeight.w700, color: tokens.ink),
+            ),
+          ),
+          TextButton(
+            onPressed: onToggle,
+            child: Text(onBreak ? 'End break' : 'Start break'),
+          ),
+        ],
       ),
     );
   }

@@ -52,6 +52,113 @@
 
 ---
 
+## Phase 0 — Restore a compiling baseline (prerequisite)
+
+`main` (and `origin/main`) do not compile: `field_officer_guard_detail_screen.dart` and `guard_attendance_logs_screen.dart` reference members that were never implemented. This task restores a green baseline before any plan work. Ruling (controller): the missing members are authored fresh (no branch/stash contains them); `fetchFieldOfficerGuardAttendanceRange` reuses the existing `/api/field-officer/guard-attendance` endpoint with `from`/`to` ISO date params — if the server uses different param names this is a one-line change.
+
+### Task 0: Complete `FieldOfficerAttendanceEntry` + range fetch
+
+**Files:**
+- Modify: `lib/core/models/mobile_dashboard_models.dart` (class `FieldOfficerAttendanceEntry`, ~line 285-327)
+- Modify: `lib/core/network/mobile_repository.dart` (after `fetchFieldOfficerGuardAttendance`, ~line 1672)
+- Test: `test/field_officer_attendance_entry_test.dart`
+
+**Interfaces:**
+- Produces: `FieldOfficerAttendanceEntry` gains `num? distanceMeters`, `num? gpsAccuracyMeters`, `num? geofenceRadiusAtTime`, `bool isMockLocationSuspected`, `String? mockLocationReason`, `String? reviewStatus`, `bool requiresAdminReview`. `MobileRepository.fetchFieldOfficerGuardAttendanceRange({required DateTime start, required DateTime end})` → `Future<List<FieldOfficerAttendanceEntry>>`.
+
+- [ ] **Step 1: Write the failing test**
+
+```dart
+// test/field_officer_attendance_entry_test.dart
+import 'package:ciss_mobile/core/models/mobile_dashboard_models.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  test('parses flag/evidence fields, defaults when absent', () {
+    final e = FieldOfficerAttendanceEntry.fromJson(const {
+      'id': '1', 'guardName': 'A', 'guardId': 'g1', 'employeeId': 'e1',
+      'siteName': 'S', 'clientName': 'C', 'district': 'D', 'date': '2026-10-11',
+      'dutyPointName': 'P', 'shiftLabel': 'Day', 'status': 'in',
+      'distanceMeters': 45.2, 'gpsAccuracyMeters': 8, 'geofenceRadiusAtTime': 100,
+      'isMockLocationSuspected': true, 'mockLocationReason': 'Mock app detected',
+      'reviewStatus': 'pending', 'requiresAdminReview': true,
+    });
+    expect(e.distanceMeters, 45.2);
+    expect(e.gpsAccuracyMeters, 8);
+    expect(e.geofenceRadiusAtTime, 100);
+    expect(e.isMockLocationSuspected, isTrue);
+    expect(e.mockLocationReason, 'Mock app detected');
+    expect(e.reviewStatus, 'pending');
+    expect(e.requiresAdminReview, isTrue);
+
+    final empty = FieldOfficerAttendanceEntry.fromJson(const {});
+    expect(empty.distanceMeters, isNull);
+    expect(empty.isMockLocationSuspected, isFalse);
+    expect(empty.requiresAdminReview, isFalse);
+    expect(empty.mockLocationReason, isNull);
+  });
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `flutter test test/field_officer_attendance_entry_test.dart`
+Expected: FAIL (named parameters/fields don't exist)
+
+- [ ] **Step 3: Add the fields + parsing**
+
+In `FieldOfficerAttendanceEntry`: add the constructor params, the `final` fields, and in `fromJson`:
+
+```dart
+      distanceMeters: json['distanceMeters'] as num?,
+      gpsAccuracyMeters: json['gpsAccuracyMeters'] as num?,
+      geofenceRadiusAtTime: json['geofenceRadiusAtTime'] as num?,
+      isMockLocationSuspected: json['isMockLocationSuspected'] == true,
+      mockLocationReason: json['mockLocationReason'] as String?,
+      reviewStatus: json['reviewStatus'] as String?,
+      requiresAdminReview: json['requiresAdminReview'] == true,
+```
+
+with types `final num? distanceMeters; final num? gpsAccuracyMeters; final num? geofenceRadiusAtTime; final bool isMockLocationSuspected; final String? mockLocationReason; final String? reviewStatus; final bool requiresAdminReview;` and constructor defaults `this.distanceMeters, this.gpsAccuracyMeters, this.geofenceRadiusAtTime, this.isMockLocationSuspected = false, this.mockLocationReason, this.reviewStatus, this.requiresAdminReview = false`.
+
+- [ ] **Step 4: Add the range method**
+
+```dart
+  Future<List<FieldOfficerAttendanceEntry>> fetchFieldOfficerGuardAttendanceRange({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    String ymd(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final data = await _getJson(
+      '/api/field-officer/guard-attendance',
+      queryParameters: <String, dynamic>{'from': ymd(start), 'to': ymd(end)},
+    );
+    final entries =
+        (data['attendance'] ?? data['records'] ?? data['logs'] ?? data['data'])
+            as List<dynamic>? ??
+        const <dynamic>[];
+    return entries
+        .whereType<Map<String, dynamic>>()
+        .map(FieldOfficerAttendanceEntry.fromJson)
+        .toList();
+  }
+```
+
+- [ ] **Step 5: Run test + full analyze/test**
+
+Run: `flutter test test/field_officer_attendance_entry_test.dart && flutter analyze && flutter test`
+Expected: new test PASS; `flutter analyze` reports no errors; full suite PASS (green baseline restored).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add lib/core/models/mobile_dashboard_models.dart lib/core/network/mobile_repository.dart test/field_officer_attendance_entry_test.dart
+git commit -m "fix(field-officer): complete FieldOfficerAttendanceEntry fields + range fetch"
+```
+
+---
+
 ## Phase A — Module settings gating
 
 ### Task A1: `ModuleFlags` model + defaults

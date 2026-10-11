@@ -89,15 +89,6 @@ class _FieldOfficerReportsScreenState
     ref.invalidate(fieldOfficerTrainingReportsProvider);
   }
 
-  String _formatDate(String raw) {
-    if (raw.isEmpty) return '—';
-    final parsed = DateTime.tryParse(raw);
-    if (parsed != null) {
-      return DateFormat('dd MMM yyyy').format(parsed.toLocal());
-    }
-    return raw;
-  }
-
   void _openVisitDetail(VisitReportModel report) {
     final isAdmin = false; // FO shell is field-officer only
     showModalBottomSheet(
@@ -2794,4 +2785,13 @@ String _statusLabel(String status) {
     default:
       return status;
   }
+}
+
+String _formatDate(String raw) {
+  if (raw.isEmpty) return '—';
+  final parsed = DateTime.tryParse(raw);
+  if (parsed != null) {
+    return DateFormat('dd MMM yyyy').format(parsed.toLocal());
+  }
+  return raw;
 }

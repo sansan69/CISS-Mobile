@@ -174,3 +174,19 @@ Chosen approach: **Central `AppSettings` Riverpod provider + GoRouter redirect g
 - **State/plugins:** MobX + flutter_mobx, google_maps_flutter, mobile_scanner (ML Kit Barcode `libbarhopper_v3`), background_location_tracker, geolocator, flutter_activity_recognition, disable_battery_optimization, sqflite (`app.db`), firebase_core/firebase_messaging, flutter_local_notifications, cached_network_image, infinite_scroll_pagination, lottie, pdfium.
 - **Offline DB:** `app.db` tables `trackings`, `visit`, `client`, `clientSync`, `domain`, `cacheObject`. `trackings` columns: `status, accuracy, activity, latitude, longitude, altitude, bearing, locationAccuracy, speed, time, isMock, batteryPercentage, isGPSOn, …`.
 - **Observations:** server-driven `is*ModuleEnabled` flags via `getModuleSettings`; IP-based attendance via public-IP lookup (`ipv4.seeip.org`); Firebase project `ciss-mis`; Maps key in manifest. No Crashlytics/Sentry.
+
+## As-built addendum (updated 2026-10-11, post-implementation)
+
+Deviations from the sections above, as actually shipped:
+
+- **§4/§5 tracking buffer is an NDJSON spool, not a Hive box.** Cross-isolate Hive access (background `flutter_background_service` isolate writes, main isolate flushes) does not share a box, so `TrackingBuffer` was reimplemented as an append-only `dart:io` spool file (`live/spool.seg.*.ndjson`, rename-based drain). The spool is currently **plaintext** (old Hive box was AES) — encryption deferred (needs a cross-isolate-safe cipher).
+- **§6 attendance pre-check is gated on `ipAttendance` only** (default OFF), not `geoFence`; `fetchPublicIp()` runs only then. Keeps the check-in/out path latency-unchanged by default; the server still enforces on submit.
+- **§1 settings + §6 validate now match the live backend contracts (cisskerala.site):**
+  - `GET /api/mobile/settings` → `{data:{version,app,modules}}` (implemented in the CISS backend; defaults key-match `ModuleFlags.defaults()`).
+  - Geo pre-check calls the existing `POST /api/attendance/validate` with `{employeeDocId,siteId,lat,lon,status}` → `{canSubmit,reason}` (not `allowed`).
+  - Guard attendance range calls `GET /api/field-officer/guard-attendance/range?start=&end=`.
+  - Heartbeat: `batteryLevel` stays 0–1; `batteryPercentage` is now the 0–100 integer.
+- **Remote-config cache key includes the active role** (`region:role`, from `AuthSession.role`), re-keyed on role change.
+- **Backend endpoints added** (CISS repo, branch `feature/mobile-api-endpoints`): `/api/mobile/settings`, `/api/mobile/attendance/break`, `/api/mobile/tracking/batch`, plus heartbeat AMS-field persistence via a shared `src/lib/guard-tracking-persist.ts`.
+
+Known deferred items: spool encryption (plaintext at rest); spool crash-window residuals (orphaned segment on kill mid-drain; torn-line fusion); on-device cross-isolate flush verification; `minSupportedVersion`/`maintenance` sources in the backend.

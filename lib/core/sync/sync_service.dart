@@ -7,17 +7,32 @@ import 'package:flutter/foundation.dart' as foundation;
 import '../network/mobile_repository.dart';
 import '../network/api_client.dart';
 import '../location/background_tracking_service.dart';
+import '../location/tracking_buffer.dart';
 import '../offline/offline_queue.dart';
 import '../offline/offline_request.dart';
 
 class SyncService {
-  SyncService(this._repository, this._queue);
+  SyncService(this._repository, this._queue, this._trackingBuffer);
 
   final MobileRepository _repository;
   final OfflineQueue _queue;
+  final TrackingBuffer _trackingBuffer;
   final _connectivity = Connectivity();
   StreamSubscription<List<ConnectivityResult>>? _subscription;
   bool _isSyncing = false;
+
+  /// Tracking samples posted per batch request. The server rejects an
+  /// oversized payload, so a single request for the entire (up to 5000-sample)
+  /// buffer could be retried forever; chunking keeps each request bounded.
+  static const int trackingBatchChunkSize = 200;
+
+  /// Splits [items] into consecutive chunks of at most [size] elements.
+  static Iterable<List<T>> chunked<T>(List<T> items, int size) sync* {
+    for (var start = 0; start < items.length; start += size) {
+      final end = math.min(start + size, items.length);
+      yield items.sublist(start, end);
+    }
+  }
 
   /// Tracks the last time any request succeeded — used to decay retry counts
   /// after a quiet period (1 hour without failure).
@@ -50,6 +65,10 @@ class SyncService {
     _isSyncing = true;
 
     try {
+      // Flush buffered location samples first — independent of the generic
+      // request queue and fully best-effort (errors are swallowed).
+      await _flushTrackingSamples();
+
       final requests = _queue.getQueuedRequests();
       for (final request in requests) {
         // Evict requests that have failed too many times.
@@ -119,6 +138,51 @@ class SyncService {
       }
     } finally {
       _isSyncing = false;
+    }
+  }
+
+  /// Uploads buffered tracking samples in bounded chunks, persisting progress
+  /// after each chunk so a delivered chunk is not re-sent. Never throws: a
+  /// failure (offline, non-2xx, auth) is logged and the un-sent tail is retried
+  /// on the next [processQueue] pass.
+  Future<void> _flushTrackingSamples() async {
+    final List<Map<String, dynamic>> pending;
+    try {
+      pending = await _trackingBuffer.readPending();
+    } catch (error) {
+      // Buffer not initialized yet (early startup) — retry on the next pass.
+      return;
+    }
+    if (pending.isEmpty) return;
+
+    final chunks = chunked(pending, trackingBatchChunkSize);
+    var sent = 0;
+    for (final chunk in chunks) {
+      try {
+        final dio = _repository.apiClient.dio;
+        final response = await dio.post<dynamic>(
+          '/api/mobile/tracking/batch',
+          data: <String, dynamic>{'samples': chunk},
+          options: Options(headers: await _repository.authHeaders()),
+        );
+        final data = response.data;
+        if (data is Map && data['success'] == false) {
+          throw Exception(
+            data['error']?.toString() ?? 'Server rejected tracking batch',
+          );
+        }
+        sent += chunk.length;
+        // Persist progress: keep only the un-sent tail so a crash mid-flush
+        // does not resend the chunks that already landed. An empty remainder
+        // clears the spool.
+        await _trackingBuffer.commit(pending.sublist(sent));
+      } catch (error) {
+        foundation.debugPrint(
+          'Tracking batch sync failed (${pending.length} samples, '
+          '$sent already sent), will retry later: $error',
+        );
+        break;
+      }
     }
   }
 
