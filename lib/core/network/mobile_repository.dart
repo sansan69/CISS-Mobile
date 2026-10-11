@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../attendance/attendance_validation.dart';
 import '../models/app_role.dart';
 import '../models/admin_models.dart';
 import '../models/attendance_models.dart';
@@ -35,6 +36,8 @@ class MobileRepository {
   static const String _mobileTokenPath = '/api/mobile/token';
   static const String _remoteConfigPath = '/api/mobile/settings';
   static const String _attendanceBreakPath = '/api/mobile/attendance/break';
+  static const String _attendanceValidatePath =
+      '/api/mobile/attendance/validate';
 
   Future<String?> _token() async => _auth.currentUser?.getIdToken(false);
 
@@ -935,6 +938,30 @@ class MobileRepository {
     Map<String, dynamic> payload,
   ) async {
     return _postJson('/api/attendance/submit', payload);
+  }
+
+  /// Server-authoritative geo + IP pre-check for check-in/out.
+  ///
+  /// The server derives the client IP from the request itself; [publicIp] is an
+  /// optional hint only. The attendance submit endpoint re-enforces the same
+  /// checks, so callers must treat an error here as fail-open rather than as
+  /// permission to bypass enforcement.
+  Future<AttendanceValidationResult> validateAttendance({
+    required String siteId,
+    required double lat,
+    required double lng,
+    required double accuracy,
+    String? publicIp,
+  }) async {
+    final data = await _postJson(_attendanceValidatePath, <String, dynamic>{
+      'siteId': siteId,
+      'lat': lat,
+      'lng': lng,
+      'accuracy': accuracy,
+      'publicIp': publicIp,
+      'capturedAt': DateTime.now().toUtc().toIso8601String(),
+    });
+    return AttendanceValidationResult.fromJson(data);
   }
 
   /// Starts or stops a break for the guard's open attendance session.

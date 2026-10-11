@@ -18,6 +18,7 @@ import '../../../../../core/network/providers.dart';
 import '../../../../../core/settings/module_gate.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/location/background_tracking_service.dart';
+import '../../../../../core/location/public_ip.dart';
 import '../../../../../core/fcm/providers.dart';
 import '../../../../../shared/widgets/camera_capture_screen.dart';
 import '../../../../../shared/widgets/modern_card.dart';
@@ -533,6 +534,65 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     );
   }
 
+  /// Server-authoritative geo + IP pre-check before check-in/out.
+  ///
+  /// Gated by the `geoFence` / `ipAttendance` module flags. Returns true when
+  /// the submit must be aborted because the server said the guard is not
+  /// allowed. Fails open on any error — the submit endpoint re-enforces the
+  /// same checks server-side, so an unreachable pre-check must never block.
+  Future<bool> _validateBeforeSubmit() async {
+    if (!mounted) return false;
+
+    final enabled =
+        moduleEnabled(ref, 'geoFence', fallback: true) ||
+        moduleEnabled(ref, 'ipAttendance', fallback: false);
+    if (!enabled) return false;
+
+    final position = _position;
+    final site = _site;
+    if (position == null || site == null) return false;
+
+    if (position.accuracy > 100 && mounted) {
+      final accuracy = position.accuracy.toStringAsFixed(0);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Low GPS accuracy (±$accuracy m). Your location may be imprecise.',
+          ),
+        ),
+      );
+    }
+
+    // Best-effort public IP hint; never fatal.
+    final publicIp = await fetchPublicIp();
+
+    try {
+      final result = await ref
+          .read(mobileRepositoryProvider)
+          .validateAttendance(
+            siteId: site.id,
+            lat: position.latitude,
+            lng: position.longitude,
+            accuracy: position.accuracy,
+            publicIp: publicIp,
+          );
+      if (!result.blocksSubmit) return false;
+
+      if (mounted) {
+        final reason =
+            result.reason ?? 'Attendance blocked by server validation.';
+        setState(() => _error = reason);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(reason)));
+      }
+      return true;
+    } catch (_) {
+      // Fail-open: offline or validation endpoint unavailable.
+      return false;
+    }
+  }
+
   Future<void> _submitAttendance(GuardProfileModel profile) async {
     if (_status == 'Out' && !_breakSession.canCheckOut) {
       setState(() => _error = 'Please end your break before checking out.');
@@ -565,6 +625,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         return;
       }
     }
+
+    // Server-authoritative geo + IP pre-check (module-gated). Aborts the submit
+    // when the server says the guard is not allowed; otherwise the submit
+    // endpoint re-enforces the same checks server-side.
+    if (await _validateBeforeSubmit()) return;
 
     setState(() {
       _busy = true;
