@@ -3,36 +3,77 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/app_role.dart';
-import '../models/admin_models.dart';
 import '../models/attendance_models.dart';
 import '../models/auth_session.dart';
-import '../models/guard_pin_status.dart';
 import '../models/guard_profile.dart';
 import '../models/incident_models.dart';
 import '../models/leave_models.dart';
 import '../models/mobile_dashboard_models.dart';
 import '../models/patrol_models.dart';
-import '../models/payroll_models.dart';
+import '../models/payslip_models.dart';
 import '../models/report_models.dart';
 import '../models/training_models.dart';
+import '../auth/guard_login_identifier.dart';
+import '../cache/hive_read_cache_store.dart';
+import '../cache/read_cache.dart';
 import 'api_client.dart';
+import 'authenticated_identity_mismatch_error.dart';
+import 'authoritative_session_error.dart';
+import 'auth_repository.dart';
+import 'ciss_error.dart';
+import 'guard_pin_verification_adapter.dart';
 import '../region/region_service.dart';
 
-class MobileRepository {
-  MobileRepository(this._apiClient, this._auth, this._regionService);
+class MobileRepository implements AuthRepository {
+  MobileRepository(
+    this._apiClient,
+    this._auth,
+    this._regionService, {
+    GuardPinVerificationAdapter? guardPinVerificationAdapter,
+    ReadCache? readCache,
+  }) : _guardPinVerificationAdapter =
+           guardPinVerificationAdapter ?? GuardPinVerificationAdapter(),
+       _readCache =
+           readCache ??
+           ReadCache(store: HiveReadCacheStore());
 
   final ApiClient _apiClient;
   final FirebaseAuth _auth;
   final RegionService _regionService;
+  final GuardPinVerificationAdapter _guardPinVerificationAdapter;
+  final ReadCache _readCache;
 
   ApiClient get apiClient => _apiClient;
   User? get currentUser => _auth.currentUser;
 
   static const String _mobileNotificationsPath = '/api/mobile/notifications';
   static const String _mobileTokenPath = '/api/mobile/token';
+
+  /// Read endpoints eligible for the Hive-backed read-through cache. The
+  /// allowlist is deliberately narrow so identity/authorization responses
+  /// (`/api/mobile/session`, auth, profile) are never served stale, and so
+  /// dedicated live endpoints (streaming) are unaffected.
+  static const Set<String> _cacheableReadPaths = <String>{
+    '/api/guard/dashboard',
+    '/api/guard/training',
+    '/api/guard/evaluations',
+    '/api/guard/payslips',
+    '/api/guard/leave',
+    '/api/guard/incidents',
+    '/api/guard/leaderboard',
+    '/api/field-officer/dashboard',
+    '/api/field-officer/work-orders',
+    '/api/field-officer/sites',
+    '/api/field-officer/guards',
+    '/api/field-officer/incidents',
+    '/api/field-officer/visit-reports',
+    '/api/field-officer/training-reports',
+  };
 
   Future<String?> _token() async => _auth.currentUser?.getIdToken(false);
 
@@ -123,22 +164,47 @@ class MobileRepository {
     });
   }
 
+  String _readCacheKey(String path, Map<String, dynamic>? queryParameters) {
+    final sorted = (queryParameters ?? <String, dynamic>{}).entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    final qs = sorted.map((e) => '${e.key}=${e.value}').join('&');
+    final region = _regionService.activeRegion?.code ?? 'KL';
+    return '$region|$path|$qs';
+  }
+
   Future<Map<String, dynamic>> _getJson(
     String path, {
     Map<String, dynamic>? queryParameters,
+    bool authenticated = true,
   }) async {
+    final cacheable = _cacheableReadPaths.contains(path);
+    final cacheKey =
+        cacheable ? _readCacheKey(path, queryParameters) : null;
     try {
       final response = await _apiClient.dio.get<dynamic>(
         path,
         queryParameters: queryParameters,
-        options: Options(headers: await _authHeaders()),
+        options:
+            authenticated
+                ? Options(headers: await _authHeaders())
+                : Options(extra: <String, dynamic>{kSkipApiAuth: true}),
       );
       final data = response.data;
       if (data is! Map) {
         throw Exception('Unexpected response format from server');
       }
-      return Map<String, dynamic>.from(data);
+      final result = Map<String, dynamic>.from(data);
+      if (cacheable && cacheKey != null) {
+        _readCache.setJson(cacheKey, result);
+      }
+      return result;
     } catch (error) {
+      // Offline/stale fallback: serve the last-known-good payload for cached
+      // read endpoints so dashboards render from cache instead of erroring.
+      if (cacheable && cacheKey != null) {
+        final cached = await _readCache.readJson(cacheKey);
+        if (cached != null) return cached;
+      }
       if (_isOfflineDioError(error)) rethrow;
       throw Exception(_extractApiError(error));
     }
@@ -160,30 +226,17 @@ class MobileRepository {
 
   Future<Map<String, dynamic>> _postJson(
     String path,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    bool authenticated = true,
+  }) async {
     try {
       final response = await _apiClient.dio.post<dynamic>(
         path,
         data: body,
-        options: Options(headers: await _authHeaders()),
-      );
-      final data = response.data;
-      if (data is! Map) {
-        throw Exception('Unexpected response format from server');
-      }
-      return Map<String, dynamic>.from(data);
-    } catch (error) {
-      if (_isOfflineDioError(error)) rethrow;
-      throw Exception(_extractApiError(error));
-    }
-  }
-
-  Future<Map<String, dynamic>> _deleteJson(String path) async {
-    try {
-      final response = await _apiClient.dio.delete<dynamic>(
-        path,
-        options: Options(headers: await _authHeaders()),
+        options:
+            authenticated
+                ? Options(headers: await _authHeaders())
+                : Options(extra: <String, dynamic>{kSkipApiAuth: true}),
       );
       final data = response.data;
       if (data is! Map) {
@@ -198,13 +251,17 @@ class MobileRepository {
 
   Future<Map<String, dynamic>> _patchJson(
     String path,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    bool authenticated = true,
+  }) async {
     try {
       final response = await _apiClient.dio.patch<dynamic>(
         path,
         data: body,
-        options: Options(headers: await _authHeaders()),
+        options:
+            authenticated
+                ? Options(headers: await _authHeaders())
+                : Options(extra: <String, dynamic>{kSkipApiAuth: true}),
       );
       final data = response.data;
       if (data is! Map) {
@@ -235,11 +292,7 @@ class MobileRepository {
       return false;
     }
 
-    return error.type == DioExceptionType.connectionTimeout ||
-        error.type == DioExceptionType.sendTimeout ||
-        error.type == DioExceptionType.receiveTimeout ||
-        error.type == DioExceptionType.connectionError ||
-        error.type == DioExceptionType.unknown;
+    return CissError.isRetryableNetworkError(error);
   }
 
   Future<Map<String, String>> _authHeaders() async {
@@ -250,124 +303,64 @@ class MobileRepository {
     return <String, String>{'Authorization': 'Bearer $token'};
   }
 
+  @override
   Future<AuthSession?> resolveCurrentSession() async {
     final user = _auth.currentUser;
     if (user == null) return null;
 
-    // Check Firebase claims first to see if this is an admin or client role.
-    // The /api/mobile/session endpoint only resolves guard and fieldOfficer,
-    // so skip the backend call entirely for roles it doesn't support.
-    final token = await user.getIdTokenResult(false);
-    final claims = token.claims ?? <String, dynamic>{};
-    final role = _roleFromClaims(claims);
-
-    if (role == AppRole.admin || role == AppRole.client) {
-      return _buildSessionFromClaims(user: user, claims: claims, role: role!);
-    }
-
     try {
       final backendSession = await _resolveSessionFromBackend();
-      if (backendSession != null) {
-        return backendSession;
+      if (backendSession == null) {
+        throw const AuthoritativeSessionResolutionError(
+          'The server did not return an authorized mobile session.',
+        );
       }
-    } catch (e) {
-      // Backend may be temporarily unavailable; fall back to Firebase claims.
-      debugPrint('Backend session resolution failed: $e');
+      return backendSession;
+    } catch (error, st) {
+      debugPrint('resolveCurrentSession caught error: $error\n$st');
+      // Firebase authentication alone is not a CISS Mobile authorization
+      // grant. Any missing, denied, malformed, unavailable, or UID-mismatched
+      // authoritative response invalidates this Firebase identity too.
+      await _signOutAfterAuthoritativeFailure(error);
+      rethrow;
     }
-
-    // Fallback: try guard profile endpoint or build from claims.
-    if (role == AppRole.guard) {
-      final guardSession = await _resolveGuardSessionFromProfile(user);
-      if (guardSession != null) {
-        return guardSession;
-      }
-    }
-
-    if (role != null) {
-      return _buildSessionFromClaims(user: user, claims: claims, role: role);
-    }
-
-    return null;
   }
 
-  AuthSession _buildSessionFromClaims({
-    required User user,
-    required Map<String, dynamic> claims,
-    required AppRole role,
-  }) {
-    if (role == AppRole.guard) {
-      return AuthSession(
-        role: role,
-        displayName:
-            (claims['name'] as String?)?.trim().isNotEmpty == true
-                ? claims['name'] as String
-                : (user.displayName ?? user.email ?? 'Guard'),
-        primaryId: (claims['employeeId'] as String?) ?? user.uid,
-        uid: user.uid,
-        email: user.email,
-        employeeDocId: claims['employeeDocId'] as String?,
-        clientId: claims['clientId'] as String?,
-        clientName: claims['clientName'] as String?,
-        district: claims['district'] as String?,
-        stateCode: claims['stateCode'] as String?,
+  Future<void> _signOutAfterAuthoritativeFailure(Object error) async {
+    try {
+      await _auth.signOut();
+    } catch (signOutError) {
+      // The caller still clears all UI state. Firebase sign-out failures must
+      // not preserve an unauthorized application session.
+      debugPrint(
+        'Could not clear Firebase after authoritative session failure '
+        '($error): $signOutError',
       );
     }
-
-    if (role == AppRole.client) {
-      return AuthSession(
-        role: role,
-        displayName:
-            (claims['name'] as String?)?.trim().isNotEmpty == true
-                ? claims['name'] as String
-                : (claims['clientName'] as String?) ??
-                    (user.displayName ?? user.email ?? 'Client'),
-        primaryId: user.uid,
-        uid: user.uid,
-        email: user.email,
-        clientId: claims['clientId'] as String?,
-        clientName: claims['clientName'] as String?,
-      );
-    }
-
-    if (role == AppRole.admin) {
-      return AuthSession(
-        role: role,
-        displayName:
-            (claims['name'] as String?)?.trim().isNotEmpty == true
-                ? claims['name'] as String
-                : (user.displayName ?? user.email ?? 'Admin'),
-        primaryId: user.uid,
-        uid: user.uid,
-        email: user.email,
-      );
-    }
-
-    return AuthSession(
-      role: role,
-      displayName:
-          (claims['name'] as String?)?.trim().isNotEmpty == true
-              ? claims['name'] as String
-              : (user.displayName ?? user.email ?? 'Field Officer'),
-      primaryId: user.uid,
-      uid: user.uid,
-      email: user.email,
-      assignedDistricts:
-          (claims['assignedDistricts'] as List<dynamic>? ?? const <dynamic>[])
-              .whereType<String>()
-              .toList(),
-      stateCode: claims['stateCode'] as String?,
-    );
   }
+
+  @visibleForTesting
+  static bool allowsClaimsFallback(Object error) => false;
 
   Future<AuthSession?> _resolveSessionFromBackend() async {
     final user = _auth.currentUser;
-    if (user == null) return null;
-
-    final data = await _getJson('/api/mobile/session');
-    final role = _roleFromWire(data['role']);
-    if (role == null) {
+    if (user == null) {
+      debugPrint('_resolveSessionFromBackend: _auth.currentUser is null');
       return null;
     }
+
+    final data = await _getAuthoritativeSessionJson();
+    debugPrint('_resolveSessionFromBackend: received data=$data, user.uid=${user.uid}');
+    final role = _roleFromWire(data['role']);
+    if (role == null) {
+      debugPrint('_resolveSessionFromBackend: _roleFromWire returned null for role=${data['role']}');
+      return null;
+    }
+
+    final firebaseUid = authoritativeSessionUid(
+      firebaseUid: user.uid,
+      backendUid: data['uid'] as String?,
+    );
 
     return AuthSession(
       role: role,
@@ -379,56 +372,47 @@ class MobileRepository {
           (data['primaryId'] as String?)?.trim().isNotEmpty == true
               ? data['primaryId'] as String
               : user.uid,
-      uid:
-          (data['uid'] as String?)?.trim().isNotEmpty == true
-              ? data['uid'] as String
-              : user.uid,
+      uid: firebaseUid,
       email: data['email'] as String? ?? user.email,
       employeeDocId: data['employeeDocId'] as String?,
       assignedDistricts:
           (data['assignedDistricts'] as List<dynamic>? ?? const <dynamic>[])
               .whereType<String>()
               .toList(),
-      clientId: data['clientId'] as String?,
       clientName: data['clientName'] as String?,
       district: data['district'] as String?,
       stateCode: data['stateCode'] as String?,
     );
   }
 
-  Future<AuthSession?> _resolveGuardSessionFromProfile(User user) async {
+  Future<Map<String, dynamic>> _getAuthoritativeSessionJson() async {
     try {
-      final profile = await fetchGuardProfile();
-      return AuthSession(
-        role: AppRole.guard,
-        displayName:
-            profile.fullName.isNotEmpty
-                ? profile.fullName
-                : (user.displayName ?? user.email ?? 'Guard'),
-        primaryId:
-            profile.employeeId.isNotEmpty ? profile.employeeId : user.uid,
-        uid: user.uid,
-        email: user.email,
-        employeeDocId: profile.id.isNotEmpty ? profile.id : null,
-        clientName: profile.clientName.isNotEmpty ? profile.clientName : null,
-        district: profile.district.isNotEmpty ? profile.district : null,
+      final response = await _apiClient.dio.get<dynamic>(
+        '/api/mobile/session',
+        options: Options(headers: await _authHeaders()),
       );
-    } catch (e) {
-      debugPrint('Session fallback failed: $e');
-      return null;
+      final data = response.data;
+      if (data is! Map) {
+        throw const AuthoritativeSessionResolutionError(
+          'The server returned an invalid mobile session response.',
+        );
+      }
+      return Map<String, dynamic>.from(data);
+    } on DioException catch (error) {
+      final status = error.response?.statusCode;
+      if (status == 401 || status == 403) {
+        throw AuthoritativeSessionDeniedError(status!);
+      }
+      throw AuthoritativeSessionResolutionError(
+        'Could not resolve the authoritative mobile session.',
+      );
+    } on AuthoritativeSessionResolutionError {
+      rethrow;
+    } catch (_) {
+      throw const AuthoritativeSessionResolutionError(
+        'Could not resolve the authoritative mobile session.',
+      );
     }
-  }
-
-  AppRole? _roleFromClaims(Map<String, dynamic>? claims) {
-    final roleStr = claims?['role']?.toString().toLowerCase();
-    if (roleStr != null && roleStr.isNotEmpty) {
-      return appRoleFromWire(roleStr);
-    }
-    // Admin users may have admin:true without an explicit role string
-    if (claims?['admin'] == true) {
-      return AppRole.admin;
-    }
-    return null;
   }
 
   AppRole? _roleFromWire(Object? value) {
@@ -451,7 +435,28 @@ class MobileRepository {
         return error.message!.trim();
       }
     }
+    if (error is StateError) {
+      return error.message.toString();
+    }
+    if (error is FormatException) {
+      return 'The server returned an invalid response.';
+    }
     return error.toString().replaceFirst('Exception: ', '');
+  }
+
+  Map<String, dynamic> _mapResponse(Object? value) {
+    if (value is! Map) {
+      throw const FormatException('The server returned an invalid response.');
+    }
+    return Map<String, dynamic>.from(value);
+  }
+
+  List<dynamic> _listValue(Map<String, dynamic> data, Iterable<String> keys) {
+    for (final key in keys) {
+      final value = data[key];
+      if (value is List) return value;
+    }
+    return const <dynamic>[];
   }
 
   Future<bool> _saveFcmTokenDirectly(String token) async {
@@ -487,13 +492,22 @@ class MobileRepository {
         await _regionService.activeFirestore
             .collection('notifications')
             .where('recipientUid', isEqualTo: user.uid)
-            .orderBy('createdAt', descending: true)
             .limit(50)
             .get();
 
-    return snapshot.docs
-        .map((doc) => _serializeNotificationDocument(doc))
-        .toList();
+    final notifications =
+        snapshot.docs
+            .map((doc) => _serializeNotificationDocument(doc))
+            .toList();
+    notifications.sort((a, b) {
+      final aDate = DateTime.tryParse(a['createdAt']?.toString() ?? '');
+      final bDate = DateTime.tryParse(b['createdAt']?.toString() ?? '');
+      if (aDate == null && bDate == null) return 0;
+      if (aDate == null) return 1;
+      if (bDate == null) return -1;
+      return bDate.compareTo(aDate);
+    });
+    return notifications;
   }
 
   Future<bool> _markNotificationAsReadDirectly(String notifId) async {
@@ -610,36 +624,54 @@ class MobileRepository {
     }
   }
 
+  /// Returns null when the reset outcome must remain neutral to callers.
+  @visibleForTesting
+  static String authoritativeSessionUid({
+    required String firebaseUid,
+    String? backendUid,
+  }) {
+    final normalizedBackendUid = backendUid?.trim();
+    if (normalizedBackendUid != null &&
+        normalizedBackendUid.isNotEmpty &&
+        normalizedBackendUid != firebaseUid) {
+      // The bearer token authenticates [firebaseUid]. Never attach that
+      // user's client session to a UID supplied by a backend response.
+      throw AuthenticatedIdentityMismatchError(
+        firebaseUid: firebaseUid,
+        backendUid: normalizedBackendUid,
+      );
+    }
+    return firebaseUid;
+  }
+
+  @visibleForTesting
+  static String? passwordResetErrorMessage(FirebaseAuthException error) {
+    switch (error.code) {
+      case 'user-not-found':
+      case 'user-disabled':
+        return null;
+      case 'invalid-email':
+        return 'Enter a valid email address.';
+      case 'too-many-requests':
+        return 'Too many password reset attempts. Please wait and try again.';
+      case 'network-request-failed':
+        return 'Network error while sending reset instructions. Please check the connection.';
+      case 'operation-not-allowed':
+        return 'Password reset is currently unavailable. Please contact support.';
+      default:
+        return 'Could not send reset instructions. Please try again.';
+    }
+  }
+
   Map<String, String> _guardIdentityPayload(String loginIdOrPhone) {
     final normalizedInput = loginIdOrPhone.trim();
-    final compactDigits = normalizedInput.replaceAll(RegExp(r'\D+'), '');
-    final isPhoneLike = RegExp(r'^\d{8,15}$').hasMatch(compactDigits);
+    final isPhoneLike = GuardLoginIdentifier.isPhoneNumber(normalizedInput);
     return <String, String>{
       if (isPhoneLike)
         'phoneNumber': normalizedInput
       else
         'employeeId': normalizedInput,
     };
-  }
-
-  Future<GuardPinStatus> checkGuardPinStatus({
-    required String loginIdOrPhone,
-  }) async {
-    try {
-      final response = await _apiClient.dio.post<dynamic>(
-        '/api/guard/auth/pin-status',
-        data: _guardIdentityPayload(loginIdOrPhone),
-      );
-      final data = Map<String, dynamic>.from(response.data as Map);
-      return GuardPinStatus(
-        found: data['found'] == true,
-        hasPin: data['hasPin'] == true,
-        employeeName: data['employeeName'] as String?,
-        employeeId: data['employeeId'] as String?,
-      );
-    } catch (error) {
-      throw Exception(_extractApiError(error));
-    }
   }
 
   Future<void> setupGuardPin({
@@ -649,13 +681,86 @@ class MobileRepository {
     required String pin,
   }) async {
     try {
+      final normalizedPhoneNumber = _normalizeGuardPhoneNumber(phoneNumber);
       await _apiClient.dio.post<dynamic>(
         '/api/guard/auth/setup-pin',
         data: <String, String>{
           if (employeeId.trim().isNotEmpty) 'employeeId': employeeId.trim(),
-          'phoneNumber': phoneNumber.trim(),
+          'phoneNumber': normalizedPhoneNumber,
           'dateOfBirth': dateOfBirth.trim(),
           'pin': pin.trim(),
+        },
+      );
+    } catch (error) {
+      throw Exception(_guardPinSetupErrorMessage(error));
+    }
+  }
+
+  /// Identity verification happens on an unauthenticated endpoint. Keep
+  /// identity-dependent failures neutral so the setup screen cannot reveal
+  /// whether a phone number, employee id, or date of birth matched.
+  String _guardPinSetupErrorMessage(Object error) {
+    if (error is DioException) {
+      final status = error.response?.statusCode;
+      if (status == 400 ||
+          status == 401 ||
+          status == 403 ||
+          status == 404 ||
+          status == 409) {
+        return guardPinSetupClientMessage();
+      }
+    }
+
+    final message = _extractApiError(error);
+    return guardPinSetupClientMessage(serverMessage: message);
+  }
+
+  @visibleForTesting
+  static String guardPinSetupClientMessage({String? serverMessage}) {
+    final normalized = serverMessage?.toLowerCase() ?? '';
+    const identityTerms = <String>[
+      'employee',
+      'phone',
+      'date of birth',
+      'dob',
+      'identity',
+      'not found',
+      'does not match',
+      'invalid details',
+    ];
+    if (identityTerms.any(normalized.contains)) {
+      return 'Could not verify those details. Check them and try again.';
+    }
+    return serverMessage?.trim().isNotEmpty == true
+        ? serverMessage!.trim()
+        : 'Could not set the PIN. Please try again.';
+  }
+
+  String _normalizeGuardPhoneNumber(String phoneNumber) {
+    final trimmedPhoneNumber = phoneNumber.trim();
+    if (!RegExp(r'^[0-9\s()+-]+$').hasMatch(trimmedPhoneNumber)) {
+      throw StateError('Phone number contains unsupported characters.');
+    }
+    final normalizedPhoneNumber = trimmedPhoneNumber.replaceAll(
+      RegExp(r'\D+'),
+      '',
+    );
+    if (!RegExp(r'^\d{8,15}$').hasMatch(normalizedPhoneNumber)) {
+      throw StateError('Enter a valid registered phone number.');
+    }
+    return normalizedPhoneNumber;
+  }
+
+  Future<void> changeGuardPin({
+    required String currentPin,
+    required String newPin,
+  }) async {
+    try {
+      await _apiClient.dio.post<dynamic>(
+        '/api/guard/auth/change-pin',
+        data: <String, String>{
+          'currentPin': currentPin.trim(),
+          'newPin': newPin.trim(),
         },
       );
     } catch (error) {
@@ -663,6 +768,7 @@ class MobileRepository {
     }
   }
 
+  @override
   Future<AuthSession> signInGuard({
     required String loginIdOrPhone,
     required String pin,
@@ -676,7 +782,7 @@ class MobileRepository {
         },
       );
 
-      final data = Map<String, dynamic>.from(response.data as Map);
+      final data = _mapResponse(response.data);
       final token = data['token'] as String?;
       if (token == null || token.isEmpty) {
         throw StateError('Guard login did not return a Firebase custom token.');
@@ -694,6 +800,7 @@ class MobileRepository {
     }
   }
 
+  @override
   Future<AuthSession> signInFieldOfficer({
     required String email,
     required String password,
@@ -716,33 +823,114 @@ class MobileRepository {
     }
   }
 
-  Future<AuthSession> signInAdminOrClient({
-    required String email,
-    required String password,
-  }) async {
-    try {
-      await _auth.signInWithEmailAndPassword(
-        email: email.trim(),
-        password: password,
+  void _assertActiveIdentity(AuthSession expectedSession) {
+    final user = _auth.currentUser;
+    if (expectedSession.role != AppRole.guard &&
+        expectedSession.role != AppRole.fieldOfficer) {
+      throw const AuthenticatedIdentityMismatchError(
+        firebaseUid: '',
+        backendUid: '',
       );
-      final session = await resolveCurrentSession();
-      if (session == null ||
-          (session.role != AppRole.admin && session.role != AppRole.client)) {
-        await _auth.signOut();
-        throw StateError(
-          'Access denied. Admin or client credentials required.',
-        );
-      }
-      return session;
-    } catch (error) {
-      throw Exception(_extractApiError(error));
+    }
+    if (user == null || user.uid != expectedSession.uid) {
+      throw AuthenticatedIdentityMismatchError(
+        firebaseUid: user?.uid ?? '',
+        backendUid: expectedSession.uid,
+      );
     }
   }
 
+  @override
+  Future<void> verifyCurrentFieldOfficerPassword({
+    required AuthSession expectedSession,
+    required String email,
+    required String password,
+  }) async {
+    if (expectedSession.role != AppRole.fieldOfficer) {
+      throw AuthenticatedIdentityMismatchError(
+        firebaseUid: _auth.currentUser?.uid ?? '',
+        backendUid: expectedSession.uid,
+      );
+    }
+    _assertActiveIdentity(expectedSession);
+    final user = _auth.currentUser!;
+    if (user.email?.trim().toLowerCase() != email.trim().toLowerCase()) {
+      throw AuthenticatedIdentityMismatchError(
+        firebaseUid: user.uid,
+        backendUid: expectedSession.uid,
+      );
+    }
+    await user.reauthenticateWithCredential(
+      EmailAuthProvider.credential(email: email.trim(), password: password),
+    );
+    _assertActiveIdentity(expectedSession);
+  }
+
+  @override
+  Future<void> verifyCurrentGuardPin({
+    required AuthSession expectedSession,
+    required String loginIdOrPhone,
+    required String pin,
+  }) async {
+    if (expectedSession.role != AppRole.guard) {
+      throw AuthenticatedIdentityMismatchError(
+        firebaseUid: _auth.currentUser?.uid ?? '',
+        backendUid: expectedSession.uid,
+      );
+    }
+    _assertActiveIdentity(expectedSession);
+
+    final response = await _apiClient.dio.post<dynamic>(
+      '/api/guard/auth/login',
+      data: <String, String>{
+        ..._guardIdentityPayload(loginIdOrPhone),
+        'pin': pin.trim(),
+      },
+    );
+    final token = _mapResponse(response.data)['token'] as String?;
+    if (token == null || token.isEmpty) {
+      throw StateError('Guard verification did not return a Firebase token.');
+    }
+
+    // The primary identity may belong to a named regional Firebase app.
+    // Verification uses those active app options in a disposable adapter,
+    // never the default Firebase app's options.
+    await _guardPinVerificationAdapter.verify(
+      regionalOptions: _auth.app.options,
+      token: token,
+      expectedUid: expectedSession.uid,
+    );
+    _assertActiveIdentity(expectedSession);
+  }
+
+  /// Sends the Firebase password-reset email for a field officer account.
+  ///
+  /// Firebase owns this workflow; no application backend endpoint is involved.
+  Future<void> sendFieldOfficerPasswordResetEmail({
+    required String email,
+  }) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email.trim());
+    } on FirebaseAuthException catch (error) {
+      final message = passwordResetErrorMessage(error);
+      // Keep the outcome neutral so this screen cannot be used to discover
+      // whether a given email address exists or has been disabled.
+      if (message == null) return;
+      throw Exception(message);
+    } catch (_) {
+      throw Exception('Could not send reset instructions. Please try again.');
+    }
+  }
+
+  @override
   Future<void> signOut() => _auth.signOut();
 
   Future<GuardDashboardSnapshot> fetchGuardDashboard() async {
     final data = await _getJson('/api/guard/dashboard');
+    final attendanceStats =
+        data['attendanceStats'] is Map
+            ? Map<String, dynamic>.from(data['attendanceStats'] as Map)
+            : const <String, dynamic>{};
     final leaveBalance =
         data['leaveBalance'] is Map<String, dynamic>
             ? _parseLeaveBalance(
@@ -766,29 +954,9 @@ class MobileRepository {
       clientName: (data['clientName'] as String?) ?? '',
       district: (data['district'] as String?) ?? '',
       profilePhotoUrl: data['profilePhotoUrl'] as String?,
-      presentDays:
-          (data['attendanceStats'] as Map<String, dynamic>?)?['presentDays']
-                  is num
-              ? ((data['attendanceStats']
-                          as Map<String, dynamic>)['presentDays']
-                      as num)
-                  .toInt()
-              : 0,
-      absentDays:
-          (data['attendanceStats'] as Map<String, dynamic>?)?['absentDays']
-                  is num
-              ? ((data['attendanceStats'] as Map<String, dynamic>)['absentDays']
-                      as num)
-                  .toInt()
-              : 0,
-      workingDays:
-          (data['attendanceStats'] as Map<String, dynamic>?)?['workingDays']
-                  is num
-              ? ((data['attendanceStats']
-                          as Map<String, dynamic>)['workingDays']
-                      as num)
-                  .toInt()
-              : 0,
+      presentDays: (attendanceStats['presentDays'] as num?)?.toInt() ?? 0,
+      absentDays: (attendanceStats['absentDays'] as num?)?.toInt() ?? 0,
+      workingDays: (attendanceStats['workingDays'] as num?)?.toInt() ?? 0,
       leaveBalance: leaveBalance,
       latestEvalScore: data['latestEvalScore'] as num?,
       latestEvalPeriod: data['latestEvalPeriod'] as String?,
@@ -807,14 +975,39 @@ class MobileRepository {
         data['employee'] is Map<String, dynamic>
             ? Map<String, dynamic>.from(data['employee'] as Map)
             : data;
+    // The /api/guard/profile endpoint does not include the document id, so
+    // fall back to the employeeDocId custom claim (the Firestore doc id used
+    // for photo storage paths like employees/{employeeDocId}/attendance).
+    final backendId = employee['id'] as String? ?? '';
     return GuardProfileModel.fromJson(
       employee,
-      id: employee['id'] as String? ?? '',
+      id:
+          backendId.isNotEmpty
+              ? backendId
+              : (await _guardEmployeeDocId() ?? ''),
     );
   }
 
+  /// Reads the guard's employeeDocId from the Firebase custom token claims.
+  /// This is the Firestore employee document id (no slashes) used as the
+  /// storage owner key for attendance photos.
+  Future<String?> _guardEmployeeDocId() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return null;
+      final token = await user.getIdTokenResult(false);
+      final employeeDocId = token.claims?['employeeDocId'] as String?;
+      if (employeeDocId != null && employeeDocId.trim().isNotEmpty) {
+        return employeeDocId.trim();
+      }
+    } catch (error) {
+      debugPrint('Could not resolve guard employeeDocId from claims: $error');
+    }
+    return null;
+  }
+
   Future<List<SiteOptionModel>> fetchAttendanceSites() async {
-    final data = await _getJson('/api/public/attendance');
+    final data = await _getJson('/api/public/attendance', authenticated: false);
     final options = data['options'] as List<dynamic>? ?? const <dynamic>[];
     return options
         .whereType<Map<String, dynamic>>()
@@ -836,10 +1029,40 @@ class MobileRepository {
       params['resourceId'] = resourceId;
     }
     if (params.isEmpty) return null;
-    final data = await _getJson(
-      '/api/public/attendance/employee',
-      queryParameters: params,
+    final body = <String, dynamic>{
+      if (employeeId.isNotEmpty) ...<String, dynamic>{
+        'method': 'employeeId',
+        'value': employeeId,
+        if (phoneNumber != null && phoneNumber.isNotEmpty)
+          'phoneNumber': phoneNumber,
+      } else if (phoneNumber != null &&
+          phoneNumber.isNotEmpty) ...<String, dynamic>{
+        'method': 'phone',
+        'value': phoneNumber,
+      } else ...<String, dynamic>{'method': 'resourceId', 'value': resourceId},
+    };
+    final data = await _postJson(
+      '/api/public/attendance/identify',
+      body,
+      authenticated: false,
     );
+    return _parsePublicAttendanceEmployee(data);
+  }
+
+  Future<PublicAttendanceEmployeeModel?> fetchAttendanceEmployeeByQr(
+    String qrValue,
+  ) async {
+    final data = await _postJson(
+      '/api/public/attendance/identify',
+      <String, dynamic>{'method': 'qr', 'value': qrValue},
+      authenticated: false,
+    );
+    return _parsePublicAttendanceEmployee(data);
+  }
+
+  PublicAttendanceEmployeeModel? _parsePublicAttendanceEmployee(
+    Map<String, dynamic> data,
+  ) {
     if (data['found'] != true) return null;
     final employee =
         data['employee'] is Map<String, dynamic>
@@ -855,6 +1078,7 @@ class MobileRepository {
       fullName: employee['fullName'] as String? ?? '',
       phoneNumber: employee['phoneNumber'] as String?,
       clientName: employee['clientName'] as String?,
+      verificationToken: data['verificationToken'] as String?,
       attendanceHint:
           hint == null
               ? null
@@ -871,28 +1095,43 @@ class MobileRepository {
   }
 
   Future<Map<String, dynamic>> uploadAttendancePhoto({
-    required String path,
+    required String employeeDocId,
     required String dataUrl,
-    String? siteId,
+    required String siteId,
+    String? attemptId,
+    String? verificationToken,
+    bool authenticated = true,
   }) async {
-    final ownerMatch = RegExp(
-      r'^employees/([^/]+)/attendance/',
-    ).firstMatch(path);
-    final ownerKey = ownerMatch?.group(1);
-    if (ownerKey == null || ownerKey.isEmpty) {
+    final ownerKey = employeeDocId.trim();
+    if (!RegExp(r'^[0-9A-Za-z_-]+$').hasMatch(ownerKey)) {
       throw Exception(
         'Attendance photo path must use employees/{id}/attendance.',
       );
     }
-    if (siteId == null || siteId.isEmpty) {
+    if (siteId.isEmpty) {
       throw Exception('Attendance site id is required for photo upload.');
     }
+    final attempt =
+        (attemptId == null || attemptId.isEmpty)
+            ? const Uuid().v4()
+            : attemptId;
+    final path = 'employees/$ownerKey/attendance/$attempt/photo.jpg';
     try {
       final tokenResponse = await _apiClient.dio.post<dynamic>(
         '/api/public/attendance/upload-token',
-        data: <String, dynamic>{'employeeId': ownerKey, 'siteId': siteId},
+        data: <String, dynamic>{
+          'employeeDocId': ownerKey,
+          'siteId': siteId,
+          'attemptId': attempt,
+          if (verificationToken != null && verificationToken.isNotEmpty)
+            'attendanceVerificationToken': verificationToken,
+        },
+        options:
+            authenticated
+                ? null
+                : Options(extra: <String, dynamic>{kSkipApiAuth: true}),
       );
-      final tokenData = Map<String, dynamic>.from(tokenResponse.data as Map);
+      final tokenData = _mapResponse(tokenResponse.data);
       final uploadToken = tokenData['uploadToken'] as String?;
       if (uploadToken == null || uploadToken.isEmpty) {
         throw Exception('Attendance photo upload token missing.');
@@ -904,35 +1143,70 @@ class MobileRepository {
           'photoDataUrl': dataUrl,
           'uploadToken': uploadToken,
         },
+        options:
+            authenticated
+                ? null
+                : Options(extra: <String, dynamic>{kSkipApiAuth: true}),
       );
-      return Map<String, dynamic>.from(response.data as Map);
+      return _mapResponse(response.data);
     } catch (error) {
       if (_isOfflineDioError(error)) rethrow;
       throw Exception('Photo upload failed: ${_extractApiError(error)}');
     }
   }
 
+  /// Uploads a report photo directly to Firebase Storage.
+  ///
+  /// The legacy `/api/field-officer/upload` REST endpoint was retired by the
+  /// backend (HTTP 410); the webapp uploads report photos straight to
+  /// Storage under `foReports/{folder}/{uid}/...` and submits the download
+  /// URLs. The app mirrors that flow, honoring the active regional Firebase
+  /// storage bucket.
   Future<Map<String, dynamic>> uploadReportPhoto({
     required String path,
     required String dataUrl,
   }) async {
     try {
-      final response = await _apiClient.dio.post<dynamic>(
-        '/api/field-officer/upload',
-        data: <String, dynamic>{'path': path, 'photoDataUrl': dataUrl},
-        options: Options(headers: await _authHeaders()),
+      final bytes = Uint8List.fromList(_dataUrlToBytes(dataUrl));
+      final storage = _regionService.activeStorage;
+      final reference = storage.ref(path);
+      await reference.putData(
+        bytes,
+        SettableMetadata(contentType: 'image/jpeg'),
       );
-      return Map<String, dynamic>.from(response.data as Map);
+      final url = await reference.getDownloadURL();
+      return <String, dynamic>{'url': url, 'path': path};
     } catch (error) {
-      if (_isOfflineDioError(error)) rethrow;
-      throw Exception('Report photo upload failed: ${_extractApiError(error)}');
+      if (error is FirebaseException &&
+          CissError.isRetryableNetworkError(error)) {
+        rethrow;
+      }
+      if (error is FirebaseException &&
+          (error.code == 'permission-denied' ||
+              error.code == 'unauthenticated')) {
+        throw Exception('Report photo upload failed: storage access denied');
+      }
+      throw Exception('Report photo upload failed: $error');
     }
+  }
+
+  /// Decodes a `data:<mime>;base64,<payload>` string back to raw bytes.
+  List<int> _dataUrlToBytes(String dataUrl) {
+    final comma = dataUrl.indexOf(',');
+    final payload = comma >= 0 ? dataUrl.substring(comma + 1) : dataUrl;
+    return base64Decode(payload);
   }
 
   Future<Map<String, dynamic>> submitAttendance(
     Map<String, dynamic> payload,
   ) async {
-    return _postJson('/api/attendance/submit', payload);
+    final verificationToken = payload['attendanceVerificationToken'];
+    return _postJson(
+      '/api/attendance/submit',
+      payload,
+      authenticated:
+          !(verificationToken is String && verificationToken.trim().isNotEmpty),
+    );
   }
 
   Future<Map<String, dynamic>> fetchGuardTrackingStatus() {
@@ -990,6 +1264,11 @@ class MobileRepository {
     );
   }
 
+  Future<GuardTrainingLeaderboard> fetchTrainingLeaderboard() async {
+    final data = await _getJson('/api/guard/leaderboard');
+    return GuardTrainingLeaderboard.fromJson(data);
+  }
+
   Future<List<EvaluationModel>> fetchEvaluations() async {
     final data = await _getJson('/api/guard/evaluations');
     final evaluations =
@@ -1009,6 +1288,14 @@ class MobileRepository {
         .toList();
   }
 
+  Future<List<int>> downloadPayslipPdf(String payslipId) async {
+    final response = await _apiClient.dio.get<List<int>>(
+      '/api/guard/payslips/${Uri.encodeComponent(payslipId)}/payslip',
+      options: Options(responseType: ResponseType.bytes),
+    );
+    return response.data ?? const <int>[];
+  }
+
   Future<GuardPatrolStatusModel> fetchGuardPatrolStatus() async {
     final data = await _getJson('/api/guard/patrol');
     return GuardPatrolStatusModel.fromJson(data);
@@ -1018,6 +1305,15 @@ class MobileRepository {
     Map<String, dynamic> payload,
   ) async {
     return _postJson('/api/guard/patrol', payload);
+  }
+
+  /// Field-officer view of guard patrol activity (patrol rounds + hourly
+  /// night-photo checks). The webapp exposes this to field officers through
+  /// the shared admin route with district-scoped authorization; returns
+  /// `{summary, settings, activities}` where
+  /// activities are `GuardPatrolActivityModel` rows.
+  Future<Map<String, dynamic>> fetchFieldOfficerPatrolActivities() async {
+    return _getJson('/api/admin/patrol-activities');
   }
 
   Future<Map<String, dynamic>> fetchLeaveOverview() async {
@@ -1051,457 +1347,12 @@ class MobileRepository {
     return _postJson('/api/guard/incidents', payload);
   }
 
-  // ── Client portal endpoints ──────────────────────────────────────────
-
-  Future<Map<String, dynamic>> fetchClientDashboard() async {
-    return _getJson('/api/client/dashboard');
-  }
-
-  Future<List<Map<String, dynamic>>> fetchClientGuards(String clientId) async {
-    final data = await _getJson(
-      '/api/client/guards',
-      queryParameters: <String, dynamic>{'clientId': clientId},
-    );
-    final guards = data['guards'] as List<dynamic>? ?? const <dynamic>[];
-    return guards.whereType<Map<String, dynamic>>().toList();
-  }
-
-  Future<List<Map<String, dynamic>>> fetchClientAttendance(
-    String clientId,
-  ) async {
-    final data = await _getJson(
-      '/api/client/attendance',
-      queryParameters: <String, dynamic>{'clientId': clientId},
-    );
-    final records = data['attendance'] as List<dynamic>? ?? const <dynamic>[];
-    return records.whereType<Map<String, dynamic>>().toList();
-  }
-
-  Future<List<Map<String, dynamic>>> fetchClientWorkOrders(
-    String clientId,
-  ) async {
-    final data = await _getJson(
-      '/api/client/work-orders',
-      queryParameters: <String, dynamic>{'clientId': clientId},
-    );
-    final orders = data['workOrders'] as List<dynamic>? ?? const <dynamic>[];
-    return orders.whereType<Map<String, dynamic>>().toList();
-  }
-
-  Future<Map<String, dynamic>> fetchClientPatrolActivities(
-    String clientId,
-  ) async {
-    return _getJson(
-      '/api/client/patrol-activities',
-      queryParameters: <String, dynamic>{'clientId': clientId},
-    );
-  }
-
-  /// Fetches visit reports scoped to the client via the dedicated API.
-  /// Falls back to extracting from dashboard response if the endpoint is unavailable.
-  Future<List<Map<String, dynamic>>> fetchClientVisitReports() async {
-    try {
-      final data = await _getJson('/api/client/dashboard');
-      final reports =
-          data['recentVisitReports'] as List<dynamic>? ?? const <dynamic>[];
-      return reports.whereType<Map<String, dynamic>>().toList();
-    } catch (e) {
-      debugPrint('fetchClientVisitReports via dashboard fallback: $e');
-      rethrow;
-    }
-  }
-
-  /// Fetches training reports scoped to the client via the dedicated API.
-  /// Falls back to extracting from dashboard response if the endpoint is unavailable.
-  Future<List<Map<String, dynamic>>> fetchClientTrainingReports() async {
-    try {
-      final data = await _getJson('/api/client/dashboard');
-      final reports =
-          data['recentTrainingReports'] as List<dynamic>? ?? const <dynamic>[];
-      return reports.whereType<Map<String, dynamic>>().toList();
-    } catch (e) {
-      debugPrint('fetchClientTrainingReports via dashboard fallback: $e');
-      rethrow;
-    }
-  }
-
-  /// Fetches patrol activities extracted from the client dashboard response.
-  Future<List<Map<String, dynamic>>> fetchClientPatrolActivityList(
-    String clientId,
-  ) async {
-    try {
-      final data = await fetchClientPatrolActivities(clientId);
-      final activities =
-          data['activities'] as List<dynamic>? ??
-          data['patrolActivities'] as List<dynamic>? ??
-          const <dynamic>[];
-      return activities.whereType<Map<String, dynamic>>().toList();
-    } catch (e) {
-      // Fallback to dashboard extraction
-      final data = await _getJson('/api/client/dashboard');
-      final activities =
-          data['recentPatrolActivities'] as List<dynamic>? ?? const <dynamic>[];
-      return activities.whereType<Map<String, dynamic>>().toList();
-    }
-  }
-
-  // ── Admin endpoints ──────────────────────────────────────────────────
-
-  Future<Map<String, dynamic>> fetchAdminDashboard() async {
-    return _getJson('/api/admin/dashboard');
-  }
-
-  Future<List<Map<String, dynamic>>> fetchAdminGuards() async {
-    final data = await _getJson(
-      '/api/admin/employees',
-      queryParameters: const <String, dynamic>{'limit': 300},
-    );
-    final guards = data['employees'] as List<dynamic>? ?? const <dynamic>[];
-    return guards.whereType<Map<String, dynamic>>().toList();
-  }
-
-  Future<List<Map<String, dynamic>>> fetchAdminAttendance() async {
-    final data = await _getJson(
-      '/api/admin/attendance',
-      queryParameters: const <String, dynamic>{'limit': 250},
-    );
-    final records = data['attendance'] as List<dynamic>? ?? const <dynamic>[];
-    return records.whereType<Map<String, dynamic>>().toList();
-  }
-
-  Future<List<Map<String, dynamic>>> fetchAdminWorkOrders() async {
-    final data = await _getJson(
-      '/api/admin/work-orders',
-      queryParameters: const <String, dynamic>{'limit': 250},
-    );
-    final orders = data['workOrders'] as List<dynamic>? ?? const <dynamic>[];
-    return orders.whereType<Map<String, dynamic>>().toList();
-  }
-
-  // ── Admin Employee Management ────────────────────────────────────────
-
-  Future<List<EmployeeModel>> fetchAdminEmployees({
-    String? clientId,
-    String? status,
-    int limit = 300,
-  }) async {
-    final params = <String, dynamic>{'limit': limit};
-    if (clientId != null && clientId.isNotEmpty) params['clientId'] = clientId;
-    if (status != null && status.isNotEmpty) params['status'] = status;
-    final data = await _getJson(
-      '/api/admin/employees',
-      queryParameters: params,
-    );
-    final list = data['employees'] as List<dynamic>? ?? const <dynamic>[];
-    return list
+  Future<List<IncidentModel>> fetchFieldOfficerIncidents() async {
+    final data = await _getJson('/api/field-officer/incidents');
+    return (data['incidents'] as List<dynamic>? ?? const <dynamic>[])
         .whereType<Map<String, dynamic>>()
-        .map(EmployeeModel.fromJson)
+        .map(IncidentModel.fromJson)
         .toList();
-  }
-
-  Future<Map<String, dynamic>> updateEmployeeStatus({
-    required String employeeId,
-    required String status,
-  }) async {
-    return _patchJson('/api/admin/employees/$employeeId', <String, dynamic>{
-      'status': status,
-    });
-  }
-
-  // ── Admin Training Modules ───────────────────────────────────────────
-
-  Future<List<TrainingModuleModel>> fetchTrainingModules() async {
-    final data = await _getJson('/api/admin/training/modules');
-    final list = data['modules'] as List<dynamic>? ?? const <dynamic>[];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(TrainingModuleModel.fromJson)
-        .toList();
-  }
-
-  Future<Map<String, dynamic>> createTrainingModule(
-    Map<String, dynamic> payload,
-  ) async {
-    return _postJson('/api/admin/training/modules', payload);
-  }
-
-  Future<Map<String, dynamic>> updateTrainingModule({
-    required String moduleId,
-    required Map<String, dynamic> payload,
-  }) async {
-    return _patchJson('/api/admin/training/modules/$moduleId', payload);
-  }
-
-  Future<Map<String, dynamic>> deleteTrainingModule(String moduleId) async {
-    return _deleteJson('/api/admin/training/modules/$moduleId');
-  }
-
-  // ── Admin Question Banks ─────────────────────────────────────────────
-
-  Future<List<QuestionBankModel>> fetchQuestionBanks({String? moduleId}) async {
-    final data = await _getJson(
-      '/api/admin/training/banks',
-      queryParameters:
-          moduleId != null && moduleId.isNotEmpty
-              ? <String, dynamic>{'moduleId': moduleId}
-              : null,
-    );
-    final list = data['banks'] as List<dynamic>? ?? const <dynamic>[];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(QuestionBankModel.fromJson)
-        .toList();
-  }
-
-  Future<Map<String, dynamic>> createQuestionBank(
-    Map<String, dynamic> payload,
-  ) async {
-    return _postJson('/api/admin/training/banks', payload);
-  }
-
-  Future<Map<String, dynamic>> updateQuestionBank({
-    required String bankId,
-    required Map<String, dynamic> payload,
-  }) async {
-    return _patchJson('/api/admin/training/banks/$bankId', payload);
-  }
-
-  Future<Map<String, dynamic>> deleteQuestionBank(String bankId) async {
-    return _deleteJson('/api/admin/training/banks/$bankId');
-  }
-
-  // ── Admin Training Assignments ───────────────────────────────────────
-
-  Future<List<Map<String, dynamic>>> fetchAdminTrainingAssignments({
-    String? employeeId,
-    String? moduleId,
-  }) async {
-    final params = <String, dynamic>{};
-    if (employeeId != null && employeeId.isNotEmpty) {
-      params['employeeId'] = employeeId;
-    }
-    if (moduleId != null && moduleId.isNotEmpty) {
-      params['moduleId'] = moduleId;
-    }
-    final data = await _getJson(
-      '/api/admin/training/assignments',
-      queryParameters: params.isNotEmpty ? params : null,
-    );
-    final list = data['assignments'] as List<dynamic>? ?? const <dynamic>[];
-    return list.whereType<Map<String, dynamic>>().toList();
-  }
-
-  Future<Map<String, dynamic>> createTrainingAssignment(
-    Map<String, dynamic> payload,
-  ) async {
-    return _postJson('/api/admin/training/assignments', payload);
-  }
-
-  // ── Admin Evaluations ────────────────────────────────────────────────
-
-  Future<List<EvaluationModel>> fetchAdminEvaluations({
-    String? period,
-    String? employeeId,
-  }) async {
-    final params = <String, dynamic>{};
-    if (period != null && period.isNotEmpty) params['period'] = period;
-    if (employeeId != null && employeeId.isNotEmpty) {
-      params['employeeId'] = employeeId;
-    }
-    final data = await _getJson(
-      '/api/admin/evaluations',
-      queryParameters: params.isNotEmpty ? params : null,
-    );
-    final list = data['evaluations'] as List<dynamic>? ?? const <dynamic>[];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(EvaluationModel.fromJson)
-        .toList();
-  }
-
-  Future<Map<String, dynamic>> createEvaluation(
-    Map<String, dynamic> payload,
-  ) async {
-    return _postJson('/api/admin/evaluations', payload);
-  }
-
-  // ── Admin Leaderboard ────────────────────────────────────────────────
-
-  Future<List<LeaderboardEntryModel>> fetchLeaderboard({
-    String? district,
-    String? clientId,
-  }) async {
-    final params = <String, dynamic>{};
-    if (district != null && district.isNotEmpty) params['district'] = district;
-    if (clientId != null && clientId.isNotEmpty) params['clientId'] = clientId;
-    final data = await _getJson(
-      '/api/admin/leaderboard',
-      queryParameters: params.isNotEmpty ? params : null,
-    );
-    final list = data['scores'] as List<dynamic>? ?? const <dynamic>[];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(LeaderboardEntryModel.fromJson)
-        .toList();
-  }
-
-  // ── Admin Payroll ────────────────────────────────────────────────────
-
-  Future<List<PayrollCycleModel>> fetchPayrollCycles() async {
-    final data = await _getJson('/api/admin/payroll/cycles');
-    final list = data['cycles'] as List<dynamic>? ?? const <dynamic>[];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(PayrollCycleModel.fromJson)
-        .toList();
-  }
-
-  Future<Map<String, dynamic>> fetchPayrollCycleDetail(String cycleId) async {
-    return _getJson('/api/admin/payroll/cycles/$cycleId');
-  }
-
-  Future<Map<String, dynamic>> createPayrollCycle(
-    Map<String, dynamic> payload,
-  ) async {
-    return _postJson('/api/admin/payroll/cycles', payload);
-  }
-
-  Future<Map<String, dynamic>> finalizePayrollCycle(String cycleId) async {
-    return _postJson(
-      '/api/admin/payroll/cycles/$cycleId/finalize',
-      <String, dynamic>{},
-    );
-  }
-
-  Future<Map<String, dynamic>> deletePayrollCycle(String cycleId) async {
-    return _deleteJson('/api/admin/payroll/cycles/$cycleId');
-  }
-
-  // ── Admin Clients ────────────────────────────────────────────────────
-
-  Future<List<ClientModel>> fetchAdminClients() async {
-    final data = await _getJson('/api/admin/clients');
-    final list = data['clients'] as List<dynamic>? ?? const <dynamic>[];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(ClientModel.fromJson)
-        .toList();
-  }
-
-  Future<Map<String, dynamic>> createClient(
-    Map<String, dynamic> payload,
-  ) async {
-    return _postJson('/api/admin/clients', payload);
-  }
-
-  Future<Map<String, dynamic>> updateClient({
-    required String clientId,
-    required Map<String, dynamic> payload,
-  }) async {
-    return _patchJson('/api/admin/clients/$clientId', payload);
-  }
-
-  Future<Map<String, dynamic>> deleteClient(String clientId) async {
-    return _deleteJson('/api/admin/clients/$clientId');
-  }
-
-  // ── Admin Field Officers ─────────────────────────────────────────────
-
-  Future<List<FieldOfficerModel>> fetchAdminFieldOfficers() async {
-    final data = await _getJson('/api/admin/field-officers');
-    final list = data['fieldOfficers'] as List<dynamic>? ?? const <dynamic>[];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(FieldOfficerModel.fromJson)
-        .toList();
-  }
-
-  Future<Map<String, dynamic>> createFieldOfficer(
-    Map<String, dynamic> payload,
-  ) async {
-    return _postJson('/api/admin/field-officers', payload);
-  }
-
-  Future<Map<String, dynamic>> updateFieldOfficer({
-    required String officerId,
-    required Map<String, dynamic> payload,
-  }) async {
-    return _patchJson('/api/admin/field-officers/$officerId', payload);
-  }
-
-  Future<Map<String, dynamic>> deleteFieldOfficer(String officerId) async {
-    return _deleteJson('/api/admin/field-officers/$officerId');
-  }
-
-  // ── Admin Notifications ──────────────────────────────────────────────
-
-  Future<Map<String, dynamic>> sendAdminNotification({
-    required String title,
-    required String body,
-    String role = 'all',
-    String? district,
-    Map<String, dynamic>? data,
-  }) async {
-    return _postJson('/api/admin/notifications/send', <String, dynamic>{
-      'title': title,
-      'body': body,
-      'role': role,
-      if (district != null && district.trim().isNotEmpty)
-        'district': district.trim(),
-      if (data != null && data.isNotEmpty) 'data': data,
-    });
-  }
-
-  // ── Admin Attendance Reports ─────────────────────────────────────────
-
-  Future<List<AttendanceReportModel>> fetchAttendanceReport({
-    String? month,
-    String? clientId,
-    String? district,
-  }) async {
-    final params = <String, dynamic>{};
-    if (month != null && month.isNotEmpty) params['month'] = month;
-    if (clientId != null && clientId.isNotEmpty) params['clientId'] = clientId;
-    if (district != null && district.isNotEmpty) params['district'] = district;
-    final data = await _getJson(
-      '/api/admin/reports/attendance',
-      queryParameters: params.isNotEmpty ? params : null,
-    );
-    final list = data['reports'] as List<dynamic>? ?? const <dynamic>[];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(AttendanceReportModel.fromJson)
-        .toList();
-  }
-
-  // ── Admin Visit Reports ──────────────────────────────────────────────
-
-  Future<List<VisitReportModel>> fetchAdminVisitReports() async {
-    final data = await _getJson('/api/admin/visit-reports');
-    final list = data['reports'] as List<dynamic>? ?? const <dynamic>[];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(VisitReportModel.fromJson)
-        .toList();
-  }
-
-  // ── Admin Training Reports ───────────────────────────────────────────
-
-  Future<List<TrainingReportModel>> fetchAdminTrainingReports() async {
-    final data = await _getJson('/api/admin/training-reports');
-    final list = data['reports'] as List<dynamic>? ?? const <dynamic>[];
-    return list
-        .whereType<Map<String, dynamic>>()
-        .map(TrainingReportModel.fromJson)
-        .toList();
-  }
-
-  // ── Admin Patrol Activities ──────────────────────────────────────────
-
-  Future<List<Map<String, dynamic>>> fetchAdminPatrolActivities() async {
-    final data = await _getJson('/api/admin/patrol-activities');
-    final list = data['activities'] as List<dynamic>? ?? const <dynamic>[];
-    return list.whereType<Map<String, dynamic>>().toList();
   }
 
   // ── Field Officer endpoints ──────────────────────────────────────────
@@ -1646,6 +1497,21 @@ class MobileRepository {
     );
   }
 
+  Future<List<WorkOrderRevisionEventModel>> fetchWorkOrderRevisions() async {
+    final data = await _getJson('/api/field-officer/work-order-revisions');
+    return (data['events'] as List<dynamic>? ?? const <dynamic>[])
+        .whereType<Map<String, dynamic>>()
+        .map(WorkOrderRevisionEventModel.fromJson)
+        .toList();
+  }
+
+  Future<void> acknowledgeWorkOrderRevision(String eventId) async {
+    await _postJson(
+      '/api/field-officer/work-order-revisions',
+      <String, dynamic>{'eventId': eventId},
+    );
+  }
+
   Future<List<FieldOfficerAttendanceEntry>> fetchFieldOfficerGuardAttendance({
     String? date,
     String? district,
@@ -1660,11 +1526,48 @@ class MobileRepository {
     );
 
     // Check multiple possible keys for robustness
-    final entries =
-        (data['attendance'] ?? data['records'] ?? data['logs'] ?? data['data'])
-            as List<dynamic>? ??
-        const <dynamic>[];
+    final entries = _listValue(data, const <String>[
+      'attendance',
+      'records',
+      'logs',
+      'data',
+    ]);
 
+    return entries
+        .whereType<Map<String, dynamic>>()
+        .map(FieldOfficerAttendanceEntry.fromJson)
+        .toList();
+  }
+
+  Future<List<FieldOfficerAttendanceEntry>>
+  fetchFieldOfficerGuardAttendanceRange({
+    required DateTime start,
+    required DateTime end,
+    String? district,
+  }) async {
+    final first = DateTime(start.year, start.month, start.day);
+    final last = DateTime(end.year, end.month, end.day);
+
+    String fmt(DateTime day) =>
+        '${day.year.toString().padLeft(4, '0')}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
+
+    // A single aggregated request replaces the previous N-day fan-out (which
+    // launched up to 62 requests and caused connection resets on mobile).
+    final data = await _getJson(
+      '/api/field-officer/guard-attendance/range',
+      queryParameters: <String, dynamic>{
+        'start': fmt(first),
+        'end': fmt(last),
+        if (district != null && district.trim().isNotEmpty)
+          'district': district.trim(),
+      },
+    );
+
+    final entries = _listValue(data, const <String>[
+      'attendance',
+      'records',
+      'logs',
+    ]);
     return entries
         .whereType<Map<String, dynamic>>()
         .map(FieldOfficerAttendanceEntry.fromJson)
@@ -1699,6 +1602,24 @@ class MobileRepository {
     Map<String, dynamic> payload,
   ) async {
     return _postJson('/api/field-officer/training-reports', payload);
+  }
+
+  Future<Map<String, dynamic>> createVisitReportRevision(
+    String reportId,
+  ) async {
+    return _postJson(
+      '/api/admin/visit-reports/${Uri.encodeComponent(reportId)}/revisions',
+      <String, dynamic>{},
+    );
+  }
+
+  Future<Map<String, dynamic>> createTrainingReportRevision(
+    String reportId,
+  ) async {
+    return _postJson(
+      '/api/admin/training-reports/${Uri.encodeComponent(reportId)}/revisions',
+      <String, dynamic>{},
+    );
   }
 
   Future<Map<String, dynamic>> fetchFieldOfficerReportHistory() async {
@@ -1736,158 +1657,71 @@ class MobileRepository {
     return 'data:$mimeType;base64,${base64Encode(bytes)}';
   }
 
-  // ── Admin Employee CRUD ───────────────────────────────────────────────
-
   Future<Map<String, dynamic>> enrollGuard(Map<String, dynamic> payload) async {
     return _postJson('/api/employees/enroll', payload);
   }
 
-  Future<Map<String, dynamic>> updateEmployee({
-    required String employeeId,
-    required Map<String, dynamic> payload,
+  /// Must match `AADHAAR_CONSENT_VERSION` in `(web) src/lib/aadhaar-policy.ts`.
+  static const String aadhaarConsentVersion = 'aadhaar-esic-epf-v1';
+
+  /// Uploads a missing enrolment document (Aadhaar / identity / address) for
+  /// the signed-in guard. Mirrors the web `POST /api/guard/profile/documents`
+  /// contract; files are sent as multipart form-data.
+  ///
+  /// - `category=aadhaar` requires `aadhaarNumber` + a `front` copy and sends
+  ///   the consent flag/version automatically.
+  /// - `category=identity|address` requires `documentType` + `documentNumber`
+  ///   and a `front` copy, with an optional `back` copy.
+  Future<void> uploadGuardDocument({
+    required String category,
+    String? documentType,
+    String? documentNumber,
+    String? aadhaarNumber,
+    required DocumentUploadFile front,
+    DocumentUploadFile? back,
   }) async {
-    return _patchJson('/api/admin/employees/$employeeId', payload);
+    final form = FormData();
+    form.fields.add(MapEntry('category', category));
+    if (category == 'aadhaar') {
+      form.fields.add(MapEntry('consentAccepted', 'true'));
+      form.fields.add(MapEntry('consentVersion', aadhaarConsentVersion));
+      form.fields.add(MapEntry('aadhaarNumber', aadhaarNumber ?? ''));
+      form.files.add(MapEntry('front', await _toMultipartFile('front', front)));
+    } else {
+      form.fields.add(MapEntry('documentType', documentType ?? ''));
+      form.fields.add(MapEntry('documentNumber', documentNumber ?? ''));
+      form.files.add(MapEntry('front', await _toMultipartFile('front', front)));
+      if (back != null) {
+        form.files.add(MapEntry('back', await _toMultipartFile('back', back)));
+      }
+    }
+    try {
+      final response = await _apiClient.dio.post<dynamic>(
+        '/api/guard/profile/documents',
+        data: form,
+        options: Options(headers: await _authHeaders()),
+      );
+      final data = response.data;
+      if (data is! Map) {
+        throw const FormatException('Unexpected response from server');
+      }
+    } on DioException catch (error) {
+      throw Exception(_extractApiError(error));
+    }
   }
 
-  Future<Map<String, dynamic>> deleteEmployee(String employeeId) async {
-    return _deleteJson('/api/admin/employees/$employeeId');
-  }
-
-  Future<Map<String, dynamic>> fetchEmployeeDetail(String employeeId) async {
-    return _getJson('/api/admin/employees/$employeeId');
-  }
-
-  // ── Admin Sites ───────────────────────────────────────────────────────
-
-  Future<List<Map<String, dynamic>>> fetchAdminSites({String? clientId}) async {
-    final params = <String, dynamic>{};
-    if (clientId != null && clientId.isNotEmpty) params['clientId'] = clientId;
-    final data = await _getJson(
-      '/api/admin/sites',
-      queryParameters: params.isNotEmpty ? params : null,
-    );
-    final list = data['sites'] as List<dynamic>? ?? const <dynamic>[];
-    return list.whereType<Map<String, dynamic>>().toList();
-  }
-
-  Future<Map<String, dynamic>> createSite(Map<String, dynamic> payload) async {
-    return _postJson('/api/admin/sites', payload);
-  }
-
-  Future<Map<String, dynamic>> updateSite({
-    required String siteId,
-    required Map<String, dynamic> payload,
-  }) async {
-    return _patchJson('/api/admin/sites/$siteId', payload);
-  }
-
-  Future<Map<String, dynamic>> deleteSite(String siteId) async {
-    return _deleteJson('/api/admin/sites/$siteId');
-  }
-
-  // ── Admin Imports ─────────────────────────────────────────────────────
-
-  Future<Map<String, dynamic>> importWorkOrdersPreview(
-    Map<String, dynamic> payload,
+  Future<MultipartFile> _toMultipartFile(
+    String field,
+    DocumentUploadFile file,
   ) async {
-    return _postJson('/api/admin/work-orders/import/preview', payload);
+    return MultipartFile.fromFile(file.path, filename: file.name);
   }
 
-  Future<Map<String, dynamic>> commitWorkOrderImport(
-    Map<String, dynamic> payload,
-  ) async {
-    return _postJson('/api/admin/work-orders/import/commit', payload);
-  }
-
-  Future<Map<String, dynamic>> bulkImportEmployees(
-    Map<String, dynamic> payload,
-  ) async {
-    return _postJson('/api/admin/employees/bulk', payload);
-  }
-
-  // ── Admin QR ──────────────────────────────────────────────────────────
-
-  Future<Map<String, dynamic>> generateQR(String employeeId) async {
-    return _postJson('/api/admin/qr/generate', <String, dynamic>{
-      'employeeId': employeeId,
-    });
-  }
-
-  Future<Map<String, dynamic>> bulkGenerateQR() async {
-    return _postJson('/api/admin/qr/bulk-generate', <String, dynamic>{});
-  }
-
-  // ── Admin Data Export ─────────────────────────────────────────────────
-
-  Future<Map<String, dynamic>> exportData({
-    required String type,
-    required String format,
-    String? startDate,
-    String? endDate,
-    String? clientId,
-  }) async {
-    return _postJson('/api/admin/data-export', <String, dynamic>{
-      'type': type,
-      'format': format,
-      if (startDate != null) 'startDate': startDate,
-      if (endDate != null) 'endDate': endDate,
-      if (clientId != null) 'clientId': clientId,
-    });
-  }
-
-  // ── Admin Wage Config ─────────────────────────────────────────────────
-
-  Future<Map<String, dynamic>> updateWageConfig({
-    required String clientId,
-    required Map<String, dynamic> payload,
-  }) async {
-    return _patchJson('/api/admin/clients/$clientId/wage-config', payload);
-  }
-
-  Future<Map<String, dynamic>> fetchWageConfig(String clientId) async {
-    return _getJson('/api/admin/clients/$clientId/wage-config');
-  }
-
-  // ── Admin Enrollment Config ───────────────────────────────────────────
-
-  Future<Map<String, dynamic>> fetchEnrollmentConfig() async {
-    return _getJson('/api/admin/enrollment-config');
-  }
-
-  Future<Map<String, dynamic>> updateEnrollmentConfig(
-    Map<String, dynamic> payload,
-  ) async {
-    return _patchJson('/api/admin/enrollment-config', payload);
-  }
-
-  // ── Admin Work Order Management ───────────────────────────────────────
-
-  Future<Map<String, dynamic>> renameWorkOrderExam({
-    required String exam,
-    required String newName,
-  }) async {
-    return _postJson('/api/admin/work-orders/rename-exam', <String, dynamic>{
-      'exam': exam,
-      'newName': newName,
-    });
-  }
-
-  Future<Map<String, dynamic>> bulkDeleteWorkOrders(
-    Map<String, dynamic> payload,
-  ) async {
-    return _deleteJson('/api/admin/work-orders/bulk-delete');
-  }
-
-  Future<Map<String, dynamic>> fetchWorkOrderDetail(String workOrderId) async {
-    return _getJson('/api/admin/work-orders/$workOrderId');
-  }
-
-  Future<void> updateWorkOrderAssignments({
-    required String workOrderId,
-    required List<Map<String, dynamic>> assignedGuards,
-  }) async {
-    await _patchJson('/api/admin/work-orders/$workOrderId', <String, dynamic>{
-      'assignedGuards': assignedGuards,
+  /// Requests an Aadhaar correction (ESIC/EPF) for the signed-in guard.
+  // Payload contract: {'reason': reason}
+  Future<Map<String, dynamic>> requestAadhaarCorrection(String reason) async {
+    return _postJson('/api/guard/profile/aadhaar-correction', {
+      'reason': reason,
     });
   }
 }

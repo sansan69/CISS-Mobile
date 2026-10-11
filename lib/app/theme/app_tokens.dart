@@ -7,6 +7,8 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
     required this.surfaceMuted,
     required this.surfaceStrong,
     required this.surfaceAlt,
+    required this.surfaceGlass,
+    required this.chartGrid,
     required this.border,
     required this.borderStrong,
     required this.ink,
@@ -21,6 +23,11 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
     required this.warningSoft,
     required this.danger,
     required this.dangerSoft,
+    this.glowEmerald = const Color(0xFF10B981),
+    this.glowAmber = const Color(0xFFF59E0B),
+    this.glowCyan = const Color(0xFF06B6D4),
+    this.goldChampagne = const Color(0xFFD4AF37),
+    this.specularBorder = const Color(0x26014C85),
   });
 
   final Color canvas;
@@ -28,6 +35,8 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
   final Color surfaceMuted;
   final Color surfaceStrong;
   final Color surfaceAlt;
+  final Color surfaceGlass;
+  final Color chartGrid;
   final Color border;
   final Color borderStrong;
   final Color ink;
@@ -42,6 +51,11 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
   final Color warningSoft;
   final Color danger;
   final Color dangerSoft;
+  final Color glowEmerald;
+  final Color glowAmber;
+  final Color glowCyan;
+  final Color goldChampagne;
+  final Color specularBorder;
 
   factory CissThemeTokens.light() {
     return const CissThemeTokens(
@@ -50,6 +64,8 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
       surfaceMuted: Color(0xFFF5F8FA),
       surfaceStrong: Color(0xFFE1E8ED),
       surfaceAlt: Color(0xFFF8FAFC),
+      surfaceGlass: Color(0xD9FFFFFF),
+      chartGrid: Color(0xFFE1E8ED),
       border: Color(0xFFD3DFE9),
       borderStrong: Color(0xFFA2B6C7),
       ink: Color(0xFF0F1F31),
@@ -64,6 +80,11 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
       warningSoft: Color(0xFFFAF0E3),
       danger: Color(0xFFB52B44),
       dangerSoft: Color(0xFFFCE8EB),
+      glowEmerald: Color(0xFF10B981),
+      glowAmber: Color(0xFFF59E0B),
+      glowCyan: Color(0xFF06B6D4),
+      goldChampagne: Color(0xFFD4AF37),
+      specularBorder: Color(0x1F014C85),
     );
   }
 
@@ -74,6 +95,8 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
       surfaceMuted: Color(0xFF141D2D),
       surfaceStrong: Color(0xFF1A263B),
       surfaceAlt: Color(0xFF141D2D),
+      surfaceGlass: Color(0xCC0F1622),
+      chartGrid: Color(0xFF1E2E44),
       border: Color(0xFF1E2E44),
       borderStrong: Color(0xFF334B68),
       ink: Color(0xFFEBF1F5),
@@ -88,6 +111,11 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
       warningSoft: Color(0xFF3D270F),
       danger: Color(0xFFE8586E),
       dangerSoft: Color(0xFF3E131A),
+      glowEmerald: Color(0xFF10B981),
+      glowAmber: Color(0xFFF59E0B),
+      glowCyan: Color(0xFF06B6D4),
+      goldChampagne: Color(0xFFD8B96C),
+      specularBorder: Color(0x33FFFFFF),
     );
   }
 
@@ -103,6 +131,8 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
     Color? surfaceMuted,
     Color? surfaceStrong,
     Color? surfaceAlt,
+    Color? surfaceGlass,
+    Color? chartGrid,
     Color? border,
     Color? borderStrong,
     Color? ink,
@@ -117,6 +147,11 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
     Color? warningSoft,
     Color? danger,
     Color? dangerSoft,
+    Color? glowEmerald,
+    Color? glowAmber,
+    Color? glowCyan,
+    Color? goldChampagne,
+    Color? specularBorder,
   }) {
     return CissThemeTokens(
       canvas: canvas ?? this.canvas,
@@ -124,6 +159,8 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
       surfaceMuted: surfaceMuted ?? this.surfaceMuted,
       surfaceStrong: surfaceStrong ?? this.surfaceStrong,
       surfaceAlt: surfaceAlt ?? this.surfaceAlt,
+      surfaceGlass: surfaceGlass ?? this.surfaceGlass,
+      chartGrid: chartGrid ?? this.chartGrid,
       border: border ?? this.border,
       borderStrong: borderStrong ?? this.borderStrong,
       ink: ink ?? this.ink,
@@ -138,6 +175,11 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
       warningSoft: warningSoft ?? this.warningSoft,
       danger: danger ?? this.danger,
       dangerSoft: dangerSoft ?? this.dangerSoft,
+      glowEmerald: glowEmerald ?? this.glowEmerald,
+      glowAmber: glowAmber ?? this.glowAmber,
+      glowCyan: glowCyan ?? this.glowCyan,
+      goldChampagne: goldChampagne ?? this.goldChampagne,
+      specularBorder: specularBorder ?? this.specularBorder,
     );
   }
 
@@ -150,6 +192,8 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
       surfaceMuted: Color.lerp(surfaceMuted, other.surfaceMuted, t)!,
       surfaceStrong: Color.lerp(surfaceStrong, other.surfaceStrong, t)!,
       surfaceAlt: Color.lerp(surfaceAlt, other.surfaceAlt, t)!,
+      surfaceGlass: Color.lerp(surfaceGlass, other.surfaceGlass, t)!,
+      chartGrid: Color.lerp(chartGrid, other.chartGrid, t)!,
       border: Color.lerp(border, other.border, t)!,
       borderStrong: Color.lerp(borderStrong, other.borderStrong, t)!,
       ink: Color.lerp(ink, other.ink, t)!,
@@ -164,6 +208,11 @@ class CissThemeTokens extends ThemeExtension<CissThemeTokens> {
       warningSoft: Color.lerp(warningSoft, other.warningSoft, t)!,
       danger: Color.lerp(danger, other.danger, t)!,
       dangerSoft: Color.lerp(dangerSoft, other.dangerSoft, t)!,
+      glowEmerald: Color.lerp(glowEmerald, other.glowEmerald, t)!,
+      glowAmber: Color.lerp(glowAmber, other.glowAmber, t)!,
+      glowCyan: Color.lerp(glowCyan, other.glowCyan, t)!,
+      goldChampagne: Color.lerp(goldChampagne, other.goldChampagne, t)!,
+      specularBorder: Color.lerp(specularBorder, other.specularBorder, t)!,
     );
   }
 }
@@ -182,16 +231,22 @@ abstract final class AppRadius {
   static const double sm = 12;
   static const double md = 16;
   static const double lg = 20;
+  static const double card = 22;
   static const double pill = 999;
 }
 
 abstract final class AppShadows {
   static const List<BoxShadow> card = <BoxShadow>[
-    BoxShadow(color: Color(0x0A060E18), blurRadius: 20, offset: Offset(0, 8)),
+    BoxShadow(color: Color(0x0D060E18), blurRadius: 24, offset: Offset(0, 8)),
+    BoxShadow(color: Color(0x05060E18), blurRadius: 8, offset: Offset(0, 2)),
   ];
 
   static const List<BoxShadow> subtle = <BoxShadow>[
-    BoxShadow(color: Color(0x06060E18), blurRadius: 10, offset: Offset(0, 4)),
+    BoxShadow(color: Color(0x06060E18), blurRadius: 12, offset: Offset(0, 4)),
+  ];
+
+  static List<BoxShadow> glow(Color color, {double opacity = 0.28, double blur = 18}) => [
+    BoxShadow(color: color.withValues(alpha: opacity), blurRadius: blur, spreadRadius: 1),
   ];
 }
 

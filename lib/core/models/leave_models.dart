@@ -7,6 +7,7 @@ class LeaveRequestModel {
     required this.days,
     required this.reason,
     required this.status,
+    this.attachmentUrl,
   });
 
   final String id;
@@ -16,6 +17,7 @@ class LeaveRequestModel {
   final int days;
   final String reason;
   final String status;
+  final String? attachmentUrl;
 
   factory LeaveRequestModel.fromJson(Map<String, dynamic> json) {
     return LeaveRequestModel(
@@ -26,6 +28,8 @@ class LeaveRequestModel {
       days: (json['days'] as num?)?.toInt() ?? 0,
       reason: (json['reason'] as String?) ?? '',
       status: (json['status'] as String?) ?? '',
+      attachmentUrl:
+          (json['attachmentUrl'] as String?) ?? (json['documentUrl'] as String?),
     );
   }
 }

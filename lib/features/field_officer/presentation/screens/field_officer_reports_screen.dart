@@ -1,7 +1,6 @@
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -12,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/report_models.dart';
 import '../../../../../core/network/providers.dart';
+import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/offline/draft_service.dart';
 import '../../../../../shared/widgets/brand_banner.dart';
@@ -25,12 +25,11 @@ import '../widgets/training_report_detail_sheet.dart';
 
 final FutureProvider<List<VisitReportModel>> fieldOfficerVisitReportsProvider =
     FutureProvider<List<VisitReportModel>>((Ref ref) {
-  return ref.read(mobileRepositoryProvider).fetchVisitReports();
-});
+      return ref.read(mobileRepositoryProvider).fetchVisitReports();
+    });
 
 final FutureProvider<List<TrainingReportModel>>
-    fieldOfficerTrainingReportsProvider =
-    FutureProvider<List<TrainingReportModel>>(
+fieldOfficerTrainingReportsProvider = FutureProvider<List<TrainingReportModel>>(
   (Ref ref) {
     return ref.read(mobileRepositoryProvider).fetchTrainingReports();
   },
@@ -90,18 +89,28 @@ class _FieldOfficerReportsScreenState
     ref.invalidate(fieldOfficerTrainingReportsProvider);
   }
 
+  String _formatDate(String raw) {
+    if (raw.isEmpty) return '—';
+    final parsed = DateTime.tryParse(raw);
+    if (parsed != null) {
+      return DateFormat('dd MMM yyyy').format(parsed.toLocal());
+    }
+    return raw;
+  }
+
   void _openVisitDetail(VisitReportModel report) {
     final isAdmin = false; // FO shell is field-officer only
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => VisitReportDetailSheet(
-        report: report,
-        isAdmin: isAdmin,
-        isOwner: true, // FO shell always owner
-        onUpdated: _refresh,
-      ),
+      builder:
+          (_) => VisitReportDetailSheet(
+            report: report,
+            isAdmin: isAdmin,
+            isOwner: true, // FO shell always owner
+            onUpdated: _refresh,
+          ),
     );
   }
 
@@ -110,12 +119,13 @@ class _FieldOfficerReportsScreenState
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => TrainingReportDetailSheet(
-        report: report,
-        isAdmin: false,
-        isOwner: true, // FO shell always owner
-        onUpdated: _refresh,
-      ),
+      builder:
+          (_) => TrainingReportDetailSheet(
+            report: report,
+            isAdmin: false,
+            isOwner: true, // FO shell always owner
+            onUpdated: _refresh,
+          ),
     );
   }
 
@@ -124,35 +134,78 @@ class _FieldOfficerReportsScreenState
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _NewReportSheet(
-        initialTab: _tab,
-        workOrders: workOrders,
-        onSubmitted: () {
-          ref.invalidate(fieldOfficerVisitReportsProvider);
-          ref.invalidate(fieldOfficerTrainingReportsProvider);
-        },
-      ),
+      builder:
+          (_) => _NewReportSheet(
+            initialTab: _tab,
+            workOrders: workOrders,
+            onSubmitted: () {
+              ref.invalidate(fieldOfficerVisitReportsProvider);
+              ref.invalidate(fieldOfficerTrainingReportsProvider);
+            },
+          ),
     );
   }
 
   List<VisitReportModel> _filteredVisit(List<VisitReportModel> all) {
     var filtered = all;
-    if (_visitFilter != 'all') filtered = filtered.where((r) => r.status == _visitFilter).toList();
-    if (_clientFilter.isNotEmpty) filtered = filtered.where((r) => r.clientName.toLowerCase().contains(_clientFilter.toLowerCase())).toList();
-    if (_districtFilter.isNotEmpty) filtered = filtered.where((r) => r.district.toLowerCase().contains(_districtFilter.toLowerCase())).toList();
+    if (_visitFilter != 'all') {
+      filtered = filtered.where((r) => r.status == _visitFilter).toList();
+    }
+    if (_clientFilter.isNotEmpty) {
+      filtered =
+          filtered
+              .where(
+                (r) => r.clientName.toLowerCase().contains(
+                  _clientFilter.toLowerCase(),
+                ),
+              )
+              .toList();
+    }
+    if (_districtFilter.isNotEmpty) {
+      filtered =
+          filtered
+              .where(
+                (r) => r.district.toLowerCase().contains(
+                  _districtFilter.toLowerCase(),
+                ),
+              )
+              .toList();
+    }
     if (_monthFilter.isNotEmpty) {
-      filtered = filtered.where((r) => r.dateLabel.startsWith(_monthFilter)).toList();
+      filtered =
+          filtered.where((r) => r.dateLabel.startsWith(_monthFilter)).toList();
     }
     return filtered;
   }
 
   List<TrainingReportModel> _filteredTraining(List<TrainingReportModel> all) {
     var filtered = all;
-    if (_trainingFilter != 'all') filtered = filtered.where((r) => r.status == _trainingFilter).toList();
-    if (_clientFilter.isNotEmpty) filtered = filtered.where((r) => r.clientName.toLowerCase().contains(_clientFilter.toLowerCase())).toList();
-    if (_districtFilter.isNotEmpty) filtered = filtered.where((r) => r.district.toLowerCase().contains(_districtFilter.toLowerCase())).toList();
+    if (_trainingFilter != 'all') {
+      filtered = filtered.where((r) => r.status == _trainingFilter).toList();
+    }
+    if (_clientFilter.isNotEmpty) {
+      filtered =
+          filtered
+              .where(
+                (r) => r.clientName.toLowerCase().contains(
+                  _clientFilter.toLowerCase(),
+                ),
+              )
+              .toList();
+    }
+    if (_districtFilter.isNotEmpty) {
+      filtered =
+          filtered
+              .where(
+                (r) => r.district.toLowerCase().contains(
+                  _districtFilter.toLowerCase(),
+                ),
+              )
+              .toList();
+    }
     if (_monthFilter.isNotEmpty) {
-      filtered = filtered.where((r) => r.dateLabel.startsWith(_monthFilter)).toList();
+      filtered =
+          filtered.where((r) => r.dateLabel.startsWith(_monthFilter)).toList();
     }
     return filtered;
   }
@@ -168,7 +221,12 @@ class _FieldOfficerReportsScreenState
         visitAsync.isLoading ||
         trainingAsync.isLoading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Column(
+          children: <Widget>[
+            BrandBanner(title: 'Reports', subtitle: 'Loading report history'),
+            Expanded(child: Center(child: CircularProgressIndicator())),
+          ],
+        ),
       );
     }
 
@@ -176,19 +234,26 @@ class _FieldOfficerReportsScreenState
         workOrdersAsync.error ?? visitAsync.error ?? trainingAsync.error;
     if (err != null) {
       return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: StateBlock(
-              icon: Icons.assignment_late_rounded,
-              title: 'Could not load reports',
-              message: err.toString().replaceFirst('Exception: ', ''),
-              action: FilledButton.tonal(
-                onPressed: _refresh,
-                child: const Text('Try again'),
+        body: Column(
+          children: <Widget>[
+            const BrandBanner(title: 'Reports', subtitle: 'Report history'),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: StateBlock(
+                    icon: Icons.assignment_late_rounded,
+                    title: 'Could not load reports',
+                    message: err.toString().replaceFirst('Exception: ', ''),
+                    action: FilledButton.tonal(
+                      onPressed: _refresh,
+                      child: const Text('Try again'),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
+          ],
         ),
       );
     }
@@ -202,24 +267,31 @@ class _FieldOfficerReportsScreenState
 
     return Scaffold(
       backgroundColor: tokens.canvas,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.xxl),
-        children: [
-          BrandBanner(
-            title: 'Reports',
-            subtitle: 'Field visit and training briefing center',
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SyncStatusBadge(),
-                IconButton(
-                  onPressed: _refresh,
-                  icon: Icon(Icons.refresh_rounded, color: tokens.inkMuted, size: 20),
-                ),
-              ],
+      appBar: CissAppBar(
+        title: 'Reports',
+        subtitle: 'Field visit and training briefing center',
+        showBackButton: false,
+        actions: [
+          const SyncStatusBadge(),
+          IconButton(
+            onPressed: _refresh,
+            icon: Icon(
+              Icons.refresh_rounded,
+              color: tokens.inkMuted,
+              size: 20,
             ),
           ),
-          
+        ],
+      ),
+      body: ListView(
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          AppSpacing.sm,
+          AppSpacing.md,
+          120 + MediaQuery.paddingOf(context).bottom,
+        ),
+        children: [
+
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -238,8 +310,8 @@ class _FieldOfficerReportsScreenState
                     ),
                   ],
                   selected: <_Tab>{_tab},
-                  onSelectionChanged: (Set<_Tab> next) =>
-                      setState(() => _tab = next.first),
+                  onSelectionChanged:
+                      (Set<_Tab> next) => setState(() => _tab = next.first),
                   showSelectedIcon: false,
                 ),
                 const SizedBox(height: 12),
@@ -282,18 +354,43 @@ class _FieldOfficerReportsScreenState
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(_showFilters ? Icons.filter_list_off : Icons.filter_list, size: 16, color: tokens.inkMuted),
+                        Icon(
+                          _showFilters
+                              ? Icons.filter_list_off
+                              : Icons.filter_list,
+                          size: 16,
+                          color: tokens.inkMuted,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           _showFilters ? 'Hide Filters' : 'Show Filters',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: tokens.inkMuted),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: tokens.inkMuted,
+                          ),
                         ),
-                        if (_monthFilter.isNotEmpty || _clientFilter.isNotEmpty || _districtFilter.isNotEmpty) ...[
+                        if (_monthFilter.isNotEmpty ||
+                            _clientFilter.isNotEmpty ||
+                            _districtFilter.isNotEmpty) ...[
                           const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(color: tokens.primarySoft, borderRadius: BorderRadius.circular(4)),
-                            child: Text('Active', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: tokens.primary)),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: tokens.primarySoft,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'Active',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: tokens.primary,
+                              ),
+                            ),
                           ),
                         ],
                       ],
@@ -308,8 +405,13 @@ class _FieldOfficerReportsScreenState
                         flex: 2,
                         child: TextField(
                           decoration: const InputDecoration(
-                            labelText: 'Month', prefixIcon: Icon(Icons.calendar_month, size: 18),
-                            isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                            labelText: 'Month',
+                            prefixIcon: Icon(Icons.calendar_month, size: 18),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 12,
+                            ),
                           ),
                           controller: _monthController,
                           onChanged: (v) => setState(() => _monthFilter = v),
@@ -321,8 +423,13 @@ class _FieldOfficerReportsScreenState
                         flex: 2,
                         child: TextField(
                           decoration: const InputDecoration(
-                            labelText: 'Client', prefixIcon: Icon(Icons.business, size: 18),
-                            isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                            labelText: 'Client',
+                            prefixIcon: Icon(Icons.business, size: 18),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 12,
+                            ),
                           ),
                           controller: _clientController,
                           onChanged: (v) => setState(() => _clientFilter = v),
@@ -333,8 +440,13 @@ class _FieldOfficerReportsScreenState
                         flex: 2,
                         child: TextField(
                           decoration: const InputDecoration(
-                            labelText: 'District', prefixIcon: Icon(Icons.map, size: 18),
-                            isDense: true, contentPadding: EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                            labelText: 'District',
+                            prefixIcon: Icon(Icons.map, size: 18),
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              vertical: 10,
+                              horizontal: 12,
+                            ),
                           ),
                           controller: _districtController,
                           onChanged: (v) => setState(() => _districtFilter = v),
@@ -362,7 +474,15 @@ class _FieldOfficerReportsScreenState
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
-                  children: filteredVisit.map((r) => _VisitBriefingCard(r, onTap: () => _openVisitDetail(r))).toList(),
+                  children:
+                      filteredVisit
+                          .map(
+                            (r) => _VisitBriefingCard(
+                              r,
+                              onTap: () => _openVisitDetail(r),
+                            ),
+                          )
+                          .toList(),
                 ),
               ),
           ] else ...[
@@ -379,18 +499,38 @@ class _FieldOfficerReportsScreenState
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
-                  children: filteredTraining.map((r) => _TrainingBriefingCard(r, onTap: () => _openTrainingDetail(r))).toList(),
+                  children:
+                      filteredTraining
+                          .map(
+                            (r) => _TrainingBriefingCard(
+                              r,
+                              onTap: () => _openTrainingDetail(r),
+                            ),
+                          )
+                          .toList(),
                 ),
               ),
           ],
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openSheet(context, workOrders),
-        icon: const Icon(Icons.add_rounded),
-        label: Text(
-          'NEW BRIEFING',
-          style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 74),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            boxShadow: AppShadows.glow(tokens.primary),
+          ),
+          child: FloatingActionButton.extended(
+            onPressed: () => _openSheet(context, workOrders),
+            backgroundColor: tokens.primary,
+            foregroundColor: Colors.white,
+            elevation: 0,
+            icon: const Icon(Icons.add_rounded),
+            label: const Text(
+              'NEW BRIEFING',
+              style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1),
+            ),
+          ),
         ),
       ),
     );
@@ -414,29 +554,33 @@ class _StatusFilterRow extends StatelessWidget {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: options.map((opt) {
-          final (value, label) = opt;
-          final isSelected = value == selected;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: FilterChip(
-              label: Text(
-                label.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: isSelected ? tokens.primaryStrong : tokens.inkMuted,
+        children:
+            options.map((opt) {
+              final (value, label) = opt;
+              final isSelected = value == selected;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: FilterChip(
+                  label: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color:
+                          isSelected ? tokens.primaryStrong : tokens.inkMuted,
+                    ),
+                  ),
+                  selected: isSelected,
+                  onSelected: (_) => onChanged(value),
+                  showCheckmark: false,
+                  backgroundColor: tokens.surface,
+                  selectedColor: tokens.primarySoft,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
                 ),
-              ),
-              selected: isSelected,
-              onSelected: (_) => onChanged(value),
-              showCheckmark: false,
-              backgroundColor: tokens.surface,
-              selectedColor: tokens.primarySoft,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.sm)),
-            ),
-          );
-        }).toList(),
+              );
+            }).toList(),
       ),
     );
   }
@@ -455,126 +599,181 @@ class _VisitBriefingCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ModernCard(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        margin: const EdgeInsets.only(bottom: 12),
+        child: ModernCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          report.siteName,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: tokens.ink,
+                          ),
+                        ),
+                        Text(
+                          report.clientName,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: tokens.inkMuted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
+                      if (!isSynced)
+                        const StatusChip(
+                          label: 'Syncing',
+                          tone: StatusChipTone.warning,
+                        )
+                      else
+                        StatusChip(
+                          label: _statusLabel(report.status),
+                          tone:
+                              report.status == 'submitted'
+                                  ? StatusChipTone.info
+                                  : report.status == 'reviewed'
+                                  ? StatusChipTone.success
+                                  : StatusChipTone.warning,
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 12,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.calendar_today_rounded,
+                        size: 12,
+                        color: tokens.inkMuted,
+                      ),
+                      const SizedBox(width: 4),
                       Text(
-                        report.siteName.toUpperCase(),
+                        _formatDate(report.dateLabel),
                         style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: tokens.ink,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: tokens.inkMuted,
                         ),
                       ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.map, size: 12, color: tokens.inkMuted),
+                      const SizedBox(width: 4),
                       Text(
-                        report.clientName,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tokens.inkMuted),
+                        report.district,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: tokens.inkMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.groups_2_rounded,
+                        size: 12,
+                        color: tokens.inkMuted,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${report.guardsPresentCount} in / ${report.guardsAbsentCount} out',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: tokens.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (report.summary.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  report.summary,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              if (report.issuesFound.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: tokens.warning.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    border: Border.all(
+                      color: tokens.warning.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        size: 14,
+                        color: tokens.warning,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          report.issuesFound,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: tokens.ink,
+                          ),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    if (!isSynced)
-                      const StatusChip(label: 'SYNCING', tone: StatusChipTone.warning)
-                    else
-                      StatusChip(
-                        label: report.status.toUpperCase(),
-                        tone: report.status == 'submitted'
-                            ? StatusChipTone.info
-                            : report.status == 'reviewed'
-                                ? StatusChipTone.success
-                                : StatusChipTone.warning,
-                      ),
-                  ],
+              ],
+              if (report.photoUrls.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _PhotoThumbnailStrip(photoUrls: report.photoUrls),
+              ],
+              if (report.visitLocation != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '📍 ${report.visitLocation!['lat']?.toStringAsFixed(5) ?? '?'}, ${report.visitLocation!['lng']?.toStringAsFixed(5) ?? '?'}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: tokens.inkMuted,
+                  ),
                 ),
               ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.calendar_today_rounded, size: 12, color: tokens.inkMuted),
-                const SizedBox(width: 4),
-                Text(
-                  report.dateLabel,
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
-                ),
-                const SizedBox(width: 12),
-                Icon(Icons.map, size: 12, color: tokens.inkMuted),
-                const SizedBox(width: 4),
-                Text(
-                  report.district,
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
-                ),
-                const SizedBox(width: 12),
-                Icon(Icons.groups_2_rounded, size: 12, color: tokens.inkMuted),
-                const SizedBox(width: 4),
-                Text(
-                  '${report.guardsPresentCount} IN / ${report.guardsAbsentCount} OUT',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.primary),
-                ),
-              ],
-            ),
-            if (report.summary.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(
-                report.summary,
-                style: Theme.of(context).textTheme.bodySmall,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-              ),
             ],
-            if (report.issuesFound.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: tokens.warning.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                  border: Border.all(color: tokens.warning.withValues(alpha: 0.25)),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.warning_amber_rounded, size: 14, color: tokens.warning),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        report.issuesFound,
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.ink),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            if (report.photoUrls.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              _PhotoThumbnailStrip(photoUrls: report.photoUrls),
-            ],
-            if (report.visitLocation != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                '📍 ${report.visitLocation!['lat']?.toStringAsFixed(5) ?? '?'}, ${report.visitLocation!['lng']?.toStringAsFixed(5) ?? '?'}',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: tokens.inkMuted),
-              ),
-            ],
-          ],
+          ),
         ),
-      ),
       ), // GestureDetector
     );
   }
@@ -593,126 +792,195 @@ class _TrainingBriefingCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: ModernCard(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        report.topic.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: tokens.ink,
+        margin: const EdgeInsets.only(bottom: 12),
+        child: ModernCard(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          report.topic,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: tokens.ink,
+                          ),
                         ),
-                      ),
-                      Text(
-                        '${report.siteName} • ${report.clientName}',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: tokens.inkMuted),
-                      ),
-                    ],
+                        Text(
+                          '${report.siteName} • ${report.clientName}',
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(color: tokens.inkMuted),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                if (!isSynced)
-                  const StatusChip(label: 'QUEUED', tone: StatusChipTone.info)
-                else
-                  StatusChip(
-                    label: report.status.toUpperCase(),
-                    tone: report.status == 'acknowledged'
-                        ? StatusChipTone.success
-                        : report.status == 'submitted'
-                            ? StatusChipTone.info
-                            : StatusChipTone.warning,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Icon(Icons.calendar_today_rounded, size: 12, color: tokens.inkMuted),
-                const SizedBox(width: 4),
-                Text(
-                  report.dateLabel,
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
-                ),
-                const SizedBox(width: 12),
-                Icon(Icons.map, size: 12, color: tokens.inkMuted),
-                const SizedBox(width: 4),
-                Text(
-                  report.district,
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: tokens.inkMuted),
-                ),
-                const SizedBox(width: 12),
-                Icon(Icons.timer_rounded, size: 12, color: tokens.inkMuted),
-                const SizedBox(width: 4),
-                Text(
-                  '${report.durationMinutes} MINS',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.accent),
-                ),
-                const SizedBox(width: 12),
-                Icon(Icons.people_alt_rounded, size: 12, color: tokens.inkMuted),
-                const SizedBox(width: 4),
-                Text(
-                  '${report.attendeeCount} ATTENDED',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.inkMuted),
-                ),
-              ],
-            ),
-            if (report.description.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                report.description,
-                style: Theme.of(context).textTheme.bodySmall,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
+                  if (!isSynced)
+                    const StatusChip(label: 'Queued', tone: StatusChipTone.info)
+                  else
+                    StatusChip(
+                      label: _statusLabel(report.status),
+                      tone:
+                          report.status == 'acknowledged'
+                              ? StatusChipTone.success
+                              : report.status == 'submitted'
+                              ? StatusChipTone.info
+                              : StatusChipTone.warning,
+                    ),
+                ],
               ),
-            ],
-            if (report.clientReportUrl != null && report.clientReportUrl!.isNotEmpty) ...[
               const SizedBox(height: 8),
-              GestureDetector(
-                onTap: () => _openFullScreen(context, report.clientReportUrl!),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: tokens.primary.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                    border: Border.all(color: tokens.primary.withValues(alpha: 0.25)),
-                  ),
-                  child: Row(
+              Wrap(
+                spacing: 12,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.description_rounded, size: 14, color: tokens.primary),
-                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.calendar_today_rounded,
+                        size: 12,
+                        color: tokens.inkMuted,
+                      ),
+                      const SizedBox(width: 4),
                       Text(
-                        'Client Report',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.primary),
+                        _formatDate(report.dateLabel),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: tokens.inkMuted,
+                        ),
                       ),
                     ],
                   ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.map, size: 12, color: tokens.inkMuted),
+                      const SizedBox(width: 4),
+                      Text(
+                        report.district,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: tokens.inkMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.timer_rounded,
+                        size: 12,
+                        color: tokens.inkMuted,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${report.durationMinutes} mins',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: tokens.accent,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.people_alt_rounded,
+                        size: 12,
+                        color: tokens.inkMuted,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${report.attendeeCount} attended',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: tokens.inkMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (report.description.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  report.description,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
+              ],
+              if (report.clientReportUrl != null &&
+                  report.clientReportUrl!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                GestureDetector(
+                  onTap:
+                      () => _openFullScreen(context, report.clientReportUrl!),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: tokens.primary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
+                      border: Border.all(
+                        color: tokens.primary.withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.description_rounded,
+                          size: 14,
+                          color: tokens.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Client Report',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: tokens.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              if (report.photoUrls.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _PhotoThumbnailStrip(photoUrls: report.photoUrls),
+              ],
+              if (report.visitLocation != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '📍 ${report.visitLocation!['lat']?.toStringAsFixed(5) ?? '?'}, ${report.visitLocation!['lng']?.toStringAsFixed(5) ?? '?'}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: tokens.inkMuted,
+                  ),
+                ),
+              ],
             ],
-            if (report.photoUrls.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              _PhotoThumbnailStrip(photoUrls: report.photoUrls),
-            ],
-            if (report.visitLocation != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                '📍 ${report.visitLocation!['lat']?.toStringAsFixed(5) ?? '?'}, ${report.visitLocation!['lng']?.toStringAsFixed(5) ?? '?'}',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: tokens.inkMuted),
-              ),
-            ],
-          ],
+          ),
         ),
-      ),
       ), // GestureDetector
     );
   }
@@ -721,11 +989,15 @@ class _TrainingBriefingCard extends StatelessWidget {
 void _openFullScreen(BuildContext context, String url) {
   Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (_) => Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white),
-        body: Center(child: InteractiveViewer(child: Image.network(url))),
-      ),
+      builder:
+          (_) => Scaffold(
+            backgroundColor: Colors.black,
+            appBar: AppBar(
+              backgroundColor: Colors.black,
+              foregroundColor: Colors.white,
+            ),
+            body: Center(child: InteractiveViewer(child: Image.network(url))),
+          ),
     ),
   );
 }
@@ -742,18 +1014,19 @@ class _PhotoThumbnailStrip extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         itemCount: photoUrls.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
-        itemBuilder: (_, int i) => GestureDetector(
-          onTap: () => _openFullScreen(context, photoUrls[i]),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            child: Image.network(
-              photoUrls[i],
-              width: 60,
-              height: 60,
-              fit: BoxFit.cover,
+        itemBuilder:
+            (_, int i) => GestureDetector(
+              onTap: () => _openFullScreen(context, photoUrls[i]),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                child: Image.network(
+                  photoUrls[i],
+                  width: 60,
+                  height: 60,
+                  fit: BoxFit.cover,
+                ),
+              ),
             ),
-          ),
-        ),
       ),
     );
   }
@@ -804,8 +1077,10 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
   bool _showPreview = false;
 
   // Guard attendee selection for training reports
-  final List<Map<String, String>> _selectedAttendees = <Map<String, String>>[]; // [{userId, name}]
-  final List<Map<String, String>> _availableGuards = <Map<String, String>>[]; // cached guard list for picker
+  final List<Map<String, String>> _selectedAttendees =
+      <Map<String, String>>[]; // [{userId, name}]
+  final List<Map<String, String>> _availableGuards =
+      <Map<String, String>>[]; // cached guard list for picker
   bool _guardsLoaded = false;
   bool _gpsLoading = false;
 
@@ -818,14 +1093,15 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
   void initState() {
     super.initState();
     _tab = widget.initialTab;
-    _selectedWorkOrder = widget.workOrders.isNotEmpty ? widget.workOrders.first : null;
-    
+    _selectedWorkOrder =
+        widget.workOrders.isNotEmpty ? widget.workOrders.first : null;
+
     _visitSummaryCtrl.addListener(_saveDraft);
     _visitIssuesCtrl.addListener(_saveDraft);
     _visitActionsCtrl.addListener(_saveDraft);
     _visitPresentCtrl.addListener(_saveDraft);
     _visitAbsentCtrl.addListener(_saveDraft);
-    
+
     _trainingTopicCtrl.addListener(_saveDraft);
     _trainingDescCtrl.addListener(_saveDraft);
     _trainingDurationCtrl.addListener(_saveDraft);
@@ -904,7 +1180,10 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
   }
 
   Future<void> _pickDate({required bool isVisit}) async {
-    final initial = isVisit ? (_visitDate ?? DateTime.now()) : (_trainingDate ?? DateTime.now());
+    final initial =
+        isVisit
+            ? (_visitDate ?? DateTime.now())
+            : (_trainingDate ?? DateTime.now());
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -931,7 +1210,9 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         for (final xfile in picked) {
           final bytes = await xfile.readAsBytes();
           final mimeType = xfile.mimeType ?? 'image/jpeg';
-          setState(() => _photos.add(_PhotoEntry(bytes: bytes, mimeType: mimeType)));
+          setState(
+            () => _photos.add(_PhotoEntry(bytes: bytes, mimeType: mimeType)),
+          );
         }
         await _captureLocation();
       }
@@ -942,11 +1223,16 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
 
   Future<void> _takePhoto() async {
     try {
-      final picked = await _picker.pickImage(source: ImageSource.camera, imageQuality: 80);
+      final picked = await _picker.pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
+      );
       if (picked != null && mounted) {
         final bytes = await picked.readAsBytes();
         final mimeType = picked.mimeType ?? 'image/jpeg';
-        setState(() => _photos.add(_PhotoEntry(bytes: bytes, mimeType: mimeType)));
+        setState(
+          () => _photos.add(_PhotoEntry(bytes: bytes, mimeType: mimeType)),
+        );
         await _captureLocation();
       }
     } catch (_) {
@@ -982,7 +1268,11 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
               default:
                 mimeType = 'image/jpeg';
             }
-            setState(() => _photos.add(_PhotoEntry(bytes: file.bytes!, mimeType: mimeType)));
+            setState(
+              () => _photos.add(
+                _PhotoEntry(bytes: file.bytes!, mimeType: mimeType),
+              ),
+            );
           }
         }
         await _captureLocation();
@@ -998,6 +1288,10 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         type: FileType.custom,
         allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
         allowMultiple: false,
+        // Load the bytes into memory — without `withData` the file path is
+        // returned with `bytes == null` on Android and the selection below
+        // silently drops the picked report.
+        withData: true,
       );
       if (result != null && result.files.single.bytes != null && mounted) {
         final file = result.files.single;
@@ -1013,7 +1307,11 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           default:
             mimeType = 'image/jpeg';
         }
-        setState(() => _clientReportPhotos.add(_PhotoEntry(bytes: file.bytes!, mimeType: mimeType)));
+        setState(
+          () => _clientReportPhotos.add(
+            _PhotoEntry(bytes: file.bytes!, mimeType: mimeType),
+          ),
+        );
       }
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not pick report file.');
@@ -1024,10 +1322,15 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     if (_visitLocation != null) return;
     try {
       final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 5)),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 5),
+        ),
       );
       if (mounted) {
-        setState(() => _visitLocation = {'lat': pos.latitude, 'lng': pos.longitude});
+        setState(
+          () => _visitLocation = {'lat': pos.latitude, 'lng': pos.longitude},
+        );
       }
     } catch (_) {}
   }
@@ -1036,7 +1339,10 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     setState(() => _gpsLoading = true);
     try {
       final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high, timeLimit: Duration(seconds: 10)),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 10),
+        ),
       );
       if (mounted) {
         setState(() {
@@ -1048,7 +1354,8 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
       if (mounted) {
         setState(() {
           _gpsLoading = false;
-          _error = 'Failed to get GPS location. Ensure location services are enabled.';
+          _error =
+              'Failed to get GPS location. Ensure location services are enabled.';
         });
       }
     }
@@ -1079,12 +1386,20 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
 
     final now = DateTime.now();
     final dateStr = DateFormat('dd/MM/yyyy, hh:mm a').format(now);
-    final gpsStr = _visitLocation != null
-        ? 'GPS ${_visitLocation!['lat']!.toStringAsFixed(5)}, ${_visitLocation!['lng']!.toStringAsFixed(5)}'
-        : null;
+    final gpsStr =
+        _visitLocation != null
+            ? 'GPS ${_visitLocation!['lat']!.toStringAsFixed(5)}, ${_visitLocation!['lng']!.toStringAsFixed(5)}'
+            : null;
 
     final titleTp = TextPainter(
-      text: TextSpan(text: title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+      text: TextSpan(
+        text: title,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
       textDirection: ui.TextDirection.ltr,
     );
     titleTp.layout(maxWidth: w - 72);
@@ -1103,10 +1418,11 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           style: TextStyle(
             color: Colors.white.withValues(alpha: 0.92),
             fontSize: i == lines.length - 1 ? 10 : 12,
-            fontWeight: i == lines.length - 1 ? FontWeight.w400 : FontWeight.w500,
+            fontWeight:
+                i == lines.length - 1 ? FontWeight.w400 : FontWeight.w500,
           ),
         ),
-      textDirection: ui.TextDirection.ltr,
+        textDirection: ui.TextDirection.ltr,
       );
       tp.layout(maxWidth: w - 72);
       tp.paint(canvas, Offset(36, lineY));
@@ -1115,7 +1431,9 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
 
     final picture = recorder.endRecording();
     final stampedImage = await picture.toImage(image.width, image.height);
-    final byteData = await stampedImage.toByteData(format: ui.ImageByteFormat.png);
+    final byteData = await stampedImage.toByteData(
+      format: ui.ImageByteFormat.png,
+    );
     image.dispose();
     return byteData!.buffer.asUint8List();
   }
@@ -1130,10 +1448,14 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
       }
       setState(() => entry.uploading = true);
       try {
-        final stampedBytes = await _stampPhoto(entry.bytes, folder == 'visitReports' ? 'Site Visit' : 'Training Session');
+        final stampedBytes = await _stampPhoto(
+          entry.bytes,
+          folder == 'visitReports' ? 'Site Visit' : 'Training Session',
+        );
         final ext = 'png';
         final safeName = '${timestamp}_photo_${urls.length}.$ext';
-        final uid = ref.read(firebaseAuthProvider).currentUser?.uid ?? 'unknown';
+        final uid =
+            ref.read(firebaseAuthProvider).currentUser?.uid ?? 'unknown';
         final path = 'foReports/$folder/$uid/$safeName';
         final dataUrl = await ref
             .read(mobileRepositoryProvider)
@@ -1166,18 +1488,34 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     }
 
     // Training reports require at least 1 photo when submitting
-    if (_tab == _Tab.training && _reportStatus == 'submitted' && _photos.isEmpty) {
-      setState(() => _error = 'Training reports require at least 1 training session photo.');
+    if (_tab == _Tab.training &&
+        _reportStatus == 'submitted' &&
+        _photos.isEmpty) {
+      setState(
+        () =>
+            _error =
+                'Training reports require at least 1 training session photo.',
+      );
       return;
     }
     // Training reports require client report when submitting
-    if (_tab == _Tab.training && _reportStatus == 'submitted' && _clientReportPhotos.isEmpty) {
-      setState(() => _error = 'Upload the client-signed training report before submitting.');
+    if (_tab == _Tab.training &&
+        _reportStatus == 'submitted' &&
+        _clientReportPhotos.isEmpty) {
+      setState(
+        () =>
+            _error =
+                'Upload the client-signed training report before submitting.',
+      );
       return;
     }
     // Visit reports require at least 1 photo
     if (_tab == _Tab.visit && _reportStatus == 'submitted' && _photos.isEmpty) {
-      setState(() => _error = 'Visit reports require at least one photo (guard photo or selfie with guards).');
+      setState(
+        () =>
+            _error =
+                'Visit reports require at least one photo (guard photo or selfie with guards).',
+      );
       return;
     }
 
@@ -1204,6 +1542,13 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
             .encodeFileToDataUrl(photo.bytes.toList(), photo.mimeType);
         photoDataUrls.add(dataUrl);
       }
+      final clientReportDataUrls = <String>[];
+      for (final photo in _clientReportPhotos) {
+        final dataUrl = await ref
+            .read(mobileRepositoryProvider)
+            .encodeFileToDataUrl(photo.bytes.toList(), photo.mimeType);
+        clientReportDataUrls.add(dataUrl);
+      }
 
       final common = <String, dynamic>{
         'clientId': selected!.clientId,
@@ -1211,7 +1556,8 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         'siteId': selected.siteId,
         'siteName': selected.siteName,
         'district': selected.district,
-        'fieldOfficerName': ref.read(firebaseAuthProvider).currentUser?.displayName ?? '',
+        'fieldOfficerName':
+            ref.read(firebaseAuthProvider).currentUser?.displayName ?? '',
         'status': _reportStatus,
       };
 
@@ -1227,7 +1573,8 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           'summary': _visitSummaryCtrl.text.trim(),
           'issuesFound': _visitIssuesCtrl.text.trim(),
           'actionsRequired': _visitActionsCtrl.text.trim(),
-          'guardsPresentCount': int.tryParse(_visitPresentCtrl.text.trim()) ?? 0,
+          'guardsPresentCount':
+              int.tryParse(_visitPresentCtrl.text.trim()) ?? 0,
           'guardsAbsentCount': int.tryParse(_visitAbsentCtrl.text.trim()) ?? 0,
         };
       } else {
@@ -1236,12 +1583,15 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         payload = {
           ...common,
           'trainingDate': _apiFmt.format(date!),
-          'durationMinutes': int.tryParse(_trainingDurationCtrl.text.trim()) ?? 60,
+          'durationMinutes':
+              int.tryParse(_trainingDurationCtrl.text.trim()) ?? 60,
           'topic': _trainingTopicCtrl.text.trim(),
           'description': _trainingDescCtrl.text.trim(),
           'attendeeIds': _selectedAttendees.map((g) => g['userId']!).toList(),
           'attendeeNames': _selectedAttendees.map((g) => g['name']!).toList(),
-          'attendeeCount': int.tryParse(_trainingAttendeeCtrl.text.trim()) ?? _selectedAttendees.length,
+          'attendeeCount':
+              int.tryParse(_trainingAttendeeCtrl.text.trim()) ??
+              _selectedAttendees.length,
         };
       }
 
@@ -1255,15 +1605,15 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         String? clientReportUrl;
         if (_tab == _Tab.training && _clientReportPhotos.isNotEmpty) {
           final timestamp = DateTime.now().millisecondsSinceEpoch;
-          for (final entry in _clientReportPhotos) {
+          for (var i = 0; i < _clientReportPhotos.length; i++) {
             try {
+              final entry = _clientReportPhotos[i];
               final ext = entry.mimeType.split('/').last;
               final safeName = '${timestamp}_client_report.$ext';
-              final uid = ref.read(firebaseAuthProvider).currentUser?.uid ?? 'unknown';
+              final uid =
+                  ref.read(firebaseAuthProvider).currentUser?.uid ?? 'unknown';
               final path = 'foReports/trainingReportFiles/$uid/$safeName';
-              final dataUrl = await ref
-                  .read(mobileRepositoryProvider)
-                  .encodeFileToDataUrl(entry.bytes.toList(), entry.mimeType);
+              final dataUrl = clientReportDataUrls[i];
               final result = await ref
                   .read(mobileRepositoryProvider)
                   .uploadReportPhoto(path: path, dataUrl: dataUrl);
@@ -1279,28 +1629,32 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         };
 
         if (_tab == _Tab.visit) {
-          await ref.read(mobileRepositoryProvider).submitVisitReport(finalPayload);
+          await ref
+              .read(mobileRepositoryProvider)
+              .submitVisitReport(finalPayload);
         } else {
-          await ref.read(mobileRepositoryProvider).submitTrainingReport(finalPayload);
+          await ref
+              .read(mobileRepositoryProvider)
+              .submitTrainingReport(finalPayload);
         }
 
         await ref.read(draftServiceProvider).clearDraft(_draftKey);
         widget.onSubmitted();
         if (mounted) Navigator.of(context).pop();
       } catch (uploadOrSubmitError) {
-        if (uploadOrSubmitError is DioException &&
-            (uploadOrSubmitError.type == DioExceptionType.connectionTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.sendTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.receiveTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.connectionError)) {
-          await ref.read(offlineQueueProvider).enqueue(
-            path: path,
-            method: 'POST',
-            body: {
-              ...payload,
-              'photoDataUrls': photoDataUrls,
-            },
-          );
+        if (CissError.isRetryableNetworkError(uploadOrSubmitError)) {
+          await ref
+              .read(offlineQueueProvider)
+              .enqueue(
+                path: path,
+                method: 'POST',
+                body: {
+                  ...payload,
+                  'photoDataUrls': photoDataUrls,
+                  if (clientReportDataUrls.isNotEmpty)
+                    'clientReportDataUrls': clientReportDataUrls,
+                },
+              );
           await ref.read(draftServiceProvider).clearDraft(_draftKey);
           widget.onSubmitted();
           if (mounted) Navigator.of(context).pop();
@@ -1327,153 +1681,240 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
       initialChildSize: 0.9,
       maxChildSize: 0.95,
       minChildSize: 0.5,
-      builder: (_, scrollController) => Container(
-        decoration: BoxDecoration(
-          color: tokens.surface.withValues(alpha: 0.95),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 40, height: 4,
-                      decoration: BoxDecoration(color: tokens.border, borderRadius: BorderRadius.circular(2)),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
+      builder:
+          (_, scrollController) => Container(
+            decoration: BoxDecoration(
+              color: tokens.surface.withValues(alpha: 0.95),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(32),
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: Text(
-                            _showPreview ? 'PREVIEW' : 'NEW BRIEFING',
-                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 1),
+                        Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: tokens.border,
+                            borderRadius: BorderRadius.circular(2),
                           ),
                         ),
-                        if (_showPreview)
-                          IconButton(onPressed: () => setState(() => _showPreview = false), icon: const Icon(Icons.arrow_back_rounded))
-                        else
-                          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close_rounded)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    SegmentedButton<_Tab>(
-                      segments: const <ButtonSegment<_Tab>>[
-                        ButtonSegment<_Tab>(value: _Tab.visit, label: Text('Visit'), icon: Icon(Icons.fact_check_rounded, size: 16)),
-                        ButtonSegment<_Tab>(value: _Tab.training, label: Text('Training'), icon: Icon(Icons.school_rounded, size: 16)),
-                      ],
-                      selected: <_Tab>{_tab},
-                      onSelectionChanged: (Set<_Tab> next) => setState(() => _tab = next.first),
-                      showSelectedIcon: false,
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                ),
-              ),
-
-              Expanded(
-                child: ListView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
-                  children: _showPreview
-                      ? _buildPreviewContent(tokens)
-                      : [
-                    if (widget.workOrders.isNotEmpty) ...[
-                      DropdownButtonFormField<WorkOrderModel>(
-                        value: _selectedWorkOrder,
-                        decoration: const InputDecoration(
-                          labelText: 'Link to Work Order',
-                          prefixIcon: Icon(Icons.assignment_turned_in_rounded),
-                        ),
-                        items: widget.workOrders.map((w) => DropdownMenuItem(
-                          value: w,
-                          child: Text('${w.siteName} · ${w.examName}', overflow: TextOverflow.ellipsis),
-                        )).toList(),
-                        onChanged: (v) => setState(() => _selectedWorkOrder = v),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-                    if (_tab == _Tab.visit) _buildVisitForm() else _buildTrainingForm(),
-                    const SizedBox(height: 24),
-                    _buildPhotoSection(tokens),
-                    const SizedBox(height: 16),
-                    _buildStatusToggle(),
-                  ],
-                ),
-              ),
-
-              // Action Bar
-              Container(
-                padding: EdgeInsets.fromLTRB(24, 16, 24, 16 + MediaQuery.of(context).padding.bottom),
-                decoration: BoxDecoration(color: tokens.surface, border: Border(top: BorderSide(color: tokens.border))),
-                child: Row(
-                  children: [
-                    if (_error != null && !_showPreview)
-                      Expanded(child: Text(_error!, style: theme.textTheme.bodySmall?.copyWith(color: tokens.danger), maxLines: 2))
-                    else
-                      const Spacer(),
-                    const SizedBox(width: 16),
-                    if (_showPreview)
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            height: 48,
-                            child: OutlinedButton(
-                              onPressed: () => setState(() => _showPreview = false),
-                              style: OutlinedButton.styleFrom(minimumSize: const Size(100, 48)),
-                              child: const Text('EDIT'),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _showPreview ? 'PREVIEW' : 'NEW BRIEFING',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1,
+                                ),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
+                            if (_showPreview)
+                              IconButton(
+                                onPressed:
+                                    () => setState(() => _showPreview = false),
+                                icon: const Icon(Icons.arrow_back_rounded),
+                              )
+                            else
+                              IconButton(
+                                onPressed: () => Navigator.pop(context),
+                                icon: const Icon(Icons.close_rounded),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        SegmentedButton<_Tab>(
+                          segments: const <ButtonSegment<_Tab>>[
+                            ButtonSegment<_Tab>(
+                              value: _Tab.visit,
+                              label: Text('Visit'),
+                              icon: Icon(Icons.fact_check_rounded, size: 16),
+                            ),
+                            ButtonSegment<_Tab>(
+                              value: _Tab.training,
+                              label: Text('Training'),
+                              icon: Icon(Icons.school_rounded, size: 16),
+                            ),
+                          ],
+                          selected: <_Tab>{_tab},
+                          onSelectionChanged:
+                              (Set<_Tab> next) =>
+                                  setState(() => _tab = next.first),
+                          showSelectedIcon: false,
+                        ),
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ),
+
+                  Expanded(
+                    child: ListView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 100),
+                      children:
+                          _showPreview
+                              ? _buildPreviewContent(tokens)
+                              : [
+                                if (widget.workOrders.isNotEmpty) ...[
+                                  DropdownButtonFormField<WorkOrderModel>(
+                                    value: _selectedWorkOrder,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Link to Work Order',
+                                      prefixIcon: Icon(
+                                        Icons.assignment_turned_in_rounded,
+                                      ),
+                                    ),
+                                    items:
+                                        widget.workOrders
+                                            .map(
+                                              (w) => DropdownMenuItem(
+                                                value: w,
+                                                child: Text(
+                                                  '${w.siteName} · ${w.examName}',
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            )
+                                            .toList(),
+                                    onChanged:
+                                        (v) => setState(
+                                          () => _selectedWorkOrder = v,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                ],
+                                if (_tab == _Tab.visit)
+                                  _buildVisitForm()
+                                else
+                                  _buildTrainingForm(),
+                                const SizedBox(height: 24),
+                                _buildPhotoSection(tokens),
+                                const SizedBox(height: 16),
+                                _buildStatusToggle(),
+                              ],
+                    ),
+                  ),
+
+                  // Action Bar
+                  Container(
+                    padding: EdgeInsets.fromLTRB(
+                      24,
+                      16,
+                      24,
+                      16 + MediaQuery.of(context).padding.bottom,
+                    ),
+                    decoration: BoxDecoration(
+                      color: tokens.surface,
+                      border: Border(top: BorderSide(color: tokens.border)),
+                    ),
+                    child: Row(
+                      children: [
+                        if (_error != null && !_showPreview)
+                          Expanded(
+                            child: Text(
+                              _error!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: tokens.danger,
+                              ),
+                              maxLines: 2,
+                            ),
+                          )
+                        else
+                          const Spacer(),
+                        const SizedBox(width: 16),
+                        if (_showPreview)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                height: 48,
+                                child: OutlinedButton(
+                                  onPressed:
+                                      () =>
+                                          setState(() => _showPreview = false),
+                                  style: OutlinedButton.styleFrom(
+                                    minimumSize: const Size(100, 48),
+                                  ),
+                                  child: const Text('EDIT'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              SizedBox(
+                                height: 48,
+                                child: FilledButton(
+                                  onPressed: _loading ? null : _confirmSubmit,
+                                  style: FilledButton.styleFrom(
+                                    minimumSize: const Size(140, 48),
+                                  ),
+                                  child:
+                                      _loading
+                                          ? SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: tokens.surface,
+                                            ),
+                                          )
+                                          : const Text('SUBMIT'),
+                                ),
+                              ),
+                            ],
+                          )
+                        else
                           SizedBox(
                             height: 48,
                             child: FilledButton(
-                              onPressed: _loading ? null : _confirmSubmit,
-                              style: FilledButton.styleFrom(minimumSize: const Size(140, 48)),
-                              child: _loading
-                                  ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: tokens.surface))
-                                  : const Text('SUBMIT'),
+                              onPressed: _loading ? null : _submit,
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(140, 48),
+                              ),
+                              child:
+                                  _loading
+                                      ? SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: tokens.surface,
+                                        ),
+                                      )
+                                      : Text(
+                                        _reportStatus == 'draft'
+                                            ? 'SAVE DRAFT'
+                                            : 'SUBMIT REPORT',
+                                      ),
                             ),
                           ),
-                        ],
-                      )
-                    else
-                    SizedBox(
-                      height: 48,
-                      child: FilledButton(
-                        onPressed: _loading ? null : _submit,
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(140, 48),
+                      ],
+                    ),
+                  ),
+                  if (_error != null && _showPreview)
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
+                      child: Text(
+                        _error!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: tokens.danger,
                         ),
-                        child: _loading
-                            ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: tokens.surface,
-                                ),
-                              )
-                            : Text(_reportStatus == 'draft' ? 'SAVE DRAFT' : 'SUBMIT REPORT'),
+                        maxLines: 2,
                       ),
                     ),
-                  ],
-                ),
+                ],
               ),
-              if (_error != null && _showPreview)
-                Padding(
-                  padding: EdgeInsets.fromLTRB(24, 8, 24, 0),
-                  child: Text(_error!, style: theme.textTheme.bodySmall?.copyWith(color: tokens.danger), maxLines: 2),
-                ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
 
@@ -1485,7 +1926,10 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           controller: _visitDateCtrl,
           readOnly: true,
           onTap: () => _pickDate(isVisit: true),
-          decoration: const InputDecoration(labelText: 'Visit Date', prefixIcon: Icon(Icons.calendar_today_rounded)),
+          decoration: const InputDecoration(
+            labelText: 'Visit Date',
+            prefixIcon: Icon(Icons.calendar_today_rounded),
+          ),
         ),
         const SizedBox(height: 16),
         // GPS Location Capture
@@ -1496,65 +1940,109 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: _visitLocation != null
-                  ? tokens.success.withValues(alpha: 0.08)
-                  : tokens.primary.withValues(alpha: 0.06),
+              color:
+                  _visitLocation != null
+                      ? tokens.success.withValues(alpha: 0.08)
+                      : tokens.primary.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: _visitLocation != null
-                    ? tokens.success.withValues(alpha: 0.3)
-                    : tokens.primary.withValues(alpha: 0.2),
+                color:
+                    _visitLocation != null
+                        ? tokens.success.withValues(alpha: 0.3)
+                        : tokens.primary.withValues(alpha: 0.2),
               ),
             ),
-            child: _gpsLoading
-                ? const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                      SizedBox(width: 12),
-                      Text('Getting location...'),
-                    ],
-                  )
-                : Row(
-                    children: [
-                      Icon(
-                        _visitLocation != null ? Icons.location_on_rounded : Icons.gps_fixed_rounded,
-                        size: 20,
-                        color: _visitLocation != null ? tokens.success : tokens.primary,
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        _visitLocation != null
-                            ? '📍 Location Captured (${_visitLocation!['lat']!.toStringAsFixed(5)}, ${_visitLocation!['lng']!.toStringAsFixed(5)})'
-                            : '📡 Tap to Capture GPS Location',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: _visitLocation != null ? tokens.success : tokens.primary,
+            child:
+                _gpsLoading
+                    ? const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
                         ),
-                      ),
-                      const Spacer(),
-                      if (_visitLocation != null)
-                        GestureDetector(
-                          onTap: () { setState(() => _visitLocation = null); },
-                          child: Icon(Icons.close_rounded, size: 18, color: tokens.inkMuted),
+                        SizedBox(width: 12),
+                        Text('Getting location...'),
+                      ],
+                    )
+                    : Row(
+                      children: [
+                        Icon(
+                          _visitLocation != null
+                              ? Icons.location_on_rounded
+                              : Icons.gps_fixed_rounded,
+                          size: 20,
+                          color:
+                              _visitLocation != null
+                                  ? tokens.success
+                                  : tokens.primary,
                         ),
-                    ],
-                  ),
+                        const SizedBox(width: 12),
+                        Text(
+                          _visitLocation != null
+                              ? '📍 Location Captured (${_visitLocation!['lat']!.toStringAsFixed(5)}, ${_visitLocation!['lng']!.toStringAsFixed(5)})'
+                              : '📡 Tap to Capture GPS Location',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color:
+                                _visitLocation != null
+                                    ? tokens.success
+                                    : tokens.primary,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (_visitLocation != null)
+                          GestureDetector(
+                            onTap: () {
+                              setState(() => _visitLocation = null);
+                            },
+                            child: Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: tokens.inkMuted,
+                            ),
+                          ),
+                      ],
+                    ),
           ),
         ),
         const SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: TextField(controller: _visitPresentCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Guards Present'))),
+            Expanded(
+              child: TextField(
+                controller: _visitPresentCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Guards Present'),
+              ),
+            ),
             const SizedBox(width: 16),
-            Expanded(child: TextField(controller: _visitAbsentCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Guards Absent'))),
+            Expanded(
+              child: TextField(
+                controller: _visitAbsentCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Guards Absent'),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
-        TextField(controller: _visitSummaryCtrl, maxLines: 4, decoration: const InputDecoration(labelText: 'Visit Summary', alignLabelWithHint: true)),
+        TextField(
+          controller: _visitSummaryCtrl,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            labelText: 'Visit Summary',
+            alignLabelWithHint: true,
+          ),
+        ),
         const SizedBox(height: 16),
-        TextField(controller: _visitIssuesCtrl, maxLines: 2, decoration: const InputDecoration(labelText: 'Issues Found')),
+        TextField(
+          controller: _visitIssuesCtrl,
+          maxLines: 2,
+          decoration: const InputDecoration(labelText: 'Issues Found'),
+        ),
       ],
     );
   }
@@ -1566,7 +2054,10 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           controller: _trainingDateCtrl,
           readOnly: true,
           onTap: () => _pickDate(isVisit: false),
-          decoration: const InputDecoration(labelText: 'Training Date', prefixIcon: Icon(Icons.calendar_today_rounded)),
+          decoration: const InputDecoration(
+            labelText: 'Training Date',
+            prefixIcon: Icon(Icons.calendar_today_rounded),
+          ),
         ),
         const SizedBox(height: 16),
         TextField(
@@ -1579,16 +2070,31 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         const SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: TextField(controller: _trainingDurationCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Duration (Min)')))
-,
+            Expanded(
+              child: TextField(
+                controller: _trainingDurationCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Duration (Min)'),
+              ),
+            ),
             const SizedBox(width: 16),
-            Expanded(child: TextField(controller: _trainingAttendeeCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Attendee Count'))),
+            Expanded(
+              child: TextField(
+                controller: _trainingAttendeeCtrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Attendee Count'),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
         _buildAttendeePicker(),
         const SizedBox(height: 16),
-        TextField(controller: _trainingDescCtrl, maxLines: 4, decoration: const InputDecoration(labelText: 'Notes/Outcomes')),
+        TextField(
+          controller: _trainingDescCtrl,
+          maxLines: 4,
+          decoration: const InputDecoration(labelText: 'Notes/Outcomes'),
+        ),
       ],
     );
   }
@@ -1603,7 +2109,12 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
             Expanded(
               child: Text(
                 'TRAINING ATTENDEES',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: tokens.inkMuted, letterSpacing: 1),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: tokens.inkMuted,
+                  letterSpacing: 1,
+                ),
               ),
             ),
             TextButton.icon(
@@ -1626,23 +2137,43 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           Wrap(
             spacing: 8,
             runSpacing: 6,
-            children: _selectedAttendees.map((g) => Chip(
-              avatar: CircleAvatar(
-                radius: 12,
-                backgroundColor: tokens.accent.withValues(alpha: 0.15),
-                child: Text(
-                  g['name']!.isNotEmpty ? g['name']![0].toUpperCase() : 'G',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: tokens.accent),
-                ),
-              ),
-              label: Text(g['name']!, style: const TextStyle(fontSize: 12)),
-              deleteIcon: const Icon(Icons.close_rounded, size: 14),
-              onDeleted: () {
-                setState(() => _selectedAttendees.removeWhere((item) => item['userId'] == g['userId']));
-              },
-              visualDensity: VisualDensity.compact,
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            )).toList(),
+            children:
+                _selectedAttendees
+                    .map(
+                      (g) => Chip(
+                        avatar: CircleAvatar(
+                          radius: 12,
+                          backgroundColor: tokens.accent.withValues(
+                            alpha: 0.15,
+                          ),
+                          child: Text(
+                            g['name']!.isNotEmpty
+                                ? g['name']![0].toUpperCase()
+                                : 'G',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: tokens.accent,
+                            ),
+                          ),
+                        ),
+                        label: Text(
+                          g['name']!,
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                        deleteIcon: const Icon(Icons.close_rounded, size: 14),
+                        onDeleted: () {
+                          setState(
+                            () => _selectedAttendees.removeWhere(
+                              (item) => item['userId'] == g['userId'],
+                            ),
+                          );
+                        },
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    )
+                    .toList(),
           ),
       ],
     );
@@ -1661,7 +2192,10 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
           _availableGuards.clear();
           for (final g in guards) {
             if (g['id'] is String && g['name'] is String) {
-              _availableGuards.add({'userId': g['id'] as String, 'name': g['name'] as String});
+              _availableGuards.add({
+                'userId': g['id'] as String,
+                'name': g['name'] as String,
+              });
             }
           }
           _guardsLoaded = true;
@@ -1683,87 +2217,128 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (ctx) {
         final tokens = CissThemeTokens.of(ctx);
         return StatefulBuilder(
-          builder: (_, setModalState) => DraggableScrollableSheet(
-            initialChildSize: 0.6,
-            maxChildSize: 0.9,
-            minChildSize: 0.3,
-            expand: false,
-            builder: (_, scrollCtrl) => Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Text('Select Guard Attendees', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                      const Spacer(),
-                      TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  if (_availableGuards.isEmpty)
-                    Expanded(
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.people_outline_rounded, size: 48, color: tokens.inkMuted),
-                            const SizedBox(height: 12),
-                            Text('No guards found for this site.', style: TextStyle(color: tokens.inkMuted)),
-                            const SizedBox(height: 8),
-                            Text('You can still enter attendee count manually.', style: TextStyle(fontSize: 12, color: tokens.inkMuted)),
-                          ],
-                        ),
-                      ),
-                    )
-                  else
-                    Expanded(
-                      child: ListView(
-                        controller: scrollCtrl,
-                        children: _availableGuards.map((g) {
-                          final isSelected = selected.any((s) => s['userId'] == g['userId']);
-                          return CheckboxListTile(
-                            value: isSelected,
-                            title: Text(g['name']!),
-                            subtitle: Text('Guard', style: TextStyle(fontSize: 12, color: tokens.inkMuted)),
-                            onChanged: (v) {
-                              setModalState(() {
-                                if (v == true && !isSelected) {
-                                  selected.add(g);
-                                } else {
-                                  selected.removeWhere((s) => s['userId'] == g['userId']);
-                                }
-                              });
-                            },
-                            controlAffinity: ListTileControlAffinity.leading,
-                            dense: true,
-                          );
-                        }).toList(),
+          builder:
+              (_, setModalState) => DraggableScrollableSheet(
+                initialChildSize: 0.6,
+                maxChildSize: 0.9,
+                minChildSize: 0.3,
+                expand: false,
+                builder:
+                    (_, scrollCtrl) => Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Text(
+                                'Select Guard Attendees',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const Spacer(),
+                              TextButton(
+                                onPressed: () => Navigator.pop(ctx),
+                                child: const Text('Done'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          if (_availableGuards.isEmpty)
+                            Expanded(
+                              child: Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.people_outline_rounded,
+                                      size: 48,
+                                      color: tokens.inkMuted,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'No guards found for this site.',
+                                      style: TextStyle(color: tokens.inkMuted),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'You can still enter attendee count manually.',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: tokens.inkMuted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          else
+                            Expanded(
+                              child: ListView(
+                                controller: scrollCtrl,
+                                children:
+                                    _availableGuards.map((g) {
+                                      final isSelected = selected.any(
+                                        (s) => s['userId'] == g['userId'],
+                                      );
+                                      return CheckboxListTile(
+                                        value: isSelected,
+                                        title: Text(g['name']!),
+                                        subtitle: Text(
+                                          'Guard',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: tokens.inkMuted,
+                                          ),
+                                        ),
+                                        onChanged: (v) {
+                                          setModalState(() {
+                                            if (v == true && !isSelected) {
+                                              selected.add(g);
+                                            } else {
+                                              selected.removeWhere(
+                                                (s) =>
+                                                    s['userId'] == g['userId'],
+                                              );
+                                            }
+                                          });
+                                        },
+                                        controlAffinity:
+                                            ListTileControlAffinity.leading,
+                                        dense: true,
+                                      );
+                                    }).toList(),
+                              ),
+                            ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: FilledButton(
+                              onPressed: () {
+                                setState(() {
+                                  _selectedAttendees.clear();
+                                  _selectedAttendees.addAll(selected);
+                                });
+                                Navigator.pop(ctx);
+                              },
+                              child: Text(
+                                'Confirm ${selected.length} Attendee(s)',
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: FilledButton(
-                      onPressed: () {
-                        setState(() {
-                          _selectedAttendees.clear();
-                          _selectedAttendees.addAll(selected);
-                        });
-                        Navigator.pop(ctx);
-                      },
-                      child: Text('Confirm ${selected.length} Attendee(s)'),
-                    ),
-                  ),
-                ],
               ),
-            ),
-          ),
         );
       },
     );
@@ -1772,22 +2347,42 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
   Widget _buildPhotoSection(CissThemeTokens tokens) {
     final isVisit = _tab == _Tab.visit;
     final label = isVisit ? 'VISIT PHOTOS / FILES' : 'TRAINING PHOTOS';
-    final hint = isVisit
-        ? 'Take a guard photo (back camera) or selfie with guards (front camera). At least one required for submission. Photos are timestamped with date, time and GPS.'
-        : 'Take training session photos. At least 1 photo required for submission. Photos are timestamped with date, time and GPS.';
+    final hint =
+        isVisit
+            ? 'Take a guard photo (back camera) or selfie with guards (front camera). At least one required for submission. Photos are timestamped with date, time and GPS.'
+            : 'Take training session photos. At least 1 photo required for submission. Photos are timestamped with date, time and GPS.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('$label (${_photos.length})', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: tokens.inkMuted, letterSpacing: 1)),
+        Text(
+          '$label (${_photos.length})',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: tokens.inkMuted,
+            letterSpacing: 1,
+          ),
+        ),
         const SizedBox(height: 6),
         Text(hint, style: TextStyle(fontSize: 11, color: tokens.inkMuted)),
         const SizedBox(height: 12),
         Wrap(
-          spacing: 12, runSpacing: 12,
+          spacing: 12,
+          runSpacing: 12,
           children: [
-            ..._photos.asMap().entries.map((entry) => _PhotoPreview(index: entry.key, photo: entry.value, onRemove: _removePhoto)),
-            _AddPhotoButton(onGallery: _pickPhotos, onCamera: _takePhoto, onFiles: _pickFiles),
+            ..._photos.asMap().entries.map(
+              (entry) => _PhotoPreview(
+                index: entry.key,
+                photo: entry.value,
+                onRemove: _removePhoto,
+              ),
+            ),
+            _AddPhotoButton(
+              onGallery: _pickPhotos,
+              onCamera: _takePhoto,
+              onFiles: _pickFiles,
+            ),
           ],
         ),
         // Show requirement for visit reports with no photos
@@ -1803,12 +2398,20 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.error_outline_rounded, size: 14, color: tokens.danger),
+                Icon(
+                  Icons.error_outline_rounded,
+                  size: 14,
+                  color: tokens.danger,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Visit reports require at least one photo (guard photo or selfie with guards).',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.ink),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: tokens.ink,
+                    ),
                   ),
                 ),
               ],
@@ -1828,12 +2431,20 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.error_outline_rounded, size: 14, color: tokens.danger),
+                Icon(
+                  Icons.error_outline_rounded,
+                  size: 14,
+                  color: tokens.danger,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Training reports require at least 1 photo. You currently have ${_photos.length}.',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tokens.ink),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: tokens.ink,
+                    ),
                   ),
                 ),
               ],
@@ -1842,14 +2453,33 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         ],
         if (!isVisit) ...[
           const SizedBox(height: 24),
-          Text('CLIENT REPORT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: tokens.inkMuted, letterSpacing: 1)),
+          Text(
+            'CLIENT REPORT',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: tokens.inkMuted,
+              letterSpacing: 1,
+            ),
+          ),
           const SizedBox(height: 6),
-          Text('Upload client-signed training report or certificate (PDF/JPG/PNG)', style: TextStyle(fontSize: 11, color: tokens.inkMuted)),
+          Text(
+            'Upload client-signed training report or certificate (PDF/JPG/PNG)',
+            style: TextStyle(fontSize: 11, color: tokens.inkMuted),
+          ),
           const SizedBox(height: 12),
           Wrap(
-            spacing: 12, runSpacing: 12,
+            spacing: 12,
+            runSpacing: 12,
             children: [
-              ..._clientReportPhotos.asMap().entries.map((entry) => _PhotoPreview(index: entry.key, photo: entry.value, onRemove: (i) => setState(() => _clientReportPhotos.removeAt(i)))),
+              ..._clientReportPhotos.asMap().entries.map(
+                (entry) => _PhotoPreview(
+                  index: entry.key,
+                  photo: entry.value,
+                  onRemove:
+                      (i) => setState(() => _clientReportPhotos.removeAt(i)),
+                ),
+              ),
               if (_clientReportPhotos.isEmpty)
                 _AddReportButton(onTap: _pickClientReport),
             ],
@@ -1865,15 +2495,21 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         Expanded(
           child: SegmentedButton<String>(
             segments: const [
-              ButtonSegment(value: 'submitted', label: Text('Submit'), icon: Icon(Icons.send_rounded, size: 16)),
-              ButtonSegment(value: 'draft', label: Text('Save Draft'), icon: Icon(Icons.save_rounded, size: 16)),
+              ButtonSegment(
+                value: 'submitted',
+                label: Text('Submit'),
+                icon: Icon(Icons.send_rounded, size: 16),
+              ),
+              ButtonSegment(
+                value: 'draft',
+                label: Text('Save Draft'),
+                icon: Icon(Icons.save_rounded, size: 16),
+              ),
             ],
             selected: {_reportStatus},
             onSelectionChanged: (v) => setState(() => _reportStatus = v.first),
             showSelectedIcon: false,
-            style: ButtonStyle(
-              visualDensity: VisualDensity.compact,
-            ),
+            style: ButtonStyle(visualDensity: VisualDensity.compact),
           ),
         ),
       ],
@@ -1889,12 +2525,18 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         _buildPreviewRow('Site', _selectedWorkOrder!.siteName),
         const SizedBox(height: 12),
       ],
-      _buildPreviewRow('Date', isVisit
-          ? (_visitDate != null ? _displayFmt.format(_visitDate!) : '')
-          : (_trainingDate != null ? _displayFmt.format(_trainingDate!) : '')),
+      _buildPreviewRow(
+        'Date',
+        isVisit
+            ? (_visitDate != null ? _displayFmt.format(_visitDate!) : '')
+            : (_trainingDate != null ? _displayFmt.format(_trainingDate!) : ''),
+      ),
       const SizedBox(height: 12),
       if (_visitLocation != null) ...[
-        _buildPreviewRow('GPS', '${_visitLocation!['lat']!.toStringAsFixed(5)}, ${_visitLocation!['lng']!.toStringAsFixed(5)}'),
+        _buildPreviewRow(
+          'GPS',
+          '${_visitLocation!['lat']!.toStringAsFixed(5)}, ${_visitLocation!['lng']!.toStringAsFixed(5)}',
+        ),
         const SizedBox(height: 12),
       ],
       if (isVisit) ...[
@@ -1915,7 +2557,10 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         _buildPreviewRow('Attendees', _trainingAttendeeCtrl.text),
         if (_selectedAttendees.isNotEmpty) ...[
           const SizedBox(height: 12),
-          _buildPreviewRow('Attendees Selected', _selectedAttendees.map((g) => g['name']!).join(', ')),
+          _buildPreviewRow(
+            'Attendees Selected',
+            _selectedAttendees.map((g) => g['name']!).join(', '),
+          ),
         ],
         if (_trainingDescCtrl.text.isNotEmpty) ...[
           const SizedBox(height: 12),
@@ -1923,7 +2568,14 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         ],
       ],
       const SizedBox(height: 24),
-      Text('PHOTOS (${_photos.length})', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.inkMuted)),
+      Text(
+        'PHOTOS (${_photos.length})',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+          color: tokens.inkMuted,
+        ),
+      ),
       if (_photos.isNotEmpty) ...[
         const SizedBox(height: 8),
         SizedBox(
@@ -1932,16 +2584,29 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
             scrollDirection: Axis.horizontal,
             itemCount: _photos.length,
             separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (_, i) => ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.memory(_photos[i].bytes, width: 80, height: 80, fit: BoxFit.cover),
-            ),
+            itemBuilder:
+                (_, i) => ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.memory(
+                    _photos[i].bytes,
+                    width: 80,
+                    height: 80,
+                    fit: BoxFit.cover,
+                  ),
+                ),
           ),
         ),
       ],
       if (!isVisit && _clientReportPhotos.isNotEmpty) ...[
         const SizedBox(height: 16),
-        Text('CLIENT REPORT ATTACHED', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: tokens.inkMuted)),
+        Text(
+          'CLIENT REPORT ATTACHED',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: tokens.inkMuted,
+          ),
+        ),
       ],
     ];
   }
@@ -1951,16 +2616,30 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label.toUpperCase(), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: tokens.inkMuted)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: tokens.inkMuted,
+          ),
+        ),
         const SizedBox(height: 2),
-        Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+        ),
       ],
     );
   }
 }
 
 class _PhotoPreview extends StatelessWidget {
-  const _PhotoPreview({required this.index, required this.photo, required this.onRemove});
+  const _PhotoPreview({
+    required this.index,
+    required this.photo,
+    required this.onRemove,
+  });
   final int index;
   final _PhotoEntry photo;
   final Function(int) onRemove;
@@ -1969,25 +2648,53 @@ class _PhotoPreview extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(photo.bytes, width: 80, height: 80, fit: BoxFit.cover)),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.memory(
+            photo.bytes,
+            width: 80,
+            height: 80,
+            fit: BoxFit.cover,
+          ),
+        ),
         Positioned(
-          top: 4, right: 4,
+          top: 4,
+          right: 4,
           child: GestureDetector(
             onTap: () => onRemove(index),
             child: Container(
-              decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
-              child: const Icon(Icons.close_rounded, size: 16, color: Colors.white),
+              decoration: const BoxDecoration(
+                color: Colors.black54,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.close_rounded,
+                size: 16,
+                color: Colors.white,
+              ),
             ),
           ),
         ),
-        if (photo.uploading) const Positioned.fill(child: Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))),
+        if (photo.uploading)
+          const Positioned.fill(
+            child: Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+          ),
       ],
     );
   }
 }
 
 class _AddPhotoButton extends StatelessWidget {
-  const _AddPhotoButton({required this.onGallery, required this.onCamera, this.onFiles});
+  const _AddPhotoButton({
+    required this.onGallery,
+    required this.onCamera,
+    this.onFiles,
+  });
   final VoidCallback onGallery;
   final VoidCallback onCamera;
   final VoidCallback? onFiles;
@@ -1999,8 +2706,13 @@ class _AddPhotoButton extends StatelessWidget {
       onTap: () => _showPicker(context),
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        width: 80, height: 80,
-        decoration: BoxDecoration(color: tokens.surfaceStrong, borderRadius: BorderRadius.circular(8), border: Border.all(color: tokens.border)),
+        width: 80,
+        height: 80,
+        decoration: BoxDecoration(
+          color: tokens.surfaceStrong,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: tokens.border),
+        ),
         child: Icon(Icons.add_a_photo_rounded, color: tokens.inkMuted),
       ),
     );
@@ -2009,16 +2721,38 @@ class _AddPhotoButton extends StatelessWidget {
   void _showPicker(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
-      builder: (_) => SafeArea(
-        child: Wrap(
-          children: [
-            ListTile(leading: const Icon(Icons.camera_alt_rounded), title: const Text('Take Photo'), onTap: () { Navigator.pop(context); onCamera(); }),
-            ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('Gallery'), onTap: () { Navigator.pop(context); onGallery(); }),
-            if (onFiles != null)
-              ListTile(leading: const Icon(Icons.folder_open_rounded), title: const Text('Files (PDF + Images)'), onTap: () { Navigator.pop(context); onFiles!(); }),
-          ],
-        ),
-      ),
+      builder:
+          (_) => SafeArea(
+            child: Wrap(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.camera_alt_rounded),
+                  title: const Text('Take Photo'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    onCamera();
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.photo_library_rounded),
+                  title: const Text('Gallery'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    onGallery();
+                  },
+                ),
+                if (onFiles != null)
+                  ListTile(
+                    leading: const Icon(Icons.folder_open_rounded),
+                    title: const Text('Files (PDF + Images)'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      onFiles!();
+                    },
+                  ),
+              ],
+            ),
+          ),
     );
   }
 }
@@ -2034,10 +2768,30 @@ class _AddReportButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        width: 80, height: 80,
-        decoration: BoxDecoration(color: tokens.surfaceStrong, borderRadius: BorderRadius.circular(8), border: Border.all(color: tokens.accent)),
+        width: 80,
+        height: 80,
+        decoration: BoxDecoration(
+          color: tokens.surfaceStrong,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: tokens.accent),
+        ),
         child: Icon(Icons.description_rounded, color: tokens.accent),
       ),
     );
+  }
+}
+
+String _statusLabel(String status) {
+  switch (status.toLowerCase()) {
+    case 'submitted':
+      return 'Submitted';
+    case 'reviewed':
+      return 'Reviewed';
+    case 'acknowledged':
+      return 'Acknowledged';
+    case 'draft':
+      return 'Draft';
+    default:
+      return status;
   }
 }

@@ -13,6 +13,9 @@ class VisitReportModel {
     required this.status,
     this.photoUrls = const <String>[],
     this.visitLocation,
+    this.reviewStatus,
+    this.reviewNotes,
+    this.auditEvents = const <Map<String, dynamic>>[],
   });
 
   final String id;
@@ -34,6 +37,9 @@ class VisitReportModel {
 
   /// GPS location where the report was filed
   final Map<String, double>? visitLocation;
+  final String? reviewStatus;
+  final String? reviewNotes;
+  final List<Map<String, dynamic>> auditEvents;
 
   factory VisitReportModel.fromJson(Map<String, dynamic> json) {
     Map<String, double>? location;
@@ -59,11 +65,16 @@ class VisitReportModel {
       guardsPresentCount: (json['guardsPresentCount'] as num?)?.toInt() ?? 0,
       guardsAbsentCount: (json['guardsAbsentCount'] as num?)?.toInt() ?? 0,
       status: (json['status'] as String?) ?? 'submitted',
-      photoUrls: (json['photoUrls'] as List<dynamic>?)
-              ?.whereType<String>()
-              .toList() ??
+      photoUrls:
+          (json['photoUrls'] as List<dynamic>?)?.whereType<String>().toList() ??
           const <String>[],
       visitLocation: location,
+      reviewStatus: json['reviewStatus'] as String?,
+      reviewNotes: json['reviewNotes'] as String?,
+      auditEvents: (json['auditEvents'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map((event) => Map<String, dynamic>.from(event))
+          .toList(growable: false),
     );
   }
 
@@ -81,14 +92,14 @@ class VisitReportModel {
     'status': status,
     'photoUrls': photoUrls,
     if (visitLocation != null) 'visitLocation': visitLocation,
+    if (reviewStatus != null) 'reviewStatus': reviewStatus,
+    if (reviewNotes != null) 'reviewNotes': reviewNotes,
+    'auditEvents': auditEvents,
   };
 }
 
 class TrainingAttendee {
-  const TrainingAttendee({
-    required this.userId,
-    required this.name,
-  });
+  const TrainingAttendee({required this.userId, required this.name});
 
   final String userId;
   final String name;
@@ -100,10 +111,7 @@ class TrainingAttendee {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    'userId': userId,
-    'name': name,
-  };
+  Map<String, dynamic> toJson() => {'userId': userId, 'name': name};
 }
 
 class TrainingReportModel {
@@ -125,6 +133,9 @@ class TrainingReportModel {
     this.visitLocation,
     this.attendeeNames = const <String>[],
     this.attendees = const <TrainingAttendee>[],
+    this.reviewStatus,
+    this.reviewNotes,
+    this.auditEvents = const <Map<String, dynamic>>[],
   });
 
   final String id;
@@ -158,6 +169,9 @@ class TrainingReportModel {
 
   /// Detailed attendee list with IDs and names
   final List<TrainingAttendee> attendees;
+  final String? reviewStatus;
+  final String? reviewNotes;
+  final List<Map<String, dynamic>> auditEvents;
 
   factory TrainingReportModel.fromJson(Map<String, dynamic> json) {
     Map<String, double>? location;
@@ -183,25 +197,33 @@ class TrainingReportModel {
       attendeeCount: (json['attendeeCount'] as num?)?.toInt() ?? 0,
       durationMinutes: (json['durationMinutes'] as num?)?.toInt() ?? 0,
       status: (json['status'] as String?) ?? 'submitted',
-      photoUrls: (json['photoUrls'] as List<dynamic>?)
-              ?.whereType<String>()
-              .toList() ??
+      photoUrls:
+          (json['photoUrls'] as List<dynamic>?)?.whereType<String>().toList() ??
           const <String>[],
-      attachmentUrls: (json['attachmentUrls'] as List<dynamic>?)
+      attachmentUrls:
+          (json['attachmentUrls'] as List<dynamic>?)
               ?.whereType<String>()
               .toList() ??
           const <String>[],
       clientReportUrl: json['clientReportUrl'] as String?,
       visitLocation: location,
-      attendeeNames: (json['attendeeNames'] as List<dynamic>?)
+      attendeeNames:
+          (json['attendeeNames'] as List<dynamic>?)
               ?.whereType<String>()
               .toList() ??
           const <String>[],
-      attendees: (json['attendees'] as List<dynamic>?)
+      attendees:
+          (json['attendees'] as List<dynamic>?)
               ?.whereType<Map<String, dynamic>>()
               .map(TrainingAttendee.fromJson)
               .toList() ??
           const <TrainingAttendee>[],
+      reviewStatus: json['reviewStatus'] as String?,
+      reviewNotes: json['reviewNotes'] as String?,
+      auditEvents: (json['auditEvents'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map((event) => Map<String, dynamic>.from(event))
+          .toList(growable: false),
     );
   }
 
@@ -223,6 +245,9 @@ class TrainingReportModel {
     if (visitLocation != null) 'visitLocation': visitLocation,
     'attendeeNames': attendeeNames,
     'attendees': attendees.map((a) => a.toJson()).toList(),
+    if (reviewStatus != null) 'reviewStatus': reviewStatus,
+    if (reviewNotes != null) 'reviewNotes': reviewNotes,
+    'auditEvents': auditEvents,
   };
 }
 
@@ -240,6 +265,11 @@ class WorkOrderModel {
     required this.totalManpowerLabel,
     required this.totalManpower,
     required this.assignedCount,
+    this.maleGuardsRequired = 0,
+    this.femaleGuardsRequired = 0,
+    this.assignedGuards = const <Map<String, dynamic>>[],
+    this.assignmentReviewRequired = false,
+    this.assignmentStatus = '',
   });
 
   final String id;
@@ -254,6 +284,11 @@ class WorkOrderModel {
   final String totalManpowerLabel;
   final int totalManpower;
   final int assignedCount;
+  final int maleGuardsRequired;
+  final int femaleGuardsRequired;
+  final List<Map<String, dynamic>> assignedGuards;
+  final bool assignmentReviewRequired;
+  final String assignmentStatus;
 
   factory WorkOrderModel.fromJson(Map<String, dynamic> json) {
     final male = json['maleGuardsRequired'];
@@ -272,14 +307,79 @@ class WorkOrderModel {
           'Duty',
       examCode: (json['examCode'] as String?) ?? '',
       dateLabel: (json['date'] as String?) ?? '',
-      totalManpowerLabel: total is num
-          ? total.toString()
-          : '${male is num ? male : 0}M \u00b7 ${female is num ? female : 0}F',
-      totalManpower: total is num
-          ? total.toInt()
-          : ((male is num ? male.toInt() : 0) +
-                (female is num ? female.toInt() : 0)),
+      totalManpowerLabel:
+          total is num
+              ? total.toString()
+              : '${male is num ? male : 0}M \u00b7 ${female is num ? female : 0}F',
+      totalManpower:
+          total is num
+              ? total.toInt()
+              : ((male is num ? male.toInt() : 0) +
+                  (female is num ? female.toInt() : 0)),
       assignedCount: (json['assignedCount'] as num?)?.toInt() ?? 0,
+      maleGuardsRequired: (male is num) ? male.toInt() : 0,
+      femaleGuardsRequired: (female is num) ? female.toInt() : 0,
+      assignedGuards: (json['assignedGuards'] as List<dynamic>? ??
+              const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map((guard) => Map<String, dynamic>.from(guard))
+          .toList(growable: false),
+      assignmentReviewRequired: json['assignmentReviewRequired'] == true,
+      assignmentStatus: (json['assignmentStatus'] as String?) ?? '',
+    );
+  }
+}
+
+class WorkOrderRevisionEventModel {
+  const WorkOrderRevisionEventModel({
+    required this.id,
+    required this.workOrderId,
+    required this.siteName,
+    required this.district,
+    required this.date,
+    required this.revisionNumber,
+    required this.changeType,
+    required this.previousMaleGuardsRequired,
+    required this.previousFemaleGuardsRequired,
+    required this.maleGuardsRequired,
+    required this.femaleGuardsRequired,
+    required this.affectedGuardCount,
+    required this.assignmentReviewRequired,
+    required this.acknowledged,
+  });
+
+  final String id;
+  final String workOrderId;
+  final String siteName;
+  final String district;
+  final String date;
+  final int revisionNumber;
+  final String changeType;
+  final int previousMaleGuardsRequired;
+  final int previousFemaleGuardsRequired;
+  final int maleGuardsRequired;
+  final int femaleGuardsRequired;
+  final int affectedGuardCount;
+  final bool assignmentReviewRequired;
+  final bool acknowledged;
+
+  factory WorkOrderRevisionEventModel.fromJson(Map<String, dynamic> json) {
+    int number(String key) => (json[key] as num?)?.toInt() ?? 0;
+    return WorkOrderRevisionEventModel(
+      id: (json['id'] as String?) ?? '',
+      workOrderId: (json['workOrderId'] as String?) ?? '',
+      siteName: (json['siteName'] as String?) ?? '',
+      district: (json['district'] as String?) ?? '',
+      date: (json['date'] as String?) ?? '',
+      revisionNumber: number('revisionNumber'),
+      changeType: (json['changeType'] as String?) ?? '',
+      previousMaleGuardsRequired: number('previousMaleGuardsRequired'),
+      previousFemaleGuardsRequired: number('previousFemaleGuardsRequired'),
+      maleGuardsRequired: number('maleGuardsRequired'),
+      femaleGuardsRequired: number('femaleGuardsRequired'),
+      affectedGuardCount: number('affectedGuardCount'),
+      assignmentReviewRequired: json['assignmentReviewRequired'] == true,
+      acknowledged: json['acknowledged'] == true,
     );
   }
 }

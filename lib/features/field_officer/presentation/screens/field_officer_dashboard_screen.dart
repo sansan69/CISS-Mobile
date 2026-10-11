@@ -6,16 +6,19 @@ import '../../../../../core/haptics.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../shared/widgets/modern_hero.dart';
+import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/metric_card.dart';
 import '../../../../../shared/widgets/modern_card.dart';
 import 'field_officer_live_map_screen.dart';
+import 'field_officer_duties_screen.dart';
+import 'field_officer_guards_screen.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../field_officer_tab_provider.dart';
 
 final FutureProvider<FieldOfficerDashboardSnapshot>
-    fieldOfficerDashboardProvider = FutureProvider<FieldOfficerDashboardSnapshot>((
+fieldOfficerDashboardProvider = FutureProvider<FieldOfficerDashboardSnapshot>((
   Ref ref,
 ) {
   return ref.read(mobileRepositoryProvider).fetchFieldOfficerDashboard();
@@ -29,25 +32,52 @@ class FieldOfficerDashboardScreen extends ConsumerWidget {
     final snapshot = ref.watch(fieldOfficerDashboardProvider);
 
     return snapshot.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
-      error: (Object error, _) => Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: StateBlock(
-              icon: Icons.signal_wifi_statusbar_connected_no_internet_4_rounded,
-              title: 'Could not load field dashboard',
-              message: error.toString().replaceFirst('Exception: ', ''),
-              action: FilledButton.tonal(
-                onPressed: () => ref.invalidate(fieldOfficerDashboardProvider),
-                child: const Text('Try again'),
-              ),
+      loading:
+          () => const Scaffold(
+            body: Column(
+              children: <Widget>[
+                BrandBanner(
+                  title: 'Field Officer',
+                  subtitle: 'Preparing dashboard',
+                ),
+                Expanded(child: Center(child: CircularProgressIndicator())),
+              ],
             ),
           ),
-        ),
-      ),
+      error:
+          (Object error, _) => Scaffold(
+            body: Column(
+              children: <Widget>[
+                const BrandBanner(
+                  title: 'Field Officer',
+                  subtitle: 'Dashboard',
+                ),
+                Expanded(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: StateBlock(
+                        icon:
+                            Icons
+                                .signal_wifi_statusbar_connected_no_internet_4_rounded,
+                        title: 'Could not load field dashboard',
+                        message: error.toString().replaceFirst(
+                          'Exception: ',
+                          '',
+                        ),
+                        action: FilledButton.tonal(
+                          onPressed:
+                              () =>
+                                  ref.invalidate(fieldOfficerDashboardProvider),
+                          child: const Text('Try again'),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
       data: (FieldOfficerDashboardSnapshot data) => _DashboardBody(data: data),
     );
   }
@@ -62,23 +92,24 @@ class _DashboardBody extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = CissThemeTokens.of(context);
 
-    final districts = data.assignedDistricts.isEmpty
-        ? 'No district assigned'
-        : data.assignedDistricts.join(', ');
+    final districts =
+        data.assignedDistricts.isEmpty
+            ? 'No district assigned'
+            : data.assignedDistricts.join(', ');
 
     final hour = DateTime.now().hour;
-    final greeting = hour < 12
-        ? 'Good morning'
-        : hour < 17
+    final greeting =
+        hour < 12
+            ? 'Good morning'
+            : hour < 17
             ? 'Good afternoon'
             : 'Good evening';
 
     final summary = data.attendanceSummary;
     final checkedIn = summary.checkedInToday;
     final onDuty = summary.onDutyNow;
-    final coverage = checkedIn <= 0
-        ? 0.0
-        : (onDuty / checkedIn).clamp(0, 1).toDouble();
+    final coverage =
+        checkedIn <= 0 ? 0.0 : (onDuty / checkedIn).clamp(0, 1).toDouble();
 
     final overview = data.todayOverview;
 
@@ -91,25 +122,31 @@ class _DashboardBody extends ConsumerWidget {
             ref.invalidate(fieldOfficerDashboardProvider);
           },
           child: ListView(
-            padding: const EdgeInsets.only(bottom: AppSpacing.xxl + 80),
+            padding: EdgeInsets.only(
+              bottom: 120 + MediaQuery.paddingOf(context).bottom,
+            ),
             children: <Widget>[
               ModernHero(
                 eyebrow: 'Field Officer',
                 title: greeting,
                 subtitle: districts,
-                avatarText: data.name.isNotEmpty
-                    ? data.name.substring(0, 1).toUpperCase()
-                    : 'FO',
+                avatarText:
+                    data.name.isNotEmpty
+                        ? data.name.substring(0, 1).toUpperCase()
+                        : 'FO',
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     const SyncStatusBadge(),
                     const SizedBox(width: 4),
                     IconButton(
-                      onPressed: () =>
-                          ref.invalidate(fieldOfficerDashboardProvider),
-                      icon: Icon(Icons.refresh_rounded,
-                          color: tokens.surface, size: 20),
+                      onPressed:
+                          () => ref.invalidate(fieldOfficerDashboardProvider),
+                      icon: Icon(
+                        Icons.refresh_rounded,
+                        color: tokens.surface,
+                        size: 20,
+                      ),
                     ),
                   ],
                 ),
@@ -153,10 +190,13 @@ class _DashboardBody extends ConsumerWidget {
               ),
 
               // Today Overview — new webapp-matched section
-              if (overview.sitesScheduled > 0 || overview.dutiesScheduled > 0) ...[
+              if (overview.sitesScheduled > 0 ||
+                  overview.dutiesScheduled > 0) ...[
                 const SizedBox(height: AppSpacing.xl),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -169,7 +209,8 @@ class _DashboardBody extends ConsumerWidget {
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           children: <Widget>[
-                            _overviewMetricRow(tokens,
+                            _overviewMetricRow(
+                              tokens,
                               sitesScheduled: overview.sitesScheduled,
                               dutiesScheduled: overview.dutiesScheduled,
                               requiredGuards: overview.requiredGuards,
@@ -179,10 +220,13 @@ class _DashboardBody extends ConsumerWidget {
                             const SizedBox(height: AppSpacing.md),
                             Divider(height: 1, color: tokens.border),
                             const SizedBox(height: AppSpacing.md),
-                            _overviewStatusRow(tokens,
-                              sitesWithoutAttendance: overview.sitesWithoutAttendance,
+                            _overviewStatusRow(
+                              tokens,
+                              sitesWithoutAttendance:
+                                  overview.sitesWithoutAttendance,
                               visitReportsToday: overview.visitReportsToday,
-                              trainingReportsToday: overview.trainingReportsToday,
+                              trainingReportsToday:
+                                  overview.trainingReportsToday,
                               pendingSiteReports: overview.pendingSiteReports,
                               underAssignedSites: overview.underAssignedSites,
                             ),
@@ -206,7 +250,12 @@ class _DashboardBody extends ConsumerWidget {
                         icon: Icons.assignment_turned_in_rounded,
                         label: 'Orders',
                         color: tokens.primary,
-                        onTap: () => _navigateToDuties(ref, 0),
+                        onTap: () {
+                          ref
+                              .read(fieldOfficerDutiesSubTabProvider.notifier)
+                              .state = 0;
+                          _navigateToDuty(ref, 1);
+                        },
                       ),
                     ),
                     const SizedBox(width: AppSpacing.xs),
@@ -215,7 +264,13 @@ class _DashboardBody extends ConsumerWidget {
                         icon: Icons.groups_2_rounded,
                         label: 'Guards',
                         color: tokens.success,
-                        onTap: () => _navigateToDuties(ref, 1),
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const FieldOfficerGuardsScreen(),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     const SizedBox(width: AppSpacing.xs),
@@ -224,7 +279,12 @@ class _DashboardBody extends ConsumerWidget {
                         icon: Icons.fact_check_rounded,
                         label: 'Attendance',
                         color: tokens.warning,
-                        onTap: () => _navigateToDuties(ref, 2),
+                        onTap: () {
+                          ref
+                              .read(fieldOfficerDutiesSubTabProvider.notifier)
+                              .state = 1;
+                          _navigateToDuty(ref, 1);
+                        },
                       ),
                     ),
                     const SizedBox(width: AppSpacing.xs),
@@ -233,9 +293,7 @@ class _DashboardBody extends ConsumerWidget {
                         icon: Icons.edit_note_rounded,
                         label: 'Reports',
                         color: tokens.accent,
-                        onTap: () => ref
-                            .read(fieldOfficerTabIndexProvider.notifier)
-                            .state = 2,
+                        onTap: () => _navigateToDuty(ref, 2),
                       ),
                     ),
                   ],
@@ -249,7 +307,9 @@ class _DashboardBody extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
                 child: ModernCard(
                   padding: EdgeInsets.zero,
+                  hasGlow: true,
                   onTap: () {
+                    Haptics.medium();
                     Navigator.of(context).push(
                       MaterialPageRoute<void>(
                         builder: (_) => const FieldOfficerLiveMapScreen(),
@@ -261,16 +321,20 @@ class _DashboardBody extends ConsumerWidget {
                     child: Row(
                       children: <Widget>[
                         Container(
-                          width: 44,
-                          height: 44,
+                          width: 48,
+                          height: 48,
                           decoration: BoxDecoration(
-                            color: tokens.primarySoft,
-                            borderRadius: BorderRadius.circular(AppRadius.sm),
+                            color: tokens.glowCyan.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            border: Border.all(
+                              color: tokens.glowCyan.withValues(alpha: 0.35),
+                              width: 1,
+                            ),
                           ),
                           child: Icon(
-                            Icons.map_rounded,
-                            color: tokens.primary,
-                            size: 24,
+                            Icons.radar_rounded,
+                            color: tokens.glowCyan,
+                            size: 26,
                           ),
                         ),
                         const SizedBox(width: AppSpacing.md),
@@ -278,20 +342,57 @@ class _DashboardBody extends ConsumerWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
-                              Text(
-                                'Live Map',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
-                                  color: tokens.ink,
-                                ),
+                              Row(
+                                children: [
+                                  Text(
+                                    'Live Map Radar',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      color: tokens.ink,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 7,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: tokens.glowEmerald.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 5,
+                                          height: 5,
+                                          decoration: BoxDecoration(
+                                            color: tokens.glowEmerald,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          'ACTIVE GPS',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w800,
+                                            color: tokens.glowEmerald,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 2),
+                              const SizedBox(height: 3),
                               Text(
-                                'Realtime positions of guards on duty, '
-                                'battery and network status',
+                                'Realtime guard positions, telemetry, battery & geofence rings',
                                 style: TextStyle(
-                                  fontSize: 12.5,
+                                  fontSize: 12,
                                   color: tokens.inkMuted,
                                 ),
                               ),
@@ -299,8 +400,9 @@ class _DashboardBody extends ConsumerWidget {
                           ),
                         ),
                         Icon(
-                          Icons.chevron_right_rounded,
-                          color: tokens.inkMuted,
+                          Icons.arrow_forward_ios_rounded,
+                          color: tokens.glowCyan,
+                          size: 16,
                         ),
                       ],
                     ),
@@ -313,7 +415,9 @@ class _DashboardBody extends ConsumerWidget {
               // Today's Sites (todaySites)
               if (data.todaySites.isNotEmpty) ...[
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
@@ -326,23 +430,28 @@ class _DashboardBody extends ConsumerWidget {
                           ),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               color: tokens.primarySoft,
-                              borderRadius: BorderRadius.circular(AppRadius.pill),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.pill,
+                              ),
                             ),
                             child: Text(
                               '${data.todaySites.length} sites',
-                              style: AppTypography.label(context).copyWith(
-                                color: tokens.primary,
-                              ),
+                              style: AppTypography.label(
+                                context,
+                              ).copyWith(color: tokens.primary),
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: AppSpacing.md),
                       ...data.todaySites.take(5).map((site) {
-                        final shortage = site.requiredGuards - site.assignedGuards;
+                        final shortage =
+                            site.requiredGuards - site.assignedGuards;
                         final isStaffed = shortage <= 0;
                         final hasAttendance = site.hasAttendance ?? false;
                         return Padding(
@@ -355,24 +464,27 @@ class _DashboardBody extends ConsumerWidget {
                                   width: 36,
                                   height: 36,
                                   decoration: BoxDecoration(
-                                    color: isStaffed
-                                        ? (hasAttendance
-                                            ? tokens.successSoft
-                                            : tokens.warningSoft)
-                                        : tokens.dangerSoft,
+                                    color:
+                                        isStaffed
+                                            ? (hasAttendance
+                                                ? tokens.successSoft
+                                                : tokens.warningSoft)
+                                            : tokens.dangerSoft,
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Icon(
                                     isStaffed
                                         ? (hasAttendance
                                             ? Icons.check_circle_rounded
-                                            : Icons.check_circle_outline_rounded)
+                                            : Icons
+                                                .check_circle_outline_rounded)
                                         : Icons.warning_amber_rounded,
-                                    color: isStaffed
-                                        ? (hasAttendance
-                                            ? tokens.success
-                                            : tokens.warning)
-                                        : tokens.danger,
+                                    color:
+                                        isStaffed
+                                            ? (hasAttendance
+                                                ? tokens.success
+                                                : tokens.warning)
+                                            : tokens.danger,
                                     size: 20,
                                   ),
                                 ),
@@ -412,9 +524,10 @@ class _DashboardBody extends ConsumerWidget {
                                       style: TextStyle(
                                         fontSize: 15,
                                         fontWeight: FontWeight.w800,
-                                        color: isStaffed
-                                            ? tokens.success
-                                            : tokens.danger,
+                                        color:
+                                            isStaffed
+                                                ? tokens.success
+                                                : tokens.danger,
                                       ),
                                     ),
                                     if (!isStaffed)
@@ -442,7 +555,7 @@ class _DashboardBody extends ConsumerWidget {
               _AttendanceCoverage(
                 data: data,
                 coverage: coverage,
-                onViewAll: () => _navigateToDuties(ref, 2),
+                onViewAll: () => _navigateToDuty(ref, 3),
               ),
 
               // Pending Items
@@ -471,39 +584,47 @@ Widget _overviewMetricRow(
   required int assignedGuards,
   required int unassignedGuards,
 }) {
-  return Wrap(
-    spacing: 8,
-    runSpacing: 10,
+  return Row(
     children: <Widget>[
-      _tile(
-        label: 'Sites',
-        value: '$sitesScheduled',
-        icon: Icons.location_city_rounded,
-        color: tokens.primary,
+      Expanded(
+        child: _tile(
+          label: 'Sites',
+          value: '$sitesScheduled',
+          icon: Icons.location_city_rounded,
+          color: tokens.primary,
+        ),
       ),
-      _tile(
-        label: 'Duties',
-        value: '$dutiesScheduled',
-        icon: Icons.work_rounded,
-        color: tokens.accent,
+      Expanded(
+        child: _tile(
+          label: 'Duties',
+          value: '$dutiesScheduled',
+          icon: Icons.work_rounded,
+          color: tokens.accent,
+        ),
       ),
-      _tile(
-        label: 'Required',
-        value: '$requiredGuards',
-        icon: Icons.people_rounded,
-        color: tokens.ink,
+      Expanded(
+        child: _tile(
+          label: 'Required',
+          value: '$requiredGuards',
+          icon: Icons.people_rounded,
+          color: tokens.ink,
+        ),
       ),
-      _tile(
-        label: 'Assigned',
-        value: '$assignedGuards',
-        icon: Icons.person_pin_rounded,
-        color: tokens.success,
+      Expanded(
+        child: _tile(
+          label: 'Assigned',
+          value: '$assignedGuards',
+          icon: Icons.person_pin_rounded,
+          color: tokens.success,
+        ),
       ),
-      _tile(
-        label: 'Unassigned',
-        value: '$unassignedGuards',
-        icon: Icons.person_off_rounded,
-        color: unassignedGuards > 0 ? tokens.danger : tokens.inkMuted,
+      Expanded(
+        child: _tile(
+          label: 'Unassigned',
+          value: '$unassignedGuards',
+          icon: Icons.person_off_rounded,
+          color: unassignedGuards > 0 ? tokens.danger : tokens.inkMuted,
+        ),
       ),
     ],
   );
@@ -515,10 +636,8 @@ Widget _tile({
   required IconData icon,
   required Color color,
 }) {
-  return SizedBox(
-    width: 76,
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
+  return Column(
+    mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         Icon(icon, color: color, size: 18),
         const SizedBox(height: 4),
@@ -613,7 +732,8 @@ Widget _statusLineInner({
   int? warnThreshold,
   String suffix = '',
 }) {
-  final isGood = invert ? value > 0 : (warnThreshold == null || value < warnThreshold);
+  final isGood =
+      invert ? value > 0 : (warnThreshold == null || value < warnThreshold);
   final color = isGood ? tokens.success : tokens.danger;
 
   return Row(
@@ -621,13 +741,7 @@ Widget _statusLineInner({
       Icon(icon, size: 16, color: color),
       const SizedBox(width: 8),
       Expanded(
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            color: tokens.ink,
-          ),
-        ),
+        child: Text(label, style: TextStyle(fontSize: 13, color: tokens.ink)),
       ),
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -667,25 +781,42 @@ class _QuickActionChip extends StatelessWidget {
 
     return Material(
       color: tokens.surface,
-      borderRadius: BorderRadius.circular(AppRadius.md),
+      borderRadius: BorderRadius.circular(AppRadius.card),
       child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        onTap: () {
+          Haptics.light();
+          onTap();
+        },
+        borderRadius: BorderRadius.circular(AppRadius.card),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            border: Border.all(color: tokens.border),
+            borderRadius: BorderRadius.circular(AppRadius.card),
+            border: Border.all(color: tokens.specularBorder, width: 1),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Icon(icon, color: color, size: 24),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: color.withValues(alpha: 0.25),
+                    width: 1,
+                  ),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
               const SizedBox(height: 6),
               Text(
                 label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: FontWeight.w700,
                   color: tokens.ink,
                 ),
@@ -698,9 +829,8 @@ class _QuickActionChip extends StatelessWidget {
   }
 }
 
-void _navigateToDuties(WidgetRef ref, int subIndex) {
-  ref.read(fieldOfficerTabIndexProvider.notifier).state = 1;
-  ref.read(fieldOfficerDutiesSubIndexProvider.notifier).state = subIndex;
+void _navigateToDuty(WidgetRef ref, int tabIndex) {
+  ref.read(fieldOfficerTabIndexProvider.notifier).state = tabIndex;
 }
 
 class _AttendanceCoverage extends StatelessWidget {
@@ -729,22 +859,21 @@ class _AttendanceCoverage extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
-              Text(
-                'Attendance Coverage',
-                style: AppTypography.title(context),
-              ),
+              Text('Attendance Coverage', style: AppTypography.title(context)),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: tokens.primarySoft,
                   borderRadius: BorderRadius.circular(AppRadius.pill),
                 ),
                 child: Text(
                   '${(coverage * 100).toInt()}%',
-                  style: AppTypography.label(context).copyWith(
-                    color: tokens.primary,
-                  ),
+                  style: AppTypography.label(
+                    context,
+                  ).copyWith(color: tokens.primary),
                 ),
               ),
             ],
@@ -767,16 +896,15 @@ class _AttendanceCoverage extends StatelessWidget {
                           const SizedBox(height: 2),
                           Text(
                             summary.date.isEmpty ? 'Today' : summary.date,
-                            style: AppTypography.micro(context).copyWith(
-                              color: tokens.inkMuted,
-                            ),
+                            style: AppTypography.micro(
+                              context,
+                            ).copyWith(color: tokens.inkMuted),
                           ),
                         ],
                       ),
                     ),
                     StatusChip(
-                      label:
-                          data.stateCode.isEmpty ? 'LIVE' : data.stateCode,
+                      label: data.stateCode.isEmpty ? 'LIVE' : data.stateCode,
                       icon: Icons.radar_rounded,
                       tone: StatusChipTone.info,
                     ),
@@ -804,15 +932,17 @@ class _AttendanceCoverage extends StatelessWidget {
                   const SizedBox(height: AppSpacing.md),
                   Divider(height: 1, color: tokens.border),
                   const SizedBox(height: AppSpacing.md),
-                  ...sites.take(3).map(
-                    (s) => _ProgressLine(
-                      label: s.siteName,
-                      sublabel: s.clientName,
-                      checkedIn: s.checkedInToday,
-                      onDuty: s.onDutyNow,
-                      accentColor: tokens.success,
-                    ),
-                  ),
+                  ...sites
+                      .take(3)
+                      .map(
+                        (s) => _ProgressLine(
+                          label: s.siteName,
+                          sublabel: s.clientName,
+                          checkedIn: s.checkedInToday,
+                          onDuty: s.onDutyNow,
+                          accentColor: tokens.success,
+                        ),
+                      ),
                 ],
                 if (sites.length > 3 && onViewAll != null)
                   Padding(
@@ -821,10 +951,9 @@ class _AttendanceCoverage extends StatelessWidget {
                       onPressed: onViewAll,
                       child: Text(
                         'View all ${sites.length} sites',
-                        style: AppTypography.bodyStrong(context).copyWith(
-                          color: tokens.primary,
-                          fontSize: 13,
-                        ),
+                        style: AppTypography.bodyStrong(
+                          context,
+                        ).copyWith(color: tokens.primary, fontSize: 13),
                       ),
                     ),
                   ),
@@ -846,9 +975,10 @@ class _PendingItems extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
 
-    final pendingOrders = data.recentWorkOrders
-        .where((w) => w.assignedCount < w.totalManpower)
-        .length;
+    final pendingOrders =
+        data.recentWorkOrders
+            .where((w) => w.assignedCount < w.totalManpower)
+            .length;
     final pendingVisits =
         data.recentVisitReports.where((r) => r.status == 'draft').length;
 
@@ -868,9 +998,10 @@ class _PendingItems extends StatelessWidget {
                     iconColor: tokens.primary,
                     iconBgColor: tokens.primarySoft,
                     title: 'Work Orders',
-                    subtitle: pendingOrders > 0
-                        ? '$pendingOrders need staffing'
-                        : 'All staffed',
+                    subtitle:
+                        pendingOrders > 0
+                            ? '$pendingOrders need staffing'
+                            : 'All staffed',
                     count: '${data.recentWorkOrders.length}',
                   ),
                 if (data.recentVisitReports.isNotEmpty) ...[
@@ -881,9 +1012,10 @@ class _PendingItems extends StatelessWidget {
                     iconColor: tokens.warning,
                     iconBgColor: tokens.warningSoft,
                     title: 'Visit Reports',
-                    subtitle: pendingVisits > 0
-                        ? '$pendingVisits drafts pending'
-                        : 'All submitted',
+                    subtitle:
+                        pendingVisits > 0
+                            ? '$pendingVisits drafts pending'
+                            : 'All submitted',
                     count: '${data.recentVisitReports.length}',
                   ),
                 ],
@@ -938,19 +1070,18 @@ class _PendingRow extends StatelessWidget {
                 Text(title, style: AppTypography.bodyStrong(context)),
                 Text(
                   subtitle,
-                  style: AppTypography.micro(context).copyWith(
-                    color: tokens.inkMuted,
-                  ),
+                  style: AppTypography.micro(
+                    context,
+                  ).copyWith(color: tokens.inkMuted),
                 ),
               ],
             ),
           ),
           Text(
             count,
-            style: AppTypography.metric(context).copyWith(
-              fontSize: 20,
-              color: tokens.primary,
-            ),
+            style: AppTypography.metric(
+              context,
+            ).copyWith(fontSize: 20, color: tokens.primary),
           ),
         ],
       ),
@@ -999,19 +1130,18 @@ class _ProgressLine extends StatelessWidget {
                     if (sublabel != null)
                       Text(
                         sublabel!,
-                        style: AppTypography.micro(context).copyWith(
-                          color: tokens.inkMuted,
-                        ),
+                        style: AppTypography.micro(
+                          context,
+                        ).copyWith(color: tokens.inkMuted),
                       ),
                   ],
                 ),
               ),
               Text(
                 '$onDuty / $checkedIn',
-                style: AppTypography.bodyStrong(context).copyWith(
-                  color: accentColor,
-                  fontSize: 13,
-                ),
+                style: AppTypography.bodyStrong(
+                  context,
+                ).copyWith(color: accentColor, fontSize: 13),
               ),
             ],
           ),

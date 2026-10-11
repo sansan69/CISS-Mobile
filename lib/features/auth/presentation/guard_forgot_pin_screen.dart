@@ -57,8 +57,9 @@ class GuardForgotPinScreen extends StatelessWidget {
                     padding: const EdgeInsets.all(AppSpacing.lg),
                     decoration: BoxDecoration(
                       color: tokens.surface,
-                      borderRadius: BorderRadius.circular(AppRadius.md),
-                      border: Border.all(color: tokens.border),
+                      borderRadius: BorderRadius.circular(AppRadius.card),
+                      border: Border.all(color: tokens.specularBorder),
+                      boxShadow: AppShadows.card,
                     ),
                     child: Text(
                       'Contact your CISS administrator and provide your '
@@ -71,10 +72,21 @@ class GuardForgotPinScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xl),
-                  SizedBox(
-                    height: 48,
+                  Container(
+                    height: 50,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                      boxShadow: AppShadows.glow(tokens.primary),
+                    ),
                     child: FilledButton.icon(
                       onPressed: () => Navigator.of(context).pop(),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: tokens.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                        ),
+                      ),
                       icon: const Icon(Icons.arrow_back_rounded),
                       label: const Text('Return to guard login'),
                     ),

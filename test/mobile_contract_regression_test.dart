@@ -74,5 +74,147 @@ void main() {
       expect(repository, isNot(contains('/api/public/guard/reset-pin')));
       expect(forgotPin, contains('administrator'));
     });
+
+    test(
+      'guard login does not preflight the enumeration-prone PIN status API',
+      () {
+        final repository =
+            File('lib/core/network/mobile_repository.dart').readAsStringSync();
+        final controller =
+            File(
+              'lib/features/auth/application/auth_controller.dart',
+            ).readAsStringSync();
+        final loginScreen =
+            File(
+              'lib/features/auth/presentation/role_login_screen.dart',
+            ).readAsStringSync();
+
+        expect(repository, isNot(contains('/api/guard/auth/pin-status')));
+        expect(controller, isNot(contains('checkGuardPinStatus')));
+        expect(loginScreen, isNot(contains('checkGuardPinStatus')));
+        expect(loginScreen, contains('Unable to sign in with those details.'));
+        expect(loginScreen, contains('Set up PIN for first-time login'));
+      },
+    );
+
+    test(
+      'public attendance uses the signed backend identification contract',
+      () {
+        final repository =
+            File('lib/core/network/mobile_repository.dart').readAsStringSync();
+        final qrFlow =
+            File(
+              'lib/features/attendance_qr/qr_attendance_flow.dart',
+            ).readAsStringSync();
+        final publicFlow =
+            File(
+              'lib/features/attendance_public/public_attendance_screen.dart',
+            ).readAsStringSync();
+
+        expect(repository, contains('/api/public/attendance/identify'));
+        expect(repository, isNot(contains('/api/public/attendance/employee')));
+        expect(repository, contains('attendanceVerificationToken'));
+        expect(qrFlow, contains('fetchAttendanceEmployeeByQr'));
+        expect(qrFlow, contains('locationCapturedAt'));
+        expect(qrFlow, contains('photoStoragePath'));
+        expect(qrFlow, contains('attendanceAttemptId'));
+        expect(publicFlow, contains('sourceCollection'));
+        expect(publicFlow, contains('locationCapturedAt'));
+        expect(publicFlow, contains('photoStoragePath'));
+        expect(publicFlow, contains('attendanceAttemptId'));
+      },
+    );
+
+    test(
+      'field-officer patrol route is shared with scoped backend authorization',
+      () {
+        final repository =
+            File('lib/core/network/mobile_repository.dart').readAsStringSync();
+        final parentRoute =
+            File(
+              '../CISS/src/app/api/admin/patrol-activities/route.ts',
+            ).readAsStringSync();
+
+        expect(repository, contains("'/api/admin/patrol-activities'"));
+        expect(parentRoute, contains('requireActiveFieldOfficerProfile'));
+        expect(parentRoute, contains('districtMatches'));
+        expect(parentRoute, contains('getAssignedDistricts'));
+        expect(parentRoute, isNot(contains('requireAdmin(request)')));
+      },
+    );
+
+    test(
+      'guard attendance range uses the single aggregated endpoint',
+      () {
+        final repository =
+            File('lib/core/network/mobile_repository.dart').readAsStringSync();
+        expect(
+          repository,
+          contains("/api/field-officer/guard-attendance/range"),
+        );
+        expect(repository, isNot(contains('days.length < 62')));
+        expect(repository, isNot(contains('offset += 6')));
+      },
+    );
+  });
+
+  group('Guard document upload contract', () {
+    final repository =
+        File('lib/core/network/mobile_repository.dart').readAsStringSync();
+
+    test('uses the documented document upload endpoint', () {
+      expect(repository, contains("/api/guard/profile/documents"));
+      expect(
+        repository,
+        isNot(contains('/api/guard/profile/documents/upload/')),
+      );
+    });
+
+    test('submits Aadhaar consent version and fields before upload', () {
+      expect(repository, contains("consentAccepted"));
+      expect(repository, contains("consentVersion"));
+      expect(repository, contains("aadhaarNumber"));
+      expect(repository, contains("aadhaar-esic-epf-v1"));
+      expect(repository, contains("category"));
+    });
+
+    test('aadhaar correction uses the supported endpoint with a reason', () {
+      expect(repository, contains("/api/guard/profile/aadhaar-correction"));
+      expect(repository, contains("{'reason': reason}"));
+    });
+  });
+
+  group('Guard training leaderboard contract', () {
+    test('uses the supported guard leaderboard endpoint', () {
+      final repository =
+          File('lib/core/network/mobile_repository.dart').readAsStringSync();
+      expect(repository, contains("'/api/guard/leaderboard'"));
+    });
+
+    test('guard surfaces link to the leaderboard screen', () {
+      for (final path in <String>[
+        'lib/features/guard/presentation/screens/guard_training_screen.dart',
+        'lib/features/guard/presentation/screens/guard_evaluations_screen.dart',
+        'lib/features/guard/presentation/screens/guard_dashboard_screen.dart',
+      ]) {
+        expect(
+          File(path).readAsStringSync(),
+          contains('GuardTrainingLeaderboardScreen'),
+        );
+      }
+    });
+  });
+
+  group('Guard upload UI wiring', () {
+    final profileScreen =
+        File(
+          'lib/features/guard/presentation/screens/guard_profile_screen.dart',
+        ).readAsStringSync();
+
+    test('profile exposes upload + correction entries', () {
+      expect(profileScreen, contains('GuardDocumentUploadScreen'));
+      expect(profileScreen, contains('GuardAadhaarCorrectionScreen'));
+      expect(profileScreen, contains("profile.anyMissingDocuments"));
+    });
   });
 }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/theme/app_tokens.dart';
 
-/// Uppercase section label with an optional trailing action.
+/// Section label with an optional trailing action.
 class SectionHeader extends StatelessWidget {
   const SectionHeader({
     super.key,
@@ -26,22 +26,22 @@ class SectionHeader extends StatelessWidget {
       child: Row(
         children: <Widget>[
           Text(
-            label.toUpperCase(),
+            label,
             style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
               color: tokens.inkMuted,
-              letterSpacing: 2,
+              letterSpacing: 0.2,
             ),
           ),
           const Spacer(),
           if (actionLabel != null)
-            GestureDetector(
-              onTap: onActionTap,
+            TextButton(
+              onPressed: onActionTap,
               child: Text(
                 actionLabel!,
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                   color: tokens.primary,
                 ),

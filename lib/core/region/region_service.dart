@@ -107,14 +107,31 @@ class RegionFirebaseConfig {
       measurementId: measurementId,
     );
   }
+
+  bool get isComplete =>
+      apiKey.trim().isNotEmpty &&
+      appId.trim().isNotEmpty &&
+      projectId.trim().isNotEmpty &&
+      messagingSenderId.trim().isNotEmpty &&
+      storageBucket.trim().isNotEmpty;
 }
 
-class RegionService {
+abstract interface class RegionActivationService {
+  Future<void> activateRegion(RegionInfo region);
+}
+
+abstract interface class RegionConfigurationService {
+  Future<RegionInfo?> fetchRegionConfig(String regionCode);
+}
+
+class RegionService
+    implements RegionActivationService, RegionConfigurationService {
   static const String _savedRegionKey = 'ciss_selected_region';
   static const String _savedRegionConfigKey = 'ciss_selected_region_config';
   static const String _baseUrl = 'https://cisskerala.site';
 
   final FlutterSecureStorage _secureStorage;
+  String? _selectedRegionCode;
   String? _activeRegionCode;
   RegionInfo? _activeRegion;
 
@@ -125,17 +142,18 @@ class RegionService {
   Future<List<RegionInfo>> fetchAvailableRegions() async {
     try {
       final uri = Uri.parse('$_baseUrl/api/public/regions');
-      final response = await http.get(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-      );
+      final response = await http
+          .get(uri, headers: {'Content-Type': 'application/json'})
+          .timeout(const Duration(seconds: 8));
       if (response.statusCode != 200) {
         debugPrint(
           'RegionService: failed to fetch regions (HTTP ${response.statusCode})',
         );
         return [await _keralaFallback()];
       }
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) return [await _keralaFallback()];
+      final data = Map<String, dynamic>.from(decoded);
       final list = (data['regions'] as List<dynamic>?) ?? <dynamic>[];
       final regions =
           list
@@ -156,19 +174,16 @@ class RegionService {
     String regionCode, {
     RegionInfo? region,
   }) async {
-    try {
-      await _secureStorage.write(key: _savedRegionKey, value: regionCode);
-      if (region != null) {
-        await _secureStorage.write(
-          key: _savedRegionConfigKey,
-          value: jsonEncode(region.toJson()),
-        );
-        _activeRegion = region;
-      }
-      _activeRegionCode = regionCode;
-    } catch (e) {
-      debugPrint('RegionService: saveRegionPreference error: $e');
+    await _secureStorage.write(key: _savedRegionKey, value: regionCode);
+    if (region != null) {
+      await _secureStorage.write(
+        key: _savedRegionConfigKey,
+        value: jsonEncode(region.toJson()),
+      );
     }
+    _selectedRegionCode = regionCode;
+    _activeRegionCode = regionCode;
+    _activeRegion = region;
   }
 
   /// Read the previously saved region preference.
@@ -176,13 +191,10 @@ class RegionService {
     try {
       final saved = await _secureStorage.read(key: _savedRegionKey);
       if (saved != null && saved.isNotEmpty) {
-        _activeRegionCode = saved;
-        final rawConfig = await _secureStorage.read(key: _savedRegionConfigKey);
-        if (rawConfig != null && rawConfig.isNotEmpty) {
-          _activeRegion = RegionInfo.fromJson(
-            jsonDecode(rawConfig) as Map<String, dynamic>,
-          );
-        }
+        // A persisted selection is not activation. In particular, never use
+        // its cached configuration to route a non-Kerala login to default
+        // Firebase before config/init succeeds again.
+        _selectedRegionCode = saved;
         return saved;
       }
     } catch (_) {}
@@ -191,29 +203,30 @@ class RegionService {
 
   /// Clear the saved region preference (e.g. on logout or region change).
   Future<void> clearRegionPreference() async {
-    try {
-      await _secureStorage.delete(key: _savedRegionKey);
-      await _secureStorage.delete(key: _savedRegionConfigKey);
-      _activeRegionCode = null;
-      _activeRegion = null;
-    } catch (_) {}
+    await _secureStorage.delete(key: _savedRegionKey);
+    await _secureStorage.delete(key: _savedRegionConfigKey);
+    _selectedRegionCode = null;
+    _activeRegionCode = null;
+    _activeRegion = null;
   }
 
   /// Get the full region config including Firebase options from HQ.
+  @override
   Future<RegionInfo?> fetchRegionConfig(String regionCode) async {
     try {
       final uri = Uri.parse('$_baseUrl/api/public/region-config/$regionCode');
-      final response = await http.get(
-        uri,
-        headers: {'Content-Type': 'application/json'},
-      );
+      final response = await http
+          .get(uri, headers: {'Content-Type': 'application/json'})
+          .timeout(const Duration(seconds: 8));
       if (response.statusCode != 200) {
         debugPrint(
           'RegionService: config fetch failed (HTTP ${response.statusCode})',
         );
         return null;
       }
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) return null;
+      final data = Map<String, dynamic>.from(decoded);
       return RegionInfo.fromJson(data);
     } catch (e) {
       debugPrint('RegionService: fetchRegionConfig error: $e');
@@ -221,8 +234,9 @@ class RegionService {
     }
   }
 
-  /// Initialize a secondary Firebase app for the given region.
-  /// Returns the named Firebase app, or null if it already exists.
+  /// Initialize a secondary Firebase app for the given region. This does not
+  /// activate it: activation happens only after preference persistence also
+  /// succeeds, making config/init/persistence one all-or-nothing operation.
   Future<FirebaseApp?> initRegionalFirebase(RegionInfo region) async {
     final appName = 'region_${region.code}';
     try {
@@ -235,16 +249,31 @@ class RegionService {
         // Not initialized — proceed
       }
 
-      // Use Android config if available, otherwise fall back to web config
+      // Use the config for the current platform. Using Android options on iOS
+      // creates a valid-looking Firebase app that cannot authenticate or
+      // connect to the intended regional project.
+      final platformConfig =
+          kIsWeb
+              ? region.webConfig
+              : defaultTargetPlatform == TargetPlatform.android
+              ? region.androidConfig
+              : region.webConfig ?? region.androidConfig;
+      if (region.code != 'KL' &&
+          (platformConfig == null || !platformConfig.isComplete)) {
+        throw StateError(
+          'Regional Firebase configuration is incomplete for ${region.code}.',
+        );
+      }
       final options =
-          region.androidConfig?.toFirebaseOptions() ??
-          region.webConfig?.toFirebaseOptions() ??
-          DefaultFirebaseOptions.currentPlatform;
+          platformConfig?.toFirebaseOptions() ??
+          (region.code == 'KL' ? DefaultFirebaseOptions.currentPlatform : null);
+      if (options == null) {
+        throw StateError(
+          'Firebase configuration is unavailable for ${region.code}.',
+        );
+      }
 
       final app = await Firebase.initializeApp(name: appName, options: options);
-
-      _activeRegionCode = region.code;
-      _activeRegion = region;
       debugPrint(
         'RegionService: Initialized Firebase app "$appName" for ${region.name}',
       );
@@ -253,6 +282,31 @@ class RegionService {
       debugPrint('RegionService: initRegionalFirebase error: $e');
       return null;
     }
+  }
+
+  @override
+  Future<void> activateRegion(RegionInfo region) async {
+    final code = region.code.trim();
+    if (code.isEmpty || region.apiUrl.trim().isEmpty) {
+      throw StateError('Region configuration is incomplete.');
+    }
+    if (code != 'KL') {
+      final platformConfig =
+          kIsWeb
+              ? region.webConfig
+              : defaultTargetPlatform == TargetPlatform.android
+              ? region.androidConfig
+              : region.webConfig ?? region.androidConfig;
+      if (platformConfig == null || !platformConfig.isComplete) {
+        throw StateError('Region Firebase configuration is incomplete.');
+      }
+    }
+
+    final app = await initRegionalFirebase(region);
+    if (app == null) {
+      throw StateError('Region Firebase could not be initialized.');
+    }
+    await saveRegionPreference(code, region: region);
   }
 
   /// Get the regional Firebase Auth instance.
@@ -265,10 +319,13 @@ class RegionService {
   }
 
   FirebaseAuth get activeAuth {
-    final code = _activeRegionCode;
+    final code = _selectedRegionCode ?? _activeRegionCode;
     if (code != null && code != 'KL') {
       final regional = getRegionalAuth(code);
       if (regional != null) return regional;
+      throw StateError(
+        'Selected regional Firebase authentication is inactive.',
+      );
     }
     return FirebaseAuth.instance;
   }
@@ -285,10 +342,11 @@ class RegionService {
   }
 
   FirebaseFirestore get activeFirestore {
-    final code = _activeRegionCode;
+    final code = _selectedRegionCode ?? _activeRegionCode;
     if (code != null && code != 'KL') {
       final regional = getRegionalFirestore(code);
       if (regional != null) return regional;
+      throw StateError('Selected regional Firestore is inactive.');
     }
     return FirebaseFirestore.instance;
   }
@@ -305,26 +363,43 @@ class RegionService {
   }
 
   FirebaseStorage get activeStorage {
-    final code = _activeRegionCode;
+    final code = _selectedRegionCode ?? _activeRegionCode;
     if (code != null && code != 'KL') {
       final regional = getRegionalStorage(code);
       if (regional != null) return regional;
+      throw StateError('Selected regional Firebase Storage is inactive.');
     }
     return FirebaseStorage.instance;
   }
 
-  String get activeApiUrl =>
-      _activeRegion?.apiUrl.isNotEmpty == true
-          ? _activeRegion!.apiUrl
-          : _baseUrl;
+  String get activeApiUrl {
+    if (_selectedRegionCode != null && _selectedRegionCode != 'KL') {
+      final active = _activeRegion;
+      if (active == null || active.apiUrl.trim().isEmpty) {
+        throw StateError('Selected regional API is inactive.');
+      }
+      return active.apiUrl;
+    }
+    return _activeRegion?.apiUrl.isNotEmpty == true
+        ? _activeRegion!.apiUrl
+        : _baseUrl;
+  }
 
   RegionInfo? get activeRegion => _activeRegion;
+
+  bool get hasActiveSelectedRegion =>
+      _selectedRegionCode == null ||
+      _selectedRegionCode == 'KL' ||
+      (_activeRegionCode == _selectedRegionCode && _activeRegion != null);
 
   /// Get the regional API base URL.
   Future<String> getRegionalApiUrl(String regionCode) async {
     if (regionCode == 'KL') return _baseUrl;
     final config = await fetchRegionConfig(regionCode);
-    return config?.apiUrl ?? _baseUrl;
+    if (config == null || config.apiUrl.trim().isEmpty) {
+      throw StateError('Regional API configuration is unavailable.');
+    }
+    return config.apiUrl;
   }
 
   /// Fallback: return Kerala as the default region.
@@ -350,6 +425,22 @@ final regionServiceProvider = Provider<RegionService>((ref) {
   return RegionService.instance;
 });
 
+final regionActivationServiceProvider = Provider<RegionActivationService>((
+  ref,
+) {
+  return ref.read(regionServiceProvider);
+});
+
+final regionConfigurationServiceProvider = Provider<RegionConfigurationService>(
+  (ref) {
+    return ref.read(regionServiceProvider);
+  },
+);
+
+/// Bumps whenever the selected region changes so region-bound Firebase, API,
+/// and session providers rebuild from the newly active regional app.
+final regionGraphRevisionProvider = StateProvider<int>((ref) => 0);
+
 final availableRegionsProvider = FutureProvider<List<RegionInfo>>((ref) async {
   return ref.read(regionServiceProvider).fetchAvailableRegions();
 });
@@ -358,9 +449,7 @@ final savedRegionProvider = FutureProvider<String?>((ref) async {
   return ref.read(regionServiceProvider).getSavedRegion();
 });
 
-final regionConfigProvider = FutureProvider.autoDispose.family<RegionInfo?, String>((
-  ref,
-  regionCode,
-) async {
-  return ref.read(regionServiceProvider).fetchRegionConfig(regionCode);
-});
+final regionConfigProvider = FutureProvider.autoDispose
+    .family<RegionInfo?, String>((ref, regionCode) async {
+      return ref.read(regionServiceProvider).fetchRegionConfig(regionCode);
+    });

@@ -90,9 +90,11 @@ class FieldOfficerTodayOverview {
       requiredGuards: (data['requiredGuards'] as num?)?.toInt() ?? 0,
       assignedGuards: (data['assignedGuards'] as num?)?.toInt() ?? 0,
       unassignedGuards: (data['unassignedGuards'] as num?)?.toInt() ?? 0,
-      sitesWithoutAttendance: (data['sitesWithoutAttendance'] as num?)?.toInt() ?? 0,
+      sitesWithoutAttendance:
+          (data['sitesWithoutAttendance'] as num?)?.toInt() ?? 0,
       visitReportsToday: (data['visitReportsToday'] as num?)?.toInt() ?? 0,
-      trainingReportsToday: (data['trainingReportsToday'] as num?)?.toInt() ?? 0,
+      trainingReportsToday:
+          (data['trainingReportsToday'] as num?)?.toInt() ?? 0,
       pendingSiteReports: (data['pendingSiteReports'] as num?)?.toInt() ?? 0,
       underAssignedSites: (data['underAssignedSites'] as num?)?.toInt() ?? 0,
     );
@@ -131,7 +133,8 @@ class FieldOfficerTodaySiteBrief {
       requiredGuards: (json['requiredGuards'] as num?)?.toInt() ?? 0,
       assignedGuards: (json['assignedGuards'] as num?)?.toInt() ?? 0,
       shiftLabel: (json['shiftLabel'] as String?) ?? '',
-      dateLabel: (json['date'] as String?) ?? (json['dateLabel'] as String?) ?? '',
+      dateLabel:
+          (json['date'] as String?) ?? (json['dateLabel'] as String?) ?? '',
       hasAttendance: json['hasAttendance'] as bool?,
     );
   }
@@ -190,10 +193,11 @@ class FieldOfficerAttendanceSummary {
       date: (data['date'] as String?) ?? '',
       checkedInToday: (data['checkedInToday'] as num?)?.toInt() ?? 0,
       onDutyNow: (data['onDutyNow'] as num?)?.toInt() ?? 0,
-      districts: (data['districts'] as List<dynamic>? ?? const <dynamic>[])
-          .whereType<Map<String, dynamic>>()
-          .map(FieldOfficerDistrictAttendance.fromJson)
-          .toList(),
+      districts:
+          (data['districts'] as List<dynamic>? ?? const <dynamic>[])
+              .whereType<Map<String, dynamic>>()
+              .map(FieldOfficerDistrictAttendance.fromJson)
+              .toList(),
     );
   }
 }
@@ -254,6 +258,8 @@ class FieldOfficerSiteOption {
     required this.district,
     required this.clientName,
     required this.clientId,
+    this.latitude,
+    this.longitude,
   });
 
   final String id;
@@ -261,14 +267,18 @@ class FieldOfficerSiteOption {
   final String district;
   final String clientName;
   final String clientId;
+  final double? latitude;
+  final double? longitude;
 
   factory FieldOfficerSiteOption.fromJson(Map<String, dynamic> json) {
     return FieldOfficerSiteOption(
-      id: (json['id'] as String?) ?? '',
+      id: (json['id'] as String?) ?? (json['siteId'] as String?) ?? '',
       siteName: (json['siteName'] as String?) ?? '',
       district: (json['district'] as String?) ?? '',
       clientName: (json['clientName'] as String?) ?? '',
       clientId: (json['clientId'] as String?) ?? '',
+      latitude: _coordinate(json['latitude'] ?? json['lat']),
+      longitude: _coordinate(json['longitude'] ?? json['lng']),
     );
   }
 }
@@ -289,6 +299,15 @@ class FieldOfficerAttendanceEntry {
     required this.shiftLabel,
     required this.status,
     this.photoUrl,
+    this.locationCoords,
+    this.distanceMeters,
+    this.gpsAccuracyMeters,
+    this.geofenceRadiusAtTime,
+    this.isMockLocationSuspected = false,
+    this.mockLocationReason,
+    this.photoCompliance,
+    this.reviewStatus,
+    this.requiresAdminReview = false,
   });
 
   final String id;
@@ -305,6 +324,26 @@ class FieldOfficerAttendanceEntry {
   final String shiftLabel;
   final String status;
   final String? photoUrl;
+  final Map<String, dynamic>? locationCoords;
+  final num? distanceMeters;
+  final num? gpsAccuracyMeters;
+  final num? geofenceRadiusAtTime;
+  final bool isMockLocationSuspected;
+  final String? mockLocationReason;
+  final Map<String, dynamic>? photoCompliance;
+  final String? reviewStatus;
+  final bool requiresAdminReview;
+
+  /// Coordinates captured at check-in. Attendance logs use `lon`, while
+  /// older records may use `lng` or `longitude`.
+  double? get attendanceLatitude =>
+      _coordinate(locationCoords?['lat'] ?? locationCoords?['latitude']);
+
+  double? get attendanceLongitude => _coordinate(
+    locationCoords?['lon'] ??
+        locationCoords?['lng'] ??
+        locationCoords?['longitude'],
+  );
 
   factory FieldOfficerAttendanceEntry.fromJson(Map<String, dynamic> json) {
     return FieldOfficerAttendanceEntry(
@@ -322,6 +361,27 @@ class FieldOfficerAttendanceEntry {
       shiftLabel: (json['shiftLabel'] as String?) ?? '',
       status: (json['status'] as String?) ?? '',
       photoUrl: json['photoUrl'] as String?,
+      locationCoords:
+          json['locationCoords'] is Map
+              ? Map<String, dynamic>.from(json['locationCoords'] as Map)
+              : null,
+      distanceMeters: json['distanceMeters'] as num?,
+      gpsAccuracyMeters: json['gpsAccuracyMeters'] as num?,
+      geofenceRadiusAtTime: json['geofenceRadiusAtTime'] as num?,
+      isMockLocationSuspected: json['isMockLocationSuspected'] == true,
+      mockLocationReason: json['mockLocationReason'] as String?,
+      photoCompliance:
+          json['photoCompliance'] is Map
+              ? Map<String, dynamic>.from(json['photoCompliance'] as Map)
+              : null,
+      reviewStatus: json['reviewStatus'] as String?,
+      requiresAdminReview: json['requiresAdminReview'] == true,
     );
   }
+}
+
+double? _coordinate(Object? value) {
+  if (value is num && value.isFinite) return value.toDouble();
+  final parsed = double.tryParse(value?.toString() ?? '');
+  return parsed != null && parsed.isFinite ? parsed : null;
 }

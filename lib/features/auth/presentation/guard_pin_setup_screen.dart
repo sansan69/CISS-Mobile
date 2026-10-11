@@ -56,12 +56,36 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
   }
 
   Future<void> _submit() async {
+    final String employeeId = _employeeIdController.text.trim();
+    final String phoneNumber = _phoneController.text.trim();
+    final String normalizedPhoneNumber = phoneNumber.replaceAll(
+      RegExp(r'\D+'),
+      '',
+    );
+    final String dateOfBirth =
+        _selectedDob != null
+            ? DateFormat('yyyy-MM-dd').format(_selectedDob!)
+            : _dobController.text.trim();
     final String pin = _pinController.text.trim();
     final String confirmPin = _confirmPinController.text.trim();
-    if (pin != confirmPin) {
-      setState(() {
-        _error = 'PIN confirmation does not match.';
-      });
+
+    String? validationError;
+    if (phoneNumber.isEmpty) {
+      validationError = 'Enter the registered phone number.';
+    } else if (!RegExp(r'^[0-9\s()+-]+$').hasMatch(phoneNumber)) {
+      validationError = 'Phone number contains unsupported characters.';
+    } else if (!RegExp(r'^\d{8,15}$').hasMatch(normalizedPhoneNumber)) {
+      validationError = 'Enter a valid registered phone number.';
+    } else if (dateOfBirth.isEmpty) {
+      validationError = 'Select your date of birth.';
+    } else if (!RegExp(r'^\d{4,6}$').hasMatch(pin)) {
+      validationError = 'Enter a 4 to 6 digit PIN.';
+    } else if (pin != confirmPin) {
+      validationError = 'PIN confirmation does not match.';
+    }
+
+    if (validationError != null) {
+      setState(() => _error = validationError);
       return;
     }
 
@@ -71,12 +95,12 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
     });
 
     try {
-      await ref.read(authControllerProvider).setupGuardPin(
-            employeeId: _employeeIdController.text.trim(),
-            phoneNumber: _phoneController.text.trim(),
-            dateOfBirth: _selectedDob != null
-                ? DateFormat('yyyy-MM-dd').format(_selectedDob!)
-                : _dobController.text.trim(),
+      await ref
+          .read(authControllerProvider)
+          .setupGuardPin(
+            employeeId: employeeId,
+            phoneNumber: normalizedPhoneNumber,
+            dateOfBirth: dateOfBirth,
             pin: pin,
           );
       if (!mounted) return;
@@ -109,7 +133,8 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
           children: <Widget>[
-            const BrandBanner(showBackButton: true,
+            const BrandBanner(
+              showBackButton: true,
               title: 'First-time guard PIN setup',
               subtitle:
                   'Create your duty PIN so this device can sign in with your guard account.',
@@ -124,8 +149,8 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
               padding: const EdgeInsets.all(AppSpacing.xl),
               decoration: BoxDecoration(
                 color: tokens.surface,
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                border: Border.all(color: tokens.border),
+                borderRadius: BorderRadius.circular(AppRadius.card),
+                border: Border.all(color: tokens.specularBorder),
                 boxShadow: AppShadows.card,
               ),
               child: Column(
@@ -133,9 +158,9 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
                 children: <Widget>[
                   Text(
                     'Enter the same phone number recorded for your employee profile, confirm your date of birth, and choose a 4 to 6 digit PIN.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: tokens.inkMuted,
-                    ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: tokens.inkMuted),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   TextField(
@@ -171,8 +196,9 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
                       if (picked != null) {
                         setState(() {
                           _selectedDob = picked;
-                          _dobController.text =
-                              DateFormat('dd/MM/yyyy').format(picked);
+                          _dobController.text = DateFormat(
+                            'dd/MM/yyyy',
+                          ).format(picked);
                         });
                       }
                     },
@@ -215,20 +241,44 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
                     ),
                   ],
                   const SizedBox(height: AppSpacing.lg),
-                  FilledButton(
-                    onPressed: _submitting ? null : _submit,
-                    child: _submitting
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator.adaptive(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.white,
-                              ),
-                            ),
-                          )
-                        : const Text('Create PIN'),
+                  Container(
+                    width: double.infinity,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                      boxShadow:
+                          _submitting
+                              ? null
+                              : AppShadows.glow(tokens.primary),
+                    ),
+                    child: FilledButton(
+                      onPressed: _submitting ? null : _submit,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: tokens.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      child:
+                          _submitting
+                              ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator.adaptive(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                              : const Text('Create PIN'),
+                    ),
                   ),
                 ],
               ),

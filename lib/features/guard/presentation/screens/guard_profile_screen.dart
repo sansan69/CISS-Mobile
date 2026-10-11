@@ -9,8 +9,11 @@ import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/security_settings_card.dart';
 import '../../../../../shared/widgets/document_list_tile.dart';
+import '../../../../../shared/widgets/compliance_tag.dart';
 import '../../../../../shared/utils/initials.dart';
 import '../widgets/guard_portal_widgets.dart';
+import 'guard_aadhaar_correction_screen.dart';
+import 'guard_document_upload_screen.dart';
 
 final FutureProvider<GuardProfileModel> guardProfileProvider =
     FutureProvider<GuardProfileModel>((Ref ref) {
@@ -33,7 +36,6 @@ class GuardProfileScreen extends ConsumerWidget {
             onRetry: () => ref.invalidate(guardProfileProvider),
           ),
       data: (profile) {
-        final tokens = CissThemeTokens.of(context);
         final docs = profile.documents;
 
         return ScreenScaffold(
@@ -50,48 +52,26 @@ class GuardProfileScreen extends ConsumerWidget {
             _ProfileHero(profile: profile),
             const SizedBox(height: AppSpacing.lg),
 
-            // ── Metric strip ───────────────────────────────────────────
-            GuardMetricStrip(
-              items: <GuardMetricItem>[
-                GuardMetricItem(
-                  label: 'Status',
-                  value: profile.status.isEmpty ? 'Active' : profile.status,
-                  icon: Icons.verified_user_rounded,
-                  color: tokens.success,
-                ),
-                GuardMetricItem(
-                  label: 'District',
-                  value: profile.district.isEmpty ? '-' : profile.district,
-                  icon: Icons.place_rounded,
-                  color: tokens.primary,
-                ),
-                GuardMetricItem(
-                  label: 'Client',
-                  value: profile.clientName.isEmpty ? '-' : profile.clientName,
-                  icon: Icons.apartment_rounded,
-                  color: tokens.accent,
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
-
             // ── Personal information ───────────────────────────────────
-            _SectionHeader(title: 'PERSONAL INFO'),
+            _SectionHeader(title: 'Personal info'),
             const SizedBox(height: AppSpacing.sm),
             _InfoCard(
               rows: <_InfoRow>[
                 _InfoRow('Phone', profile.phoneNumber),
                 _InfoRow(
-                    'Email',
-                    (profile.emailAddress ?? '').isEmpty
-                        ? '-'
-                        : profile.emailAddress!),
+                  'Email',
+                  (profile.emailAddress ?? '').isEmpty
+                      ? '-'
+                      : profile.emailAddress!,
+                ),
                 _InfoRow(
-                    'Gender',
-                    (profile.gender ?? '').isEmpty ? '-' : profile.gender!),
+                  'Gender',
+                  (profile.gender ?? '').isEmpty ? '-' : profile.gender!,
+                ),
                 _InfoRow(
-                    'Joining Date',
-                    _formatDate(profile.joiningDate ?? '')),
+                  'Joining Date',
+                  _formatDate(profile.joiningDate ?? ''),
+                ),
                 _InfoRow('Resource ID', profile.resourceIdNumber ?? ''),
                 _InfoRow('Address', profile.address ?? ''),
               ],
@@ -102,7 +82,7 @@ class GuardProfileScreen extends ConsumerWidget {
             if (profile.bankAccountNumber != null ||
                 profile.bankIfscCode != null ||
                 profile.bankName != null) ...[
-              _SectionHeader(title: 'BANK DETAILS'),
+              _SectionHeader(title: 'Bank details'),
               const SizedBox(height: AppSpacing.sm),
               _InfoCard(
                 rows: <_InfoRow>[
@@ -121,7 +101,7 @@ class GuardProfileScreen extends ConsumerWidget {
 
             // ── Documents ──────────────────────────────────────────────
             if (docs.isNotEmpty) ...[
-              _SectionHeader(title: 'DOCUMENTS'),
+              _SectionHeader(title: 'Documents'),
               const SizedBox(height: AppSpacing.sm),
               ...docs.map(
                 (doc) => Padding(
@@ -136,10 +116,89 @@ class GuardProfileScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.lg),
             ],
 
+            // ── Verification status ────────────────────────────────────
+            _SectionHeader(title: 'Verification status'),
+            const SizedBox(height: AppSpacing.sm),
+            ModernCard(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ComplianceTag(
+                    label: 'Aadhaar Card',
+                    status: profile.canUploadAadhaar
+                        ? ComplianceStatus.missing
+                        : ComplianceStatus.verified,
+                  ),
+                  ComplianceTag(
+                    label: 'Identity Proof',
+                    status: profile.canUploadIdentity
+                        ? ComplianceStatus.missing
+                        : ComplianceStatus.verified,
+                  ),
+                  ComplianceTag(
+                    label: 'Address Proof',
+                    status: profile.canUploadAddress
+                        ? ComplianceStatus.missing
+                        : ComplianceStatus.verified,
+                  ),
+                  ComplianceTag(
+                    label: 'Bank Details',
+                    status: (profile.bankAccountNumber ?? '').isNotEmpty
+                        ? ComplianceStatus.verified
+                        : ComplianceStatus.missing,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+
+            // ── Document actions ────────────────────────────────────────
+            _SectionHeader(title: 'Document actions'),
+            const SizedBox(height: AppSpacing.sm),
+            if (profile.anyMissingDocuments)
+              ModernCard(
+                child: ListTile(
+                  leading: const Icon(Icons.upload_file_rounded),
+                  title: const Text('Upload missing documents'),
+                  subtitle: const Text('Add Aadhaar, identity or address proof'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => GuardDocumentUploadScreen(
+                          profile: profile,
+                        ),
+                      ),
+                    );
+                    if (context.mounted) ref.invalidate(guardProfileProvider);
+                  },
+                ),
+              ),
+            const SizedBox(height: AppSpacing.sm),
+            ModernCard(
+              child: ListTile(
+                leading: const Icon(Icons.published_with_changes_rounded),
+                title: const Text('Request Aadhaar correction'),
+                subtitle: const Text('Notify us about an Aadhaar detail to fix'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const GuardAadhaarCorrectionScreen(),
+                    ),
+                  );
+                  if (context.mounted) ref.invalidate(guardProfileProvider);
+                },
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+
             // ── ID proof details ───────────────────────────────────────
             if (profile.idProofNumber != null &&
                 profile.idProofNumber!.isNotEmpty) ...[
-              _SectionHeader(title: 'ID PROOF DETAILS'),
+              _SectionHeader(title: 'ID proof details'),
               const SizedBox(height: AppSpacing.sm),
               _InfoCard(
                 rows: <_InfoRow>[
@@ -155,7 +214,7 @@ class GuardProfileScreen extends ConsumerWidget {
             // ── Address proof details ──────────────────────────────────
             if (profile.addressProofNumber != null &&
                 profile.addressProofNumber!.isNotEmpty) ...[
-              _SectionHeader(title: 'ADDRESS PROOF DETAILS'),
+              _SectionHeader(title: 'Address proof details'),
               const SizedBox(height: AppSpacing.sm),
               _InfoCard(
                 rows: <_InfoRow>[
@@ -170,9 +229,123 @@ class GuardProfileScreen extends ConsumerWidget {
 
             // ── Security settings ──────────────────────────────────────
             const SecuritySettingsCard(),
+            const SizedBox(height: AppSpacing.sm),
+            ModernCard(
+              child: ListTile(
+                leading: const Icon(Icons.pin_rounded),
+                title: const Text('Change PIN'),
+                subtitle: const Text('Update your guard login PIN'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap:
+                    () => showDialog<void>(
+                      context: context,
+                      builder: (_) => const _ChangePinDialog(),
+                    ),
+              ),
+            ),
           ],
         );
       },
+    );
+  }
+}
+
+class _ChangePinDialog extends ConsumerStatefulWidget {
+  const _ChangePinDialog();
+
+  @override
+  ConsumerState<_ChangePinDialog> createState() => _ChangePinDialogState();
+}
+
+class _ChangePinDialogState extends ConsumerState<_ChangePinDialog> {
+  final _current = TextEditingController();
+  final _next = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _current.dispose();
+    _next.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_next.text != _confirm.text ||
+        !RegExp(r'^\d{4,6}$').hasMatch(_next.text)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('New PIN must be 4–6 digits and match confirmation.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ref
+          .read(mobileRepositoryProvider)
+          .changeGuardPin(currentPin: _current.text, newPin: _next.text);
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('PIN changed successfully.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$error')));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Change PIN'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _current,
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Current PIN'),
+          ),
+          TextField(
+            controller: _next,
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'New PIN'),
+          ),
+          TextField(
+            controller: _confirm,
+            obscureText: true,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Confirm new PIN'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _saving ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _saving ? null : _submit,
+          child:
+              _saving
+                  ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                  : const Text('Change'),
+        ),
+      ],
     );
   }
 }
@@ -189,26 +362,15 @@ class _ProfileHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    final isActive = profile.status.isEmpty ||
+    final isActive =
+        profile.status.isEmpty ||
         profile.status.toLowerCase().contains('active');
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [tokens.primary, tokens.primaryStrong],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: tokens.primaryStrong.withValues(alpha: 0.22),
-            blurRadius: 26,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        color: tokens.primary,
+        borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,22 +391,21 @@ class _ProfileHero extends StatelessWidget {
                     (profile.profilePhotoUrl == null ||
                             profile.profilePhotoUrl!.isEmpty)
                         ? Text(
-                            initials(profile.fullName, fallback: 'G'),
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              color: tokens.surface,
-                            ),
-                          )
+                          initials(profile.fullName, fallback: 'G'),
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w700,
+                            color: tokens.surface,
+                          ),
+                        )
                         : null,
               ),
               const Spacer(),
               // Status chip
               StatusChip(
                 label: profile.status.isEmpty ? 'Active' : profile.status,
-                tone: isActive
-                    ? StatusChipTone.success
-                    : StatusChipTone.warning,
+                tone:
+                    isActive ? StatusChipTone.success : StatusChipTone.warning,
               ),
             ],
           ),
@@ -290,10 +451,10 @@ class _SectionHeader extends StatelessWidget {
     return Text(
       title,
       style: TextStyle(
-        fontSize: 11,
-        fontWeight: FontWeight.w800,
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
         color: tokens.inkMuted,
-        letterSpacing: 2,
+        letterSpacing: 0.2,
       ),
     );
   }

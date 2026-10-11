@@ -84,8 +84,8 @@ ThemeData buildCissTheme(Brightness brightness) {
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: const BorderRadius.all(Radius.circular(AppRadius.md)),
-        side: BorderSide(color: tokens.border, width: 1),
+        borderRadius: const BorderRadius.all(Radius.circular(AppRadius.card)),
+        side: BorderSide(color: tokens.specularBorder, width: 1),
       ),
       margin: EdgeInsets.zero,
     ),

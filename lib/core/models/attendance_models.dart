@@ -47,9 +47,10 @@ ShiftTemplateModel? resolveActiveShiftTemplate(
     if (start == null || end == null) continue;
 
     final crossesMidnight = start >= end;
-    final inShift = crossesMidnight
-        ? totalMinutes >= start || totalMinutes < end
-        : totalMinutes >= start && totalMinutes < end;
+    final inShift =
+        crossesMidnight
+            ? totalMinutes >= start || totalMinutes < end
+            : totalMinutes >= start && totalMinutes < end;
 
     if (inShift) {
       return shift;
@@ -101,9 +102,7 @@ ShiftTemplateModel? resolveAttendanceShiftTemplate(
     if (start == null || end == null) continue;
 
     final crossesMidnight = start >= end;
-    final duration = crossesMidnight
-        ? ((24 * 60) - start) + end
-        : end - start;
+    final duration = crossesMidnight ? ((24 * 60) - start) + end : end - start;
 
     // Minutes until this shift starts (0-1439)
     var forwardDistance = (start - punchMinutes) % (24 * 60);
@@ -217,10 +216,11 @@ class SiteOptionModel {
       sourceCollection: (json['sourceCollection'] as String?) ?? 'sites',
       lat: (json['lat'] as num?)?.toDouble(),
       lng: (json['lng'] as num?)?.toDouble(),
-      dutyPoints: (json['dutyPoints'] as List<dynamic>? ?? const <dynamic>[])
-          .whereType<Map<String, dynamic>>()
-          .map(DutyPointModel.fromJson)
-          .toList(),
+      dutyPoints:
+          (json['dutyPoints'] as List<dynamic>? ?? const <dynamic>[])
+              .whereType<Map<String, dynamic>>()
+              .map(DutyPointModel.fromJson)
+              .toList(),
     );
   }
 }
@@ -283,6 +283,7 @@ class PublicAttendanceEmployeeModel {
     this.phoneNumber,
     this.clientName,
     this.attendanceHint,
+    this.verificationToken,
   });
 
   final String id;
@@ -291,4 +292,5 @@ class PublicAttendanceEmployeeModel {
   final String? phoneNumber;
   final String? clientName;
   final AttendanceHintModel? attendanceHint;
+  final String? verificationToken;
 }

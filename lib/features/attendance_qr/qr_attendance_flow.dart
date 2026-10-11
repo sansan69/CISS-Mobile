@@ -12,8 +12,8 @@ import '../../../app/theme/app_tokens.dart';
 import '../../../core/haptics.dart';
 import '../../../core/models/attendance_models.dart';
 import '../../../core/network/providers.dart';
+import '../../../core/network/ciss_error.dart';
 import '../../../core/sync/providers.dart';
-import '../../../core/qr/qr_parser.dart';
 import '../../../core/utils/date_format.dart';
 import '../../../shared/widgets/camera_capture_screen.dart';
 import '../../../core/location/background_tracking_service.dart';
@@ -470,18 +470,10 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
     setState(() => _loading = true);
 
     try {
-      final employeeId = parseEmployeeIdFromQrText(rawValue);
-      if (employeeId == null || employeeId.isEmpty) {
-        setState(() {
-          _error = 'Could not read QR code. Please try again.';
-          _loading = false;
-          _lastScannedAt = null;
-        });
-        return;
-      }
-
       final repo = ref.read(mobileRepositoryProvider);
-      final employee = await repo.fetchAttendanceEmployee(employeeId);
+      // Let the parent API validate the full QR payload and issue the signed
+      // verification token required by the attendance submit endpoint.
+      final employee = await repo.fetchAttendanceEmployeeByQr(rawValue);
       if (employee == null) {
         setState(() {
           _error = 'Employee not found.';
@@ -832,6 +824,8 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
 
       final now = DateTime.now();
       final clientRequestId = _clientRequestId ??= _uuid.v4();
+      final photoStoragePath =
+          'employees/${employee.id}/attendance/$clientRequestId/photo.jpg';
 
       final distanceMeters = Geolocator.distanceBetween(
         pos.latitude,
@@ -872,22 +866,30 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
         'geofenceRadiusAtTime': site.geofenceRadiusMeters,
         'sourceCollection': site.sourceCollection,
         'photoCapturedAt': now.toUtc().toIso8601String(),
+        'locationCapturedAt': now.toUtc().toIso8601String(),
+        'photoStoragePath': photoStoragePath,
+        'attendanceAttemptId': clientRequestId,
+        'attendanceVerificationToken': employee.verificationToken,
         'deviceInfo': <String, dynamic>{'userAgent': 'flutter-mobile-qr'},
         'clientRequestId': clientRequestId,
       };
       submissionPayload = payload;
 
       final uploadResult = await repo.uploadAttendancePhoto(
-        path:
-            'employees/${employee.id}/attendance/${DateTime.now().millisecondsSinceEpoch}.jpg',
+        employeeDocId: employee.id,
         dataUrl: _photoDataUrl!,
         siteId: site.id,
+        attemptId: clientRequestId,
+        verificationToken: employee.verificationToken,
+        authenticated: false,
       );
       final photoUrl = uploadResult['url'] as String?;
       if (photoUrl == null || photoUrl.isEmpty) {
         throw Exception('Photo upload did not return a URL.');
       }
       payload['photoUrl'] = photoUrl;
+      payload['photoStoragePath'] =
+          uploadResult['path'] as String? ?? photoStoragePath;
 
       await repo.submitAttendance(payload);
 
@@ -902,24 +904,29 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
         await BackgroundTrackingService.stop();
       }
 
-      // Notify field officers
-      await ref
-          .read(notificationServiceProvider)
-          .triggerSystemNotification(
-            type: 'attendance_marked',
-            title:
-                'Guard ${_attendanceStatus == 'In' ? 'Checked In' : 'Checked Out'}',
-            body:
-                '${employee.fullName} marked ${_attendanceStatus.toLowerCase()} at ${_selectedSite!.siteName}',
-            role: 'fieldOfficer',
-            district: site.district,
-            data: {'employeeId': employee.employeeCode ?? employee.id},
-          );
+      // Notify field officers — best-effort; the server rejects
+      // guard-created system notifications, so this must never surface as a
+      // failure after the attendance record was already saved.
+      try {
+        await ref
+            .read(notificationServiceProvider)
+            .triggerSystemNotification(
+              type: 'attendance_marked',
+              title:
+                  'Guard ${_attendanceStatus == 'In' ? 'Checked In' : 'Checked Out'}',
+              body:
+                  '${employee.fullName} marked ${_attendanceStatus.toLowerCase()} at ${_selectedSite!.siteName}',
+              role: 'fieldOfficer',
+              district: site.district,
+              data: {'employeeId': employee.employeeCode ?? employee.id},
+            );
+      } catch (notificationError) {
+        debugPrint(
+          'FO attendance notification failed (attendance saved): $notificationError',
+        );
+      }
     } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.sendTimeout ||
-          e.type == DioExceptionType.receiveTimeout ||
-          e.type == DioExceptionType.connectionError) {
+      if (CissError.isRetryableNetworkError(e)) {
         // Offline: queue for sync
         try {
           await ref

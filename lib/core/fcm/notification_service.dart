@@ -27,6 +27,7 @@ class NotificationService {
   StreamSubscription<String>? _tokenRefreshSub;
   StreamSubscription<RemoteMessage>? _foregroundMessageSub;
   StreamSubscription<RemoteMessage>? _messageOpenedAppSub;
+  bool _notificationsAuthorized = false;
 
   void dispose() {
     _sessionRetryTimer?.cancel();
@@ -40,17 +41,18 @@ class NotificationService {
   }
 
   void _ensureSessionRetryLoop() {
-    _sessionRetryTimer ??= Timer.periodic(
-      const Duration(seconds: 1),
-      (_) {
-        final session = _ref.read(authSessionProvider).value;
-        if (session != null) {
-          unawaited(refreshTopicSubscription());
-          _sessionRetryTimer?.cancel();
-          _sessionRetryTimer = null;
-        }
-      },
-    );
+    _sessionRetryTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
+      final session = _ref.read(authSessionProvider).value;
+      if (session != null) {
+        // App bootstrap runs before login, so the first FCM token write can
+        // happen without an authenticated user. Register it again as soon
+        // as the role session becomes available.
+        unawaited(_registerCurrentToken());
+        unawaited(refreshTopicSubscription());
+        _sessionRetryTimer?.cancel();
+        _sessionRetryTimer = null;
+      }
+    });
   }
 
   static Stream<T> _poll<T>(
@@ -81,18 +83,16 @@ class NotificationService {
     _ensureSessionRetryLoop();
 
     // ── Local notification setup ───────────────────────────────────────
-    const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
       requestBadgePermission: false,
       requestSoundPermission: false,
     );
     await _localNotifications.initialize(
-      const InitializationSettings(
-        android: androidSettings,
-        iOS: iosSettings,
-      ),
+      const InitializationSettings(android: androidSettings, iOS: iosSettings),
       onDidReceiveNotificationResponse: _onLocalNotificationTap,
     );
 
@@ -104,22 +104,26 @@ class NotificationService {
     );
 
     if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-      final token = await _fcm.getToken();
-      if (token != null) {
-        await _ref.read(mobileRepositoryProvider).updateFcmToken(token);
-      }
+      _notificationsAuthorized = true;
+      await _registerCurrentToken();
 
       _tokenRefreshSub = _fcm.onTokenRefresh.listen((String newToken) async {
         await _ref.read(mobileRepositoryProvider).updateFcmToken(newToken);
       });
 
-      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+      FirebaseMessaging.onBackgroundMessage(
+        _firebaseMessagingBackgroundHandler,
+      );
 
       // Foreground messages — show local notification
-      _foregroundMessageSub = FirebaseMessaging.onMessage.listen(_onForegroundMessage);
+      _foregroundMessageSub = FirebaseMessaging.onMessage.listen(
+        _onForegroundMessage,
+      );
 
       // Background/open messages
-      _messageOpenedAppSub = FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageClick);
+      _messageOpenedAppSub = FirebaseMessaging.onMessageOpenedApp.listen(
+        _handleMessageClick,
+      );
 
       final initialMessage = await _fcm.getInitialMessage();
       if (initialMessage != null) {
@@ -128,6 +132,17 @@ class NotificationService {
 
       // Subscribe to role-based topic for broadcasts
       await _subscribeToRoleTopic();
+    }
+  }
+
+  Future<void> _registerCurrentToken() async {
+    if (!_notificationsAuthorized) return;
+    try {
+      final token = await _fcm.getToken();
+      if (token == null || token.isEmpty) return;
+      await _ref.read(mobileRepositoryProvider).updateFcmToken(token);
+    } catch (error) {
+      debugPrint('FCM token registration deferred: $error');
     }
   }
 
@@ -254,7 +269,7 @@ class NotificationService {
         _navigateFieldOfficer(1);
         break;
       case 'report_review':
-        _navigateFieldOfficer(2);
+        _navigateFieldOfficer(4);
         break;
       case 'broadcast':
         _navigateHomeForCurrentRole();
@@ -315,7 +330,9 @@ class NotificationService {
     String? district,
     Map<String, String>? data,
   }) async {
-    await _ref.read(mobileRepositoryProvider).createSystemNotification(
+    await _ref
+        .read(mobileRepositoryProvider)
+        .createSystemNotification(
           type: type,
           title: title,
           body: body,

@@ -9,15 +9,15 @@ import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/models/report_models.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../shared/widgets/brand_banner.dart';
-import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
+import '../widgets/work_order_revision_banner.dart';
 
 final FutureProvider<List<WorkOrderModel>> fieldOfficerWorkOrdersProvider =
     FutureProvider<List<WorkOrderModel>>((Ref ref) {
-  return ref.read(mobileRepositoryProvider).fetchFieldOfficerWorkOrders();
-});
+      return ref.read(mobileRepositoryProvider).fetchFieldOfficerWorkOrders();
+    });
 
 class FieldOfficerWorkOrdersScreen extends ConsumerStatefulWidget {
   const FieldOfficerWorkOrdersScreen({super.key});
@@ -47,38 +47,65 @@ class _FieldOfficerWorkOrdersScreenState
     final tokens = CissThemeTokens.of(context);
 
     return workOrdersAsync.when(
-      loading: () => const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      ),
-      error: (Object error, StackTrace stackTrace) => Scaffold(
-        body: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Center(
-            child: StateBlock(
-              icon: Icons.assignment_late_rounded,
-              title: 'Could not load work orders',
-              message: '$error',
-              action: FilledButton.tonal(
-                onPressed: () => ref.invalidate(fieldOfficerWorkOrdersProvider),
-                child: const Text('Try again'),
-              ),
+      loading:
+          () => const Scaffold(
+            body: Column(
+              children: <Widget>[
+                BrandBanner(
+                  title: 'Operations',
+                  subtitle: 'Loading work orders',
+                ),
+                Expanded(child: Center(child: CircularProgressIndicator())),
+              ],
             ),
           ),
-        ),
-      ),
+      error:
+          (Object error, StackTrace stackTrace) => Scaffold(
+            body: Column(
+              children: <Widget>[
+                const BrandBanner(title: 'Operations', subtitle: 'Work orders'),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Center(
+                      child: StateBlock(
+                        icon: Icons.assignment_late_rounded,
+                        title: 'Could not load work orders',
+                        message: '$error',
+                        action: FilledButton.tonal(
+                          onPressed:
+                              () => ref.invalidate(
+                                fieldOfficerWorkOrdersProvider,
+                              ),
+                          child: const Text('Try again'),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
       data: (workOrders) {
-        final source = _activeFilter == _WorkOrderFilter.upcoming
-            ? workOrders
-                .where((w) => w.assignedCount < w.totalManpower)
-                .toList()
-            : workOrders;
+        final source =
+            _activeFilter == _WorkOrderFilter.upcoming
+                ? workOrders
+                    .where((w) => w.assignedCount < w.totalManpower)
+                    .toList()
+                : workOrders;
         final filtered = _filter(source);
 
         return Scaffold(
           backgroundColor: tokens.canvas,
           body: ListView(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.xxl),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              0,
+              AppSpacing.md,
+              100,
+            ),
             children: [
+              const WorkOrderRevisionBanner(),
               BrandBanner(
                 title: 'Operations',
                 subtitle: 'Manage duty deployments and guard assignments',
@@ -88,9 +115,13 @@ class _FieldOfficerWorkOrdersScreenState
                     const SyncStatusBadge(),
                     const SizedBox(width: 4),
                     IconButton(
-                      onPressed: () =>
-                          ref.invalidate(fieldOfficerWorkOrdersProvider),
-                      icon: Icon(Icons.refresh_rounded, color: tokens.inkMuted, size: 20),
+                      onPressed:
+                          () => ref.invalidate(fieldOfficerWorkOrdersProvider),
+                      icon: Icon(
+                        Icons.refresh_rounded,
+                        color: tokens.inkMuted,
+                        size: 20,
+                      ),
                     ),
                   ],
                 ),
@@ -141,12 +172,14 @@ class _FieldOfficerWorkOrdersScreenState
                   padding: const EdgeInsets.all(32),
                   child: StateBlock(
                     icon: Icons.assignment_turned_in_rounded,
-                    title: _activeFilter == _WorkOrderFilter.upcoming
-                        ? 'No upcoming duties'
-                        : 'No duties loaded',
-                    message: _activeFilter == _WorkOrderFilter.upcoming
-                        ? 'All work orders are fully covered.'
-                        : 'Work orders will appear here once published.',
+                    title:
+                        _activeFilter == _WorkOrderFilter.upcoming
+                            ? 'No upcoming duties'
+                            : 'No duties loaded',
+                    message:
+                        _activeFilter == _WorkOrderFilter.upcoming
+                            ? 'All work orders are fully covered.'
+                            : 'Work orders will appear here once published.',
                   ),
                 )
               else if (filtered.isEmpty)
@@ -176,14 +209,15 @@ class _FieldOfficerWorkOrdersScreenState
     final query = _query.trim().toLowerCase();
     if (query.isEmpty) return workOrders;
     return workOrders.where((workOrder) {
-      final haystack = [
-        workOrder.siteName,
-        workOrder.examName,
-        workOrder.examCode,
-        workOrder.district,
-        workOrder.clientName,
-        workOrder.dateLabel,
-      ].join(' ').toLowerCase();
+      final haystack =
+          [
+            workOrder.siteName,
+            workOrder.examName,
+            workOrder.examCode,
+            workOrder.district,
+            workOrder.clientName,
+            workOrder.dateLabel,
+          ].join(' ').toLowerCase();
       return haystack.contains(query);
     }).toList();
   }
@@ -197,11 +231,12 @@ class _WorkOrderCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = CissThemeTokens.of(context);
-    final progress = workOrder.totalManpower <= 0
-        ? 0.0
-        : (workOrder.assignedCount / workOrder.totalManpower)
-            .clamp(0, 1)
-            .toDouble();
+    final progress =
+        workOrder.totalManpower <= 0
+            ? 0.0
+            : (workOrder.assignedCount / workOrder.totalManpower)
+                .clamp(0, 1)
+                .toDouble();
     final isCovered =
         workOrder.totalManpower > 0 &&
         workOrder.assignedCount >= workOrder.totalManpower;
@@ -210,63 +245,68 @@ class _WorkOrderCard extends ConsumerWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: ModernCard(
-        padding: EdgeInsets.zero,
-        onTap: () => _openAssignSheet(context, ref),
-        child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            workOrder.siteName.isEmpty
-                                ? 'Duty Site'
-                                : workOrder.siteName,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: tokens.ink,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+      child: Container(
+        decoration: BoxDecoration(
+          color: tokens.surface,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+            color: isCovered
+                ? tokens.glowEmerald.withValues(alpha: 0.35)
+                : tokens.specularBorder,
+          ),
+          boxShadow: isCovered
+              ? AppShadows.glow(tokens.glowEmerald)
+              : AppShadows.card,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => _openAssignSheet(context, ref),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          workOrder.siteName.isEmpty
+                              ? 'Duty Site'
+                              : workOrder.siteName,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: tokens.ink,
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            workOrder.examName,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: tokens.ink,
-                            ),
-                          ),
-                          if (workOrder.clientName.isNotEmpty) ...[
-                            const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                Icon(Icons.business, size: 12, color: tokens.inkMuted),
-                                const SizedBox(width: 4),
-                                Text(
-                                  workOrder.clientName,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: tokens.inkMuted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          workOrder.examName,
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(color: tokens.ink),
+                        ),
+                        if (workOrder.clientName.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Row(
                             children: [
-                              Icon(Icons.location_on_outlined, size: 12, color: tokens.inkMuted),
+                              Icon(
+                                Icons.business,
+                                size: 12,
+                                color: tokens.inkMuted,
+                              ),
                               const SizedBox(width: 4),
                               Text(
-                                workOrder.district,
+                                workOrder.clientName,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: tokens.inkMuted,
@@ -275,41 +315,70 @@ class _WorkOrderCard extends ConsumerWidget {
                             ],
                           ),
                         ],
-                      ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.location_on_outlined,
+                              size: 12,
+                              color: tokens.inkMuted,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              workOrder.district,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: tokens.inkMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 8),
-                    _RadialProgress(
-                      progress: progress,
-                      label: '${workOrder.assignedCount}/${workOrder.totalManpower}',
-                      color: accent,
+                  ),
+                  const SizedBox(width: 8),
+                  _RadialProgress(
+                    progress: progress,
+                    label:
+                        '${workOrder.assignedCount}/${workOrder.totalManpower}',
+                    color: accent,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(
+                    Icons.calendar_today_rounded,
+                    size: 14,
+                    color: tokens.inkMuted,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    formattedDate,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: tokens.inkMuted,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Icon(Icons.calendar_today_rounded, size: 14, color: tokens.inkMuted),
-                    const SizedBox(width: 6),
-                    Text(
-                      formattedDate,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: tokens.inkMuted,
-                      ),
-                    ),
-                    const Spacer(),
-                    StatusChip(
-                      label: isCovered ? 'COVERED' : 'OPEN',
-                      tone: isCovered ? StatusChipTone.success : StatusChipTone.warning,
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                  const Spacer(),
+                  StatusChip(
+                    label: isCovered ? 'COVERED' : 'OPEN',
+                    tone:
+                        isCovered
+                            ? StatusChipTone.success
+                            : StatusChipTone.warning,
+                  ),
+                ],
+              ),
+            ],
           ),
+        ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   String _formatWorkOrderDate(String raw) {
@@ -326,10 +395,14 @@ class _WorkOrderCard extends ConsumerWidget {
   String _daySuffix(int day) {
     if (day >= 11 && day <= 13) return 'th';
     switch (day % 10) {
-      case 1: return 'st';
-      case 2: return 'nd';
-      case 3: return 'rd';
-      default: return 'th';
+      case 1:
+        return 'st';
+      case 2:
+        return 'nd';
+      case 3:
+        return 'rd';
+      default:
+        return 'th';
     }
   }
 
@@ -338,10 +411,11 @@ class _WorkOrderCard extends ConsumerWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _AssignGuardsSheet(
-        workOrder: workOrder,
-        onSaved: () => ref.invalidate(fieldOfficerWorkOrdersProvider),
-      ),
+      builder:
+          (_) => _AssignGuardsSheet(
+            workOrder: workOrder,
+            onSaved: () => ref.invalidate(fieldOfficerWorkOrdersProvider),
+          ),
     );
   }
 }
@@ -379,8 +453,8 @@ class _RadialProgress extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
               color: color,
             ),
           ),
@@ -391,10 +465,7 @@ class _RadialProgress extends StatelessWidget {
 }
 
 class _AssignGuardsSheet extends ConsumerStatefulWidget {
-  const _AssignGuardsSheet({
-    required this.workOrder,
-    required this.onSaved,
-  });
+  const _AssignGuardsSheet({required this.workOrder, required this.onSaved});
 
   final WorkOrderModel workOrder;
   final VoidCallback onSaved;
@@ -433,37 +504,153 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
       if (mounted) {
         setState(() {
           _available = guards;
+          final assignedIds =
+              widget.workOrder.assignedGuards
+                  .map((guard) => guard['uid']?.toString() ?? '')
+                  .where((id) => id.isNotEmpty)
+                  .toSet();
+          _selected =
+              guards.where((guard) => assignedIds.contains(guard.id)).toList();
           _loading = false;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() => _loading = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not load guards: $e')));
       }
     }
   }
 
   Future<void> _save() async {
+    final tokens = CissThemeTokens.of(context);
+    final allOrders =
+        ref.read(fieldOfficerWorkOrdersProvider).value ?? <WorkOrderModel>[];
+    final conflicts = <Map<String, String>>[];
+
+    for (final guard in _selected) {
+      for (final order in allOrders) {
+        if (order.id != widget.workOrder.id &&
+            order.dateLabel.isNotEmpty &&
+            order.dateLabel == widget.workOrder.dateLabel) {
+          final isAssigned = order.assignedGuards.any(
+            (g) => g['uid']?.toString() == guard.id,
+          );
+          if (isAssigned) {
+            conflicts.add({
+              'guard': guard.fullName,
+              'site': order.siteName.isNotEmpty ? order.siteName : 'Another post',
+            });
+          }
+        }
+      }
+    }
+
+    if (conflicts.isNotEmpty && mounted) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: tokens.surface,
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: tokens.warning),
+              const SizedBox(width: 8),
+              Text(
+                'Scheduling Conflict',
+                style: TextStyle(
+                  color: tokens.ink,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'The following guard(s) are already deployed on ${widget.workOrder.dateLabel}:',
+                style: TextStyle(fontSize: 13, color: tokens.inkMuted),
+              ),
+              const SizedBox(height: 12),
+              ...conflicts.map(
+                (c) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Icon(Icons.person_outline, size: 14, color: tokens.warning),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${c['guard']} (at ${c['site']})',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: tokens.ink,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Proceeding will double-book these guards for this date.',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: tokens.danger,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text('CANCEL', style: TextStyle(color: tokens.inkMuted)),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: FilledButton.styleFrom(backgroundColor: tokens.warning),
+              child: const Text('PROCEED ANYWAY'),
+            ),
+          ],
+        ),
+      );
+
+      if (proceed != true) return;
+    }
+
     setState(() => _saving = true);
     try {
-      await ref.read(mobileRepositoryProvider).assignGuardsToWorkOrder(
+      await ref
+          .read(mobileRepositoryProvider)
+          .assignGuardsToWorkOrder(
             workOrderId: widget.workOrder.id,
-            assignedGuards: _selected
-                .map(
-                  (g) => <String, dynamic>{
-                    'uid': g.id,
-                    'name': g.fullName,
-                    'employeeId': g.employeeId,
-                    'gender': g.gender ?? '',
-                  },
-                )
-                .toList(),
+            assignedGuards:
+                _selected
+                    .map(
+                      (g) => <String, dynamic>{
+                        'uid': g.id,
+                        'name': g.fullName,
+                        'employeeId': g.employeeId,
+                        'gender': g.gender ?? '',
+                      },
+                    )
+                    .toList(),
           );
       widget.onSaved();
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Assignment failed: $e')));
       }
     }
   }
@@ -495,179 +682,196 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
     final tokens = CissThemeTokens.of(context);
     final theme = Theme.of(context);
     final wo = widget.workOrder;
-    final bool canSave = _selected.isNotEmpty && !_saving;
+    final bool canSave = !_saving;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.9,
       maxChildSize: 0.95,
       minChildSize: 0.5,
-      builder: (_, scrollController) => Container(
-        decoration: BoxDecoration(
-          color: tokens.surface.withValues(alpha: 0.95),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Column(
-            children: [
-              // Header
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-                child: Column(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: tokens.border,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
+      builder:
+          (_, scrollController) => Container(
+            decoration: BoxDecoration(
+              color: tokens.surface.withValues(alpha: 0.95),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(32),
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Column(
+                children: [
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'ASSIGN GUARDS',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 1,
+                        Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: tokens.border,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'ASSIGN GUARDS',
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                  Text(
+                                    wo.siteName,
+                                    style: theme.textTheme.bodySmall,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => Navigator.pop(context),
+                              icon: const Icon(Icons.close_rounded),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        TabBar(
+                          controller: _tabCtrl,
+                          labelStyle: TextStyle(fontWeight: FontWeight.w700),
+                          tabs: [
+                            Tab(text: 'AVAILABLE (${_available?.length ?? 0})'),
+                            Tab(text: 'SELECTED (${_selected.length})'),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabCtrl,
+                      children: [
+                        // Available
+                        Column(
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: TextField(
+                                onChanged: (v) => setState(() => _query = v),
+                                decoration: const InputDecoration(
+                                  hintText: 'Search guards...',
+                                  prefixIcon: Icon(Icons.search_rounded),
                                 ),
                               ),
-                              Text(
-                                wo.siteName,
-                                style: theme.textTheme.bodySmall,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    TabBar(
-                      controller: _tabCtrl,
-                      labelStyle: TextStyle(fontWeight: FontWeight.w700),
-                      tabs: [
-                        Tab(text: 'AVAILABLE (${_available?.length ?? 0})'),
-                        Tab(text: 'SELECTED (${_selected.length})'),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              Expanded(
-                child: TabBarView(
-                  controller: _tabCtrl,
-                  children: [
-                    // Available
-                    Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: TextField(
-                            onChanged: (v) => setState(() => _query = v),
-                            decoration: const InputDecoration(
-                              hintText: 'Search guards...',
-                              prefixIcon: Icon(Icons.search_rounded),
                             ),
-                          ),
-                        ),
-                        if (_loading)
-                          const Expanded(child: Center(child: CircularProgressIndicator()))
-                        else
-                          Expanded(
-                            child: ListView.builder(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              itemCount: _filtered.length,
-                              itemBuilder: (_, i) => _GuardTile(
-                                guard: _filtered[i],
-                                selected: _isSelected(_filtered[i]),
-                                onTap: () => _toggle(_filtered[i]),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    // Selected
-                    ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _selected.length,
-                      itemBuilder: (_, i) => _GuardTile(
-                        guard: _selected[i],
-                        selected: true,
-                        onTap: () => _toggle(_selected[i]),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Action Bar
-              Container(
-                padding: EdgeInsets.fromLTRB(24, 16, 24, 16 + MediaQuery.of(context).padding.bottom),
-                decoration: BoxDecoration(
-                  color: tokens.surface,
-                  border: Border(top: BorderSide(color: tokens.border)),
-                ),
-                child: Row(
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '${_selected.length} Selected',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: tokens.primary,
-                          ),
-                        ),
-                        Text(
-                          'Target: ${wo.totalManpower}',
-                          style: theme.textTheme.labelSmall,
-                        ),
-                      ],
-                    ),
-                    const Spacer(),
-                    SizedBox(
-                      height: 48,
-                      child: FilledButton(
-                        onPressed: canSave ? _save : null,
-                        style: FilledButton.styleFrom(
-                          minimumSize: const Size(140, 48),
-                        ),
-                        child: _saving
-                            ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: tokens.surface,
+                            if (_loading)
+                              const Expanded(
+                                child: Center(
+                                  child: CircularProgressIndicator(),
                                 ),
                               )
-                            : const Text('COMMIT ASSIGNMENT'),
-                      ),
+                            else
+                              Expanded(
+                                child: ListView.builder(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                  ),
+                                  itemCount: _filtered.length,
+                                  itemBuilder:
+                                      (_, i) => _GuardTile(
+                                        guard: _filtered[i],
+                                        selected: _isSelected(_filtered[i]),
+                                        onTap: () => _toggle(_filtered[i]),
+                                      ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        // Selected
+                        ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _selected.length,
+                          itemBuilder:
+                              (_, i) => _GuardTile(
+                                guard: _selected[i],
+                                selected: true,
+                                onTap: () => _toggle(_selected[i]),
+                              ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+
+                  // Action Bar
+                  Container(
+                    padding: EdgeInsets.fromLTRB(
+                      24,
+                      16,
+                      24,
+                      16 + MediaQuery.of(context).padding.bottom,
+                    ),
+                    decoration: BoxDecoration(
+                      color: tokens.surface,
+                      border: Border(top: BorderSide(color: tokens.border)),
+                    ),
+                    child: Row(
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${_selected.length} Selected',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: tokens.primary,
+                              ),
+                            ),
+                            Text(
+                              'Target: ${wo.totalManpower}',
+                              style: theme.textTheme.labelSmall,
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        SizedBox(
+                          height: 48,
+                          child: FilledButton(
+                            onPressed: canSave ? _save : null,
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size(140, 48),
+                            ),
+                            child:
+                                _saving
+                                    ? SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: tokens.surface,
+                                      ),
+                                    )
+                                    : const Text('COMMIT ASSIGNMENT'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
-      ),
     );
   }
 }
@@ -690,12 +894,27 @@ class _GuardTile extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: selected ? tokens.primarySoft.withValues(alpha: 0.5) : tokens.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color:
+              selected
+                  ? tokens.primarySoft.withValues(alpha: 0.6)
+                  : tokens.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color:
+                selected
+                    ? tokens.primary.withValues(alpha: 0.5)
+                    : tokens.border.withValues(alpha: 0.6),
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.all(12),
             child: Row(
@@ -703,12 +922,22 @@ class _GuardTile extends StatelessWidget {
                 CircleAvatar(
                   radius: 22,
                   backgroundColor: tokens.primarySoft,
-                  backgroundImage: (guard.profilePhotoUrl != null && guard.profilePhotoUrl!.isNotEmpty)
-                      ? NetworkImage(guard.profilePhotoUrl!)
-                      : null,
-                  child: (guard.profilePhotoUrl == null || guard.profilePhotoUrl!.isEmpty)
-                      ? Text(initials, style: TextStyle(fontWeight: FontWeight.w700, color: tokens.primaryStrong))
-                      : null,
+                  backgroundImage:
+                      (guard.profilePhotoUrl != null &&
+                              guard.profilePhotoUrl!.isNotEmpty)
+                          ? NetworkImage(guard.profilePhotoUrl!)
+                          : null,
+                  child:
+                      (guard.profilePhotoUrl == null ||
+                              guard.profilePhotoUrl!.isEmpty)
+                          ? Text(
+                            initials,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: tokens.primaryStrong,
+                            ),
+                          )
+                          : null,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -735,7 +964,9 @@ class _GuardTile extends StatelessWidget {
                   ),
                 ),
                 Icon(
-                  selected ? Icons.check_circle_rounded : Icons.add_circle_outline_rounded,
+                  selected
+                      ? Icons.check_circle_rounded
+                      : Icons.add_circle_outline_rounded,
                   color: selected ? tokens.primary : tokens.border,
                 ),
               ],
@@ -743,13 +974,16 @@ class _GuardTile extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   String _initials(String name, String fallback) {
     final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty);
     final i = parts.map((p) => p[0]).take(2).join().toUpperCase();
     if (i.isNotEmpty) return i;
-    return fallback.trim().isNotEmpty ? fallback.trim().substring(0, 1).toUpperCase() : 'G';
+    return fallback.trim().isNotEmpty
+        ? fallback.trim().substring(0, 1).toUpperCase()
+        : 'G';
   }
 }

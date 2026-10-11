@@ -220,10 +220,78 @@ class _GuardTrainingQuizScreenState
         _submitting = false;
       });
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _submitting = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _submitting = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _confirmAndSubmitQuiz() async {
+    if (_quizData == null) return;
+    final total = _quizData!.questions.length;
+    final answered = _answers.length;
+    final unanswered = total - answered;
+
+    final shouldSubmit = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final tokens = CissThemeTokens.of(ctx);
+        return AlertDialog(
+          title: const Text('Submit Quiz?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    unanswered > 0
+                        ? Icons.warning_amber_rounded
+                        : Icons.check_circle_outline_rounded,
+                    color: unanswered > 0 ? tokens.warning : tokens.success,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      unanswered > 0
+                          ? '$unanswered Unanswered Question(s)'
+                          : 'All Questions Answered',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: unanswered > 0 ? tokens.warning : tokens.success,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'You have answered $answered of $total questions.'
+                '${unanswered > 0 ? '\n\nUnanswered questions will receive 0 marks.' : '\n\nYour score will be calculated immediately upon submission.'}',
+                style: TextStyle(color: tokens.ink, fontSize: 14),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Review Questions'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Submit Quiz'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldSubmit == true) {
+      await _submitQuiz();
     }
   }
 
@@ -264,7 +332,7 @@ class _GuardTrainingQuizScreenState
                         onSelectOption: _selectOption,
                         onPrevious: _previousQuestion,
                         onNext: _nextQuestion,
-                        onSubmit: _submitQuiz,
+                        onSubmit: _confirmAndSubmitQuiz,
                       ),
       ),
     );
@@ -402,6 +470,51 @@ class _ResultView extends StatelessWidget {
               ],
             ),
           ),
+          if (result.passed) ...[
+            const SizedBox(height: AppSpacing.md),
+            Container(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: tokens.accent.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(
+                  color: tokens.accent.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.workspace_premium_rounded,
+                    color: tokens.accent,
+                    size: 32,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Training Certificate Earned',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                            color: tokens.ink,
+                          ),
+                        ),
+                        Text(
+                          'Recorded in personnel profile and synced with headquarters.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: tokens.inkMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: AppSpacing.xl),
           SizedBox(
             width: double.infinity,

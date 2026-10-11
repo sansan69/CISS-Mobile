@@ -5,10 +5,8 @@ import '../../features/auth/presentation/role_login_screen.dart';
 import '../../features/auth/presentation/auth_gate_screen.dart';
 import '../../features/auth/presentation/guard_pin_setup_screen.dart';
 import '../../features/auth/presentation/login_hub_screen.dart';
-import '../../features/auth/presentation/admin_login_screen.dart';
 import '../../features/auth/presentation/permission_onboarding_screen.dart';
 import '../../features/attendance_qr/qr_attendance_flow.dart';
-import '../../features/enrollment/presentation/guard_enrollment_screen.dart';
 import '../../features/attendance_public/public_attendance_screen.dart';
 import '../../features/region/presentation/region_selector_screen.dart';
 import '../../core/gestures/edge_gesture_screen.dart';
@@ -123,16 +121,6 @@ final GoRouter appRouter = GoRouter(
       },
     ),
     GoRoute(
-      path: '/login/admin',
-      pageBuilder: (BuildContext context, GoRouterState state) {
-        return _buildPage(
-          context: context,
-          state: state,
-          child: const AdminLoginScreen(),
-        );
-      },
-    ),
-    GoRoute(
       path: '/permissions',
       pageBuilder: (BuildContext context, GoRouterState state) {
         return _buildPage(
@@ -162,15 +150,6 @@ final GoRouter appRouter = GoRouter(
         );
       },
     ),
-    GoRoute(
-      path: '/enroll',
-      pageBuilder: (BuildContext context, GoRouterState state) {
-        return _buildPage(
-          context: context,
-          state: state,
-          child: const GuardEnrollmentScreen(),
-        );
-      },
-    ),
+
   ],
 );

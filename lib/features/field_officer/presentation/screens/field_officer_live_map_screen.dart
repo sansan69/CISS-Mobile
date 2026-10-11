@@ -5,7 +5,9 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
+import '../../../../../core/haptics.dart';
 import '../../../../../core/location/live_location_service.dart';
+import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import 'field_officer_guard_detail_screen.dart';
@@ -26,8 +28,7 @@ class FieldOfficerLiveMapScreen extends StatefulWidget {
       _FieldOfficerLiveMapScreenState();
 }
 
-class _FieldOfficerLiveMapScreenState
-    extends State<FieldOfficerLiveMapScreen> {
+class _FieldOfficerLiveMapScreenState extends State<FieldOfficerLiveMapScreen> {
   final MapController _mapController = MapController();
   final LiveLocationService _liveLocationService = LiveLocationService();
 
@@ -43,13 +44,35 @@ class _FieldOfficerLiveMapScreenState
   }
 
   List<String> _districts(List<GuardLocationData> guards) {
-    final districts = guards
-        .map((guard) => guard.district.trim())
-        .where((district) => district.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+    final districts =
+        guards
+            .map((guard) => guard.district.trim())
+            .where((district) => district.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
     return districts;
+  }
+
+  List<_SiteGeofence> _uniqueSites(List<GuardLocationData> guards) {
+    final map = <String, _SiteGeofence>{};
+    for (final g in guards) {
+      if (g.siteId.isNotEmpty && g.siteLat != null && g.siteLng != null) {
+        map.putIfAbsent(
+          g.siteId,
+          () => _SiteGeofence(
+            siteId: g.siteId,
+            siteName: g.siteName.isNotEmpty ? g.siteName : 'Duty Site',
+            lat: g.siteLat!,
+            lng: g.siteLng!,
+            radius: (g.geofenceRadius != null && g.geofenceRadius! > 0)
+                ? g.geofenceRadius!
+                : 150.0,
+          ),
+        );
+      }
+    }
+    return map.values.toList();
   }
 
   void _fitBounds(List<GuardLocationData> guards) {
@@ -131,12 +154,14 @@ class _FieldOfficerLiveMapScreenState
                     ),
                     StatusChip(
                       label: guard.isOutOfZone ? 'OUT OF ZONE' : 'IN ZONE',
-                      icon: guard.isOutOfZone
-                          ? Icons.location_off_rounded
-                          : Icons.location_on_rounded,
-                      tone: guard.isOutOfZone
-                          ? StatusChipTone.danger
-                          : StatusChipTone.success,
+                      icon:
+                          guard.isOutOfZone
+                              ? Icons.location_off_rounded
+                              : Icons.location_on_rounded,
+                      tone:
+                          guard.isOutOfZone
+                              ? StatusChipTone.danger
+                              : StatusChipTone.success,
                     ),
                   ],
                 ),
@@ -169,11 +194,13 @@ class _FieldOfficerLiveMapScreenState
                           Navigator.of(sheetContext).pop();
                           Navigator.of(context).push(
                             MaterialPageRoute<void>(
-                              builder: (_) => FieldOfficerGuardDetailScreen(
-                                employeeId: guard.employeeId,
-                                guardName: guard.guardName,
-                                siteName: guard.siteName,
-                              ),
+                              builder:
+                                  (_) => FieldOfficerGuardDetailScreen(
+                                    employeeId: guard.employeeId,
+                                    employeeDocId: guard.employeeDocId,
+                                    guardName: guard.guardName,
+                                    siteName: guard.siteName,
+                                  ),
                             ),
                           );
                         },
@@ -194,21 +221,17 @@ class _FieldOfficerLiveMapScreenState
     );
   }
 
-  Widget _deviceStatusSheet(
-    CissThemeTokens tokens,
-    GuardLocationData guard,
-  ) {
+  Widget _deviceStatusSheet(CissThemeTokens tokens, GuardLocationData guard) {
     final battery = guard.batteryLevel;
-    final batteryLabel = battery == null
-        ? '—'
-        : '${(battery * 100).round()}%';
-    final batteryColor = battery == null
-        ? tokens.inkMuted
-        : battery < 0.15
-        ? tokens.danger
-        : battery < 0.5
-        ? tokens.warning
-        : tokens.success;
+    final batteryLabel = battery == null ? '—' : '${(battery * 100).round()}%';
+    final batteryColor =
+        battery == null
+            ? tokens.inkMuted
+            : battery < 0.15
+            ? tokens.danger
+            : battery < 0.5
+            ? tokens.warning
+            : tokens.success;
 
     return ModernCard(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -232,9 +255,8 @@ class _FieldOfficerLiveMapScreenState
             guard.wifiConnected == true
                 ? (guard.networkType?.toUpperCase() ?? 'WIFI')
                 : 'MOBILE DATA',
-            color: guard.wifiConnected == true
-                ? tokens.success
-                : tokens.inkMuted,
+            color:
+                guard.wifiConnected == true ? tokens.success : tokens.inkMuted,
           ),
           const SizedBox(height: 8),
           _telemetryRow(
@@ -246,9 +268,7 @@ class _FieldOfficerLiveMapScreenState
             guard.gpsReliable == true
                 ? 'LOCKED (${guard.accuracy.round()} m)'
                 : 'UNRELIABLE',
-            color: guard.gpsReliable == true
-                ? tokens.success
-                : tokens.danger,
+            color: guard.gpsReliable == true ? tokens.success : tokens.danger,
           ),
           const SizedBox(height: 8),
           _telemetryRow(
@@ -294,11 +314,12 @@ class _FieldOfficerLiveMapScreenState
   void _pushTimeline(GuardLocationData guard) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => GuardDayTimelineScreen(
-          employeeDocId: guard.employeeDocId,
-          guardName: guard.guardName,
-          employeeId: guard.employeeId,
-        ),
+        builder:
+            (_) => GuardDayTimelineScreen(
+              employeeDocId: guard.employeeDocId,
+              guardName: guard.guardName,
+              employeeId: guard.employeeId,
+            ),
       ),
     );
   }
@@ -307,7 +328,9 @@ class _FieldOfficerLiveMapScreenState
     final diff = DateTime.now().difference(dt);
     if (diff.inSeconds < 60) return 'just now';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ${diff.inMinutes % 60}m ago';
+    if (diff.inHours < 24) {
+      return '${diff.inHours}h ${diff.inMinutes % 60}m ago';
+    }
     return '${diff.inDays}d ago';
   }
 
@@ -317,17 +340,7 @@ class _FieldOfficerLiveMapScreenState
 
     return Scaffold(
       backgroundColor: tokens.canvas,
-      appBar: AppBar(
-        title: Text(
-          'Live Map',
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 20,
-            color: tokens.ink,
-          ),
-        ),
-        backgroundColor: tokens.canvas,
-      ),
+      appBar: const CissAppBar(title: 'Live Map', subtitle: 'Active guards'),
       body: StreamBuilder<List<GuardLocationData>>(
         stream: _liveLocationService.streamActiveLocations(),
         builder: (context, snapshot) {
@@ -342,9 +355,11 @@ class _FieldOfficerLiveMapScreenState
             return const Center(child: CircularProgressIndicator());
           }
           if (guards.isEmpty) {
-            return _EmptyState(onRefresh: () {
-              setState(() => _fitRequested = false);
-            });
+            return _EmptyState(
+              onRefresh: () {
+                setState(() => _fitRequested = false);
+              },
+            );
           }
 
           final districts = _districts(guards);
@@ -372,79 +387,149 @@ class _FieldOfficerLiveMapScreenState
                         }
                       },
                     ),
+                    CircleLayer(
+                      circles: _uniqueSites(visible).map((site) {
+                        return CircleMarker(
+                          point: LatLng(site.lat, site.lng),
+                          radius: site.radius,
+                          useRadiusInMeter: true,
+                          color: tokens.primary.withValues(alpha: 0.12),
+                          borderColor: tokens.primary.withValues(alpha: 0.45),
+                          borderStrokeWidth: 1.5,
+                        );
+                      }).toList(),
+                    ),
                     MarkerLayer(
-                      markers: visible.map((guard) {
-                        final zoneColor = guard.isOutOfZone
-                            ? tokens.danger
-                            : tokens.success;
+                      markers: _uniqueSites(visible).map((site) {
                         return Marker(
-                          point: LatLng(guard.lat, guard.lng),
-                          width: 86,
-                          height: 92,
-                          child: GestureDetector(
-                            onTap: () => _openGuardSheet(context, guard),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: zoneColor,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: tokens.surface,
-                                      width: 2.5,
-                                    ),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: zoneColor.withValues(
-                                          alpha: 0.35,
-                                        ),
-                                        blurRadius: 12,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    _initials(guard.guardName),
-                                    style: TextStyle(
-                                      color: tokens.surface,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
+                          point: LatLng(site.lat, site.lng),
+                          width: 120,
+                          height: 32,
+                          child: Center(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: tokens.surface.withValues(alpha: 0.88),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: tokens.borderStrong,
+                                  width: 0.8,
                                 ),
-                                const SizedBox(height: 3),
-                                // Battery strip under the marker.
-                                Container(
-                                  width: 26,
-                                  height: 4,
-                                  decoration: BoxDecoration(
-                                    color: tokens.surface,
-                                    borderRadius: BorderRadius.circular(2),
-                                    border: Border.all(
-                                      color: tokens.borderStrong,
-                                      width: 0.5,
-                                    ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.08),
+                                    blurRadius: 4,
                                   ),
-                                  child: FractionallySizedBox(
-                                    alignment: Alignment.centerLeft,
-                                    widthFactor: guard.batteryLevel ?? 0,
-                                    child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        color: _batteryColor(tokens, guard),
-                                        borderRadius: BorderRadius.circular(1.5),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.business_rounded,
+                                    size: 12,
+                                    color: tokens.primary,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      site.siteName,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: tokens.ink,
                                       ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         );
                       }).toList(),
+                    ),
+                    MarkerLayer(
+                      markers:
+                          visible.map((guard) {
+                            final zoneColor =
+                                guard.isOutOfZone
+                                    ? tokens.danger
+                                    : tokens.success;
+                            return Marker(
+                              point: LatLng(guard.lat, guard.lng),
+                              width: 86,
+                              height: 92,
+                              child: GestureDetector(
+                                onTap: () => _openGuardSheet(context, guard),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 40,
+                                      height: 40,
+                                      decoration: BoxDecoration(
+                                        color: zoneColor,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: tokens.surface,
+                                          width: 2.5,
+                                        ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: zoneColor.withValues(
+                                              alpha: 0.35,
+                                            ),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: Text(
+                                        _initials(guard.guardName),
+                                        style: TextStyle(
+                                          color: tokens.surface,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    // Battery strip under the marker.
+                                    Container(
+                                      width: 26,
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        color: tokens.surface,
+                                        borderRadius: BorderRadius.circular(2),
+                                        border: Border.all(
+                                          color: tokens.borderStrong,
+                                          width: 0.5,
+                                        ),
+                                      ),
+                                      child: FractionallySizedBox(
+                                        alignment: Alignment.centerLeft,
+                                        widthFactor: guard.batteryLevel ?? 0,
+                                        child: DecoratedBox(
+                                          decoration: BoxDecoration(
+                                            color: _batteryColor(tokens, guard),
+                                            borderRadius: BorderRadius.circular(
+                                              1.5,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }).toList(),
                     ),
                   ],
                 ),
@@ -503,43 +588,83 @@ class _FieldOfficerLiveMapScreenState
 
               // Bottom status bar
               Positioned(
-                left: 12,
-                right: 12,
-                bottom: 16,
-                child: ModernCard(
+                left: 14,
+                right: 14,
+                bottom: 20,
+                child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 12,
                   ),
+                  decoration: BoxDecoration(
+                    color: tokens.surfaceGlass,
+                    borderRadius: BorderRadius.circular(AppRadius.card),
+                    border: Border.all(color: tokens.specularBorder, width: 1),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.16),
+                        blurRadius: 20,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
                   child: Row(
                     children: [
                       Container(
-                        width: 10,
-                        height: 10,
+                        width: 32,
+                        height: 32,
                         decoration: BoxDecoration(
-                          color: tokens.success,
+                          color: tokens.glowEmerald.withValues(alpha: 0.15),
                           shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          '${visible.length} guard'
-                          '${visible.length == 1 ? '' : 's'} on duty',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: tokens.ink,
+                          border: Border.all(
+                            color: tokens.glowEmerald.withValues(alpha: 0.4),
+                            width: 1.5,
                           ),
                         ),
+                        child: Icon(
+                          Icons.radar_rounded,
+                          size: 18,
+                          color: tokens.glowEmerald,
+                        ),
                       ),
-                      Text(
-                        'LIVE',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.5,
-                          color: tokens.success,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '${visible.length} Active Duty Guard${visible.length == 1 ? '' : 's'}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: tokens.ink,
+                              ),
+                            ),
+                            Text(
+                              '${visible.where((g) => !g.isOutOfZone).length} in zone • ${visible.where((g) => g.isOutOfZone).length} out of zone',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: tokens.inkMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: tokens.glowEmerald.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                        ),
+                        child: Text(
+                          'LIVE GPS',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.0,
+                            color: tokens.glowEmerald,
+                          ),
                         ),
                       ),
                     ],
@@ -563,22 +688,27 @@ class _FieldOfficerLiveMapScreenState
       color: selected ? tokens.primary : tokens.surface,
       borderRadius: BorderRadius.circular(AppRadius.pill),
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          Haptics.selection();
+          onTap();
+        },
         borderRadius: BorderRadius.circular(AppRadius.pill),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppRadius.pill),
             border: Border.all(
-              color: selected ? tokens.primary : tokens.border,
+              color: selected ? tokens.primary : tokens.specularBorder,
+              width: 1,
             ),
+            boxShadow: selected ? AppShadows.glow(tokens.primary) : null,
           ),
           child: Text(
             label,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
-              color: selected ? tokens.surface : tokens.inkMuted,
+              color: selected ? Colors.white : tokens.inkMuted,
             ),
           ),
         ),
@@ -586,10 +716,7 @@ class _FieldOfficerLiveMapScreenState
     );
   }
 
-  Color _batteryColor(
-    CissThemeTokens tokens,
-    GuardLocationData guard,
-  ) {
+  Color _batteryColor(CissThemeTokens tokens, GuardLocationData guard) {
     final battery = guard.batteryLevel;
     if (battery == null) return tokens.borderStrong;
     if (battery < 0.15) return tokens.danger;
@@ -602,7 +729,9 @@ class _FieldOfficerLiveMapScreenState
         name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
     if (parts.length == 1) {
-      return parts.first.substring(0, math.min(2, parts.first.length)).toUpperCase();
+      return parts.first
+          .substring(0, math.min(2, parts.first.length))
+          .toUpperCase();
     }
     return (parts.first[0] + parts.last[0]).toUpperCase();
   }
@@ -651,10 +780,7 @@ class _ErrorState extends StatelessWidget {
         children: [
           Icon(Icons.map_outlined, size: 48, color: tokens.inkMuted),
           const SizedBox(height: 12),
-          Text(
-            message,
-            style: TextStyle(color: tokens.inkMuted),
-          ),
+          Text(message, style: TextStyle(color: tokens.inkMuted)),
         ],
       ),
     );
@@ -702,9 +828,7 @@ class _EmptyState extends StatelessWidget {
               onPressed: onRefresh,
               icon: const Icon(Icons.refresh_rounded, size: 18),
               label: const Text('REFRESH'),
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size(140, 48),
-              ),
+              style: OutlinedButton.styleFrom(minimumSize: const Size(140, 48)),
             ),
           ],
         ),
@@ -712,3 +836,20 @@ class _EmptyState extends StatelessWidget {
     );
   }
 }
+
+class _SiteGeofence {
+  const _SiteGeofence({
+    required this.siteId,
+    required this.siteName,
+    required this.lat,
+    required this.lng,
+    required this.radius,
+  });
+
+  final String siteId;
+  final String siteName;
+  final double lat;
+  final double lng;
+  final double radius;
+}
+

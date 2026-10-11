@@ -10,13 +10,12 @@ import 'biometric_setup_sheet.dart';
 
 /// Security settings surface (guard profile + field-officer More screen).
 ///
-/// Fingerprint unlock here is account-bound and fingerprint-only:
-/// - Devices without a fingerprint scanner (optical/ultrasonic) show a
-///   disabled state — face/iris/weak-class biometrics do not qualify.
-/// - Devices with a scanner but no enrolled fingerprint get guidance and a
-///   deep link to the OS enrollment screen (from the setup sheet).
+/// Strong-biometric app lock here is account-bound:
+/// - Devices without a qualifying enrolled biometric show a disabled state.
+/// - Devices with a qualifying biometric policy but no enrollment get guidance
+///   and a deep link to the OS enrollment screen (from the setup sheet).
 /// - Enabling/disabling goes through the industry-standard flow in
-///   [BiometricSetupSheet] (server-verified credential + fingerprint gate).
+///   [BiometricSetupSheet] (server-verified credential + biometric gate).
 class SecuritySettingsCard extends ConsumerStatefulWidget {
   const SecuritySettingsCard({super.key});
 
@@ -65,14 +64,16 @@ class _SecuritySettingsCardState extends ConsumerState<SecuritySettingsCard> {
     final String subtitle;
     switch (availability) {
       case FingerprintAvailability.supported:
-        subtitle = enabled
-            ? 'Sign in with your fingerprint for this account.'
-            : 'Register your fingerprint to sign in without typing.';
+        subtitle =
+            enabled
+                ? 'Require biometrics to reopen this active account session.'
+                : 'Require biometrics when reopening this account session.';
       case FingerprintAvailability.notEnrolled:
-        subtitle = 'Scanner detected — no fingerprint registered yet.';
+        subtitle =
+            'Biometric hardware detected — no qualifying enrollment yet.';
       case FingerprintAvailability.noSensor:
       case FingerprintAvailability.unknown:
-        subtitle = 'No fingerprint scanner on this device.';
+        subtitle = 'No biometric authentication available on this device.';
     }
 
     final bool actionable =
@@ -102,33 +103,35 @@ class _SecuritySettingsCardState extends ConsumerState<SecuritySettingsCard> {
               Icons.fingerprint_rounded,
               color: actionable ? tokens.primary : tokens.inkMuted,
             ),
-            title: const Text('Fingerprint unlock'),
+            title: const Text('Biometric app lock'),
             subtitle: Text(
               subtitle,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: tokens.inkMuted,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: tokens.inkMuted),
             ),
-            trailing: actionable
-                ? Switch(
-                    value: enabled,
-                    onChanged:
-                        session != null ? (_) => _openSheet(session) : null,
-                    activeTrackColor: tokens.primary,
-                  )
-                : const Icon(Icons.chevron_right_rounded, size: 20),
-            onTap: actionable && session != null
-                ? () => _openSheet(session)
-                : null,
+            trailing:
+                actionable
+                    ? Switch(
+                      value: enabled,
+                      onChanged:
+                          session != null ? (_) => _openSheet(session) : null,
+                      activeTrackColor: tokens.primary,
+                    )
+                    : const Icon(Icons.chevron_right_rounded, size: 20),
+            onTap:
+                actionable && session != null
+                    ? () => _openSheet(session)
+                    : null,
           ),
           if (availability == FingerprintAvailability.notEnrolled) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
-              'Add a fingerprint in your phone Settings, then enable '
-              'fingerprint unlock here.',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: tokens.warning,
-              ),
+              'Add a biometric in your phone Settings, then enable '
+              'the app lock here.',
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: tokens.warning),
             ),
           ],
         ],

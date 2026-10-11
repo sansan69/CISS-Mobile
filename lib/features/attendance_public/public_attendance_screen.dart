@@ -5,12 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
-import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/haptics.dart';
 import '../../../core/models/attendance_models.dart';
 import '../../../core/network/providers.dart';
+import '../../../core/network/ciss_error.dart';
 import '../../../core/sync/providers.dart';
 import '../../../shared/widgets/camera_capture_screen.dart';
 import '../../../shared/widgets/state_block.dart';
@@ -62,7 +62,9 @@ class _PublicAttendanceScreenState
     final phone = _phoneCtrl.text.trim();
     final rid = _resourceCtrl.text.trim();
     if (id.isEmpty && phone.isEmpty && rid.isEmpty) {
-      setState(() => _lookupError = 'Enter employee ID, phone number, or resource ID');
+      setState(
+        () => _lookupError = 'Enter employee ID, phone number, or resource ID',
+      );
       return;
     }
     setState(() {
@@ -95,10 +97,15 @@ class _PublicAttendanceScreenState
         for (final site in sites) {
           if (site.lat == null || site.lng == null) continue;
           final dist = Geolocator.distanceBetween(
-            position.latitude, position.longitude,
-            site.lat!, site.lng!,
+            position.latitude,
+            position.longitude,
+            site.lat!,
+            site.lng!,
           );
-          if (dist < best) { best = dist; nearest = site; }
+          if (dist < best) {
+            best = dist;
+            nearest = site;
+          }
         }
       }
       final status = employee.attendanceHint?.lastStatus == 'In' ? 'Out' : 'In';
@@ -115,7 +122,8 @@ class _PublicAttendanceScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _lookupError = 'Lookup failed. ${e.toString().replaceFirst("Exception: ", "")}';
+        _lookupError =
+            'Lookup failed. ${e.toString().replaceFirst("Exception: ", "")}';
         _isLookingUp = false;
       });
     }
@@ -133,30 +141,28 @@ class _PublicAttendanceScreenState
       setState(() => _submitError = 'Guard, site, and photo are required.');
       return;
     }
+    if (_selectedSite!.lat == null || _selectedSite!.lng == null) {
+      setState(
+        () => _submitError = 'Selected site does not have GPS coordinates.',
+      );
+      return;
+    }
     setState(() {
       _isSubmitting = true;
       _submitError = null;
     });
+    Map<String, dynamic>? queuedPayload;
     try {
       final repo = ref.read(mobileRepositoryProvider);
       final photoFile = File(_photoPath!);
       final bytes = await photoFile.readAsBytes();
       final mimeType = 'image/jpeg';
       final dataUrl = await repo.encodeFileToDataUrl(bytes.toList(), mimeType);
+      final attemptId = _clientRequestId ??= _uuid.v4();
+      final capturedAt = DateTime.now().toUtc().toIso8601String();
+      final photoStoragePath =
+          'employees/${_employee!.id}/attendance/$attemptId/photo.jpg';
 
-      // Upload photo
-      final ownerKey = _employee!.id.replaceAll(RegExp(r'[^0-9A-Za-z_-]'), '_');
-      final ts = DateTime.now().millisecondsSinceEpoch;
-      final path = 'employees/$ownerKey/attendance/${ts}_attendance.jpg';
-      final uploadResp = await repo.uploadAttendancePhoto(
-        path: path,
-        dataUrl: dataUrl,
-        siteId: _selectedSite!.id,
-      );
-      final photoUrl = uploadResp['url'] as String;
-
-      final pos = _position;
-      final dateStr = DateFormat('yyyy-MM-dd').format(DateTime.now());
       final payload = <String, dynamic>{
         'employeeId': _employee!.employeeCode ?? _employee!.id,
         'employeeDocId': _employee!.id,
@@ -168,37 +174,56 @@ class _PublicAttendanceScreenState
         'district': _selectedSite!.district,
         'siteId': _selectedSite!.id,
         'siteName': _selectedSite!.siteName,
-        'sourceCollection': 'sites',
-        'siteCoords': {
-          'lat': _selectedSite!.lat,
-          'lng': _selectedSite!.lng,
-        },
-        'locationText': pos != null
-            ? 'Lat: ${pos.latitude.toStringAsFixed(4)}, Lon: ${pos.longitude.toStringAsFixed(4)}'
-            : '',
-        'locationCoords': pos != null
-            ? {
-                'lat': pos.latitude,
-                'lon': pos.longitude,
-                'accuracyMeters': pos.accuracy,
-              }
-            : {'lat': 0, 'lon': 0, 'accuracyMeters': 0},
-        'distanceMeters': pos != null && _selectedSite!.lat != null
-            ? Geolocator.distanceBetween(
-                pos.latitude, pos.longitude,
-                _selectedSite!.lat!, _selectedSite!.lng!,
-              ).round()
-            : 0,
-        'gpsAccuracyMeters': pos?.accuracy.round(),
+        'sourceCollection': _selectedSite!.sourceCollection,
+        'siteCoords': {'lat': _selectedSite!.lat, 'lng': _selectedSite!.lng},
+        'locationText':
+            _position != null
+                ? 'Lat: ${_position!.latitude.toStringAsFixed(4)}, Lon: ${_position!.longitude.toStringAsFixed(4)}'
+                : 'Location unavailable',
+        'locationCoords':
+            _position != null
+                ? {
+                  'lat': _position!.latitude,
+                  'lon': _position!.longitude,
+                  'accuracyMeters': _position!.accuracy,
+                }
+                : {'lat': 0.0, 'lon': 0.0, 'accuracyMeters': 0.0},
+        'distanceMeters':
+            _position != null &&
+                    _selectedSite!.lat != null &&
+                    _selectedSite!.lng != null
+                ? Geolocator.distanceBetween(
+                  _position!.latitude,
+                  _position!.longitude,
+                  _selectedSite!.lat!,
+                  _selectedSite!.lng!,
+                ).round()
+                : 0,
+        'gpsAccuracyMeters': _position?.accuracy,
         'geofenceRadiusAtTime': _selectedSite!.geofenceRadiusMeters,
-        'photoUrl': photoUrl,
-        'photoCapturedAt': DateTime.now().toUtc().toIso8601String(),
-        'clientRequestId': _clientRequestId ??= _uuid.v4(),
-        'reportedAtClient': DateTime.now().toUtc().toIso8601String(),
+        'photoCapturedAt': capturedAt,
+        'locationCapturedAt': capturedAt,
+        'photoStoragePath': photoStoragePath,
+        'attendanceAttemptId': attemptId,
+        'clientRequestId': attemptId,
+        'reportedAtClient': capturedAt,
         'deviceInfo': {'userAgent': 'flutter-mobile-public'},
-        'capturedAt': DateTime.now().toUtc().toIso8601String(),
-        'attendanceDate': dateStr,
+        'attendanceVerificationToken': _employee!.verificationToken,
       };
+      queuedPayload = <String, dynamic>{...payload, 'photoDataUrl': dataUrl};
+
+      // Upload photo
+      final uploadResp = await repo.uploadAttendancePhoto(
+        employeeDocId: _employee!.id,
+        dataUrl: dataUrl,
+        siteId: _selectedSite!.id,
+        attemptId: attemptId,
+        verificationToken: _employee!.verificationToken,
+        authenticated: false,
+      );
+      final photoUrl = uploadResp['url'] as String;
+      payload['photoUrl'] = photoUrl;
+      payload['photoStoragePath'] = uploadResp['path'] ?? photoStoragePath;
 
       await repo.submitAttendance(payload);
 
@@ -209,22 +234,14 @@ class _PublicAttendanceScreenState
         _step = _PublicAttendanceStep.submit;
       });
     } on DioException catch (e) {
-      if (e.type == DioExceptionType.connectionTimeout ||
-          e.type == DioExceptionType.sendTimeout ||
-          e.type == DioExceptionType.receiveTimeout ||
-          e.type == DioExceptionType.connectionError) {
-        final payload = <String, dynamic>{
-          'employeeId': _employee!.employeeCode ?? _employee!.id,
-          'employeeDocId': _employee!.id,
-          'employeeName': _employee!.fullName,
-          'status': _status,
-          'siteId': _selectedSite!.id,
-        };
-        await ref.read(offlineQueueProvider).enqueue(
-          path: '/api/attendance/submit',
-          method: 'POST',
-          body: payload,
-        );
+      if (CissError.isRetryableNetworkError(e)) {
+        await ref
+            .read(offlineQueueProvider)
+            .enqueue(
+              path: '/api/attendance/submit',
+              method: 'POST',
+              body: queuedPayload ?? <String, dynamic>{},
+            );
         if (!mounted) return;
         Haptics.success();
         setState(() {
@@ -252,10 +269,7 @@ class _PublicAttendanceScreenState
     final tokens = CissThemeTokens.of(context);
     return Scaffold(
       backgroundColor: tokens.canvas,
-      appBar: AppBar(
-        title: const Text('Record Attendance'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Record Attendance'), centerTitle: true),
       body: switch (_step) {
         _PublicAttendanceStep.identify => _buildIdentifyStep(tokens),
         _PublicAttendanceStep.details => _buildDetailsStep(tokens),
@@ -270,13 +284,21 @@ class _PublicAttendanceScreenState
       children: [
         Icon(Icons.fact_check_rounded, size: 48, color: tokens.primary),
         const SizedBox(height: 16),
-        Text('Identify Guard',
+        Text(
+          'Identify Guard',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: tokens.ink)),
+          style: TextStyle(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: tokens.ink,
+          ),
+        ),
         const SizedBox(height: 8),
-        Text('Enter employee ID, phone number, or resource ID',
+        Text(
+          'Enter employee ID, phone number, or resource ID',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 13, color: tokens.inkMuted)),
+          style: TextStyle(fontSize: 13, color: tokens.inkMuted),
+        ),
         const SizedBox(height: 32),
         TextField(
           controller: _empIdCtrl,
@@ -291,7 +313,10 @@ class _PublicAttendanceScreenState
             const Expanded(child: Divider()),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text('OR', style: TextStyle(fontSize: 11, color: tokens.inkMuted)),
+              child: Text(
+                'OR',
+                style: TextStyle(fontSize: 11, color: tokens.inkMuted),
+              ),
             ),
             const Expanded(child: Divider()),
           ],
@@ -312,7 +337,10 @@ class _PublicAttendanceScreenState
             const Expanded(child: Divider()),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text('OR', style: TextStyle(fontSize: 11, color: tokens.inkMuted)),
+              child: Text(
+                'OR',
+                style: TextStyle(fontSize: 11, color: tokens.inkMuted),
+              ),
             ),
             const Expanded(child: Divider()),
           ],
@@ -333,7 +361,10 @@ class _PublicAttendanceScreenState
               color: tokens.danger.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Text(_lookupError, style: TextStyle(color: tokens.danger, fontSize: 13)),
+            child: Text(
+              _lookupError,
+              style: TextStyle(color: tokens.danger, fontSize: 13),
+            ),
           ),
         ],
         const SizedBox(height: 32),
@@ -341,9 +372,17 @@ class _PublicAttendanceScreenState
           height: 52,
           child: FilledButton(
             onPressed: _isLookingUp ? null : _lookupGuard,
-            child: _isLookingUp
-                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('Look Up', style: TextStyle(fontSize: 16)),
+            child:
+                _isLookingUp
+                    ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                    : const Text('Look Up', style: TextStyle(fontSize: 16)),
           ),
         ),
       ],
@@ -371,13 +410,27 @@ class _PublicAttendanceScreenState
                     _employee!.fullName.isNotEmpty
                         ? _employee!.fullName[0].toUpperCase()
                         : 'G',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: tokens.primary),
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                      color: tokens.primary,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
-                Text(_employee!.fullName, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: tokens.ink)),
+                Text(
+                  _employee!.fullName,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: tokens.ink,
+                  ),
+                ),
                 if (_employee!.employeeCode != null)
-                  Text(_employee!.employeeCode!, style: TextStyle(fontSize: 12, color: tokens.inkMuted)),
+                  Text(
+                    _employee!.employeeCode!,
+                    style: TextStyle(fontSize: 12, color: tokens.inkMuted),
+                  ),
               ],
             ),
           ),
@@ -390,10 +443,18 @@ class _PublicAttendanceScreenState
               labelText: 'Site',
               prefixIcon: Icon(Icons.location_on_rounded),
             ),
-            items: _sites.map((s) => DropdownMenuItem(
-              value: s,
-              child: Text(s.siteName, overflow: TextOverflow.ellipsis),
-            )).toList(),
+            items:
+                _sites
+                    .map(
+                      (s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(
+                          s.siteName,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
             onChanged: (v) => setState(() => _selectedSite = v),
           ),
         ],
@@ -403,8 +464,16 @@ class _PublicAttendanceScreenState
             Expanded(
               child: SegmentedButton<String>(
                 segments: const [
-                  ButtonSegment(value: 'In', label: Text('IN'), icon: Icon(Icons.login_rounded, size: 16)),
-                  ButtonSegment(value: 'Out', label: Text('OUT'), icon: Icon(Icons.logout_rounded, size: 16)),
+                  ButtonSegment(
+                    value: 'In',
+                    label: Text('IN'),
+                    icon: Icon(Icons.login_rounded, size: 16),
+                  ),
+                  ButtonSegment(
+                    value: 'Out',
+                    label: Text('OUT'),
+                    icon: Icon(Icons.logout_rounded, size: 16),
+                  ),
                 ],
                 selected: {_status},
                 onSelectionChanged: (v) => setState(() => _status = v.first),
@@ -414,23 +483,44 @@ class _PublicAttendanceScreenState
           ],
         ),
         const SizedBox(height: 16),
-        Text('PHOTO', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: tokens.inkMuted, letterSpacing: 1)),
+        Text(
+          'PHOTO',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: tokens.inkMuted,
+            letterSpacing: 1,
+          ),
+        ),
         const SizedBox(height: 8),
         if (_photoPath != null) ...[
           Stack(
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.file(File(_photoPath!), height: 200, width: double.infinity, fit: BoxFit.cover),
+                child: Image.file(
+                  File(_photoPath!),
+                  height: 200,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
               ),
               Positioned(
-                top: 8, right: 8,
+                top: 8,
+                right: 8,
                 child: GestureDetector(
                   onTap: () => setState(() => _photoPath = null),
                   child: Container(
-                    decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+                    decoration: const BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                    ),
                     padding: const EdgeInsets.all(4),
-                    child: const Icon(Icons.close_rounded, size: 18, color: Colors.white),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
@@ -444,14 +534,24 @@ class _PublicAttendanceScreenState
               decoration: BoxDecoration(
                 color: tokens.surfaceStrong,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: tokens.border, style: BorderStyle.solid),
+                border: Border.all(
+                  color: tokens.border,
+                  style: BorderStyle.solid,
+                ),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.camera_alt_rounded, size: 36, color: tokens.inkMuted),
+                  Icon(
+                    Icons.camera_alt_rounded,
+                    size: 36,
+                    color: tokens.inkMuted,
+                  ),
                   const SizedBox(height: 8),
-                  Text('Tap to take photo', style: TextStyle(color: tokens.inkMuted, fontSize: 13)),
+                  Text(
+                    'Tap to take photo',
+                    style: TextStyle(color: tokens.inkMuted, fontSize: 13),
+                  ),
                 ],
               ),
             ),
@@ -464,7 +564,10 @@ class _PublicAttendanceScreenState
               color: tokens.danger.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Text(_submitError!, style: TextStyle(color: tokens.danger, fontSize: 13)),
+            child: Text(
+              _submitError!,
+              style: TextStyle(color: tokens.danger, fontSize: 13),
+            ),
           ),
         ],
         const SizedBox(height: 32),
@@ -472,9 +575,20 @@ class _PublicAttendanceScreenState
           height: 52,
           child: FilledButton(
             onPressed: _isSubmitting ? null : _submit,
-            child: _isSubmitting
-                ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Text('Submit Attendance', style: TextStyle(fontSize: 16)),
+            child:
+                _isSubmitting
+                    ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                    : const Text(
+                      'Submit Attendance',
+                      style: TextStyle(fontSize: 16),
+                    ),
           ),
         ),
       ],

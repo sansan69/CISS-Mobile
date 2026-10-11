@@ -1,7 +1,10 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../app/theme/app_tokens.dart';
 
+/// Surface card used in report detail sheets.
+///
+/// Formerly a frosted-glass panel; converted to a flat bordered surface for
+/// consistency with the rest of the app and to avoid costly blur effects.
 class GlassCard extends StatelessWidget {
   const GlassCard({
     super.key,
@@ -19,40 +22,21 @@ class GlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color resolvedAccent = accentColor ?? tokens.primary;
 
     return Padding(
       padding: margin ?? EdgeInsets.zero,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            padding: padding,
-            decoration: BoxDecoration(
-              color: isDark
-                  ? tokens.surface.withValues(alpha: 0.65)
-                  : tokens.surface.withValues(alpha: 0.82),
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              border: Border.all(
-                color: isDark
-                    ? resolvedAccent.withValues(alpha: 0.22)
-                    : resolvedAccent.withValues(alpha: 0.15),
-                width: 1.2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: resolvedAccent.withValues(alpha: 0.08),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                  spreadRadius: -4,
-                ),
-              ],
-            ),
-            child: child,
+      child: Container(
+        padding: padding,
+        decoration: BoxDecoration(
+          color: tokens.surface,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(
+            color: resolvedAccent.withValues(alpha: 0.25),
+            width: 1,
           ),
         ),
+        child: child,
       ),
     );
   }

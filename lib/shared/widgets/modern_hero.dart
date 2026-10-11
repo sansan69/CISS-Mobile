@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_tokens.dart';
+import 'brand_banner.dart';
 
 class ModernHero extends StatelessWidget {
   const ModernHero({
@@ -26,27 +27,16 @@ class ModernHero extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [tokens.primary, tokens.primaryStrong],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: const BorderRadius.vertical(
-          bottom: Radius.circular(32),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: tokens.primary.withValues(alpha: 0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        color: tokens.primary,
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
+          const CissBrandMark(inverse: true, compact: true),
+          const SizedBox(height: 20),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
@@ -57,20 +47,20 @@ class ModernHero extends StatelessWidget {
                     Text(
                       eyebrow,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        letterSpacing: 0.5,
-                        color: Colors.white.withValues(alpha: 0.75),
+                        letterSpacing: 0.3,
+                        color: Colors.white.withValues(alpha: 0.8),
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       title,
                       style: const TextStyle(
-                        fontSize: 26,
-                        fontWeight: FontWeight.w900,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
                         color: Colors.white,
-                        letterSpacing: -0.5,
+                        letterSpacing: -0.3,
                         height: 1.2,
                       ),
                     ),
@@ -80,7 +70,8 @@ class ModernHero extends StatelessWidget {
                         subtitle!,
                         style: TextStyle(
                           fontSize: 13,
-                          color: Colors.white.withValues(alpha: 0.8),
+                          height: 1.4,
+                          color: Colors.white.withValues(alpha: 0.85),
                         ),
                       ),
                     ],
@@ -90,15 +81,11 @@ class ModernHero extends StatelessWidget {
               if (avatarText != null || avatarChild != null) ...[
                 const SizedBox(width: 12),
                 Container(
-                  width: 52,
-                  height: 52,
+                  width: 48,
+                  height: 48,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.12),
-                      width: 1.5,
-                    ),
+                    color: Colors.white.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(24),
                   ),
                   alignment: Alignment.center,
                   child:
@@ -106,7 +93,7 @@ class ModernHero extends StatelessWidget {
                       Text(
                         avatarText ?? '',
                         style: const TextStyle(
-                          fontSize: 20,
+                          fontSize: 18,
                           fontWeight: FontWeight.w800,
                           color: Colors.white,
                         ),

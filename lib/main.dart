@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'app/app.dart';
 import 'core/fcm/providers.dart';
+import 'core/auth/legacy_biometric_credential_cleanup.dart';
 import 'core/location/background_tracking_service.dart';
 import 'core/offline/offline_queue.dart';
 import 'core/offline/draft_service.dart';
@@ -23,10 +24,18 @@ Future<void> main() async {
 
   // ── Crash reporting ───────────────────────────────────────────────────────
   FlutterError.onError = (details) {
-    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    try {
+      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    } catch (_) {
+      FlutterError.dumpErrorToConsole(details);
+    }
   };
   PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    try {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    } catch (_) {
+      debugPrint('Unhandled platform error before Crashlytics init: $error');
+    }
     return true;
   };
 
@@ -35,12 +44,17 @@ Future<void> main() async {
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   final container = ProviderContainer();
+  await container
+      .read(legacyBiometricCredentialCleanupProvider)
+      .purgeLegacyCredentials();
   final queue = container.read(offlineQueueProvider);
   final cipher = await queue.getEncryptionCipher();
 
   await Hive.initFlutter();
   await Hive.openBox<Map>(OfflineQueue.boxName, encryptionCipher: cipher);
-  await Hive.openBox<Map>(DraftService.boxName); // Non-encrypted for high-frequency drafts
+  await Hive.openBox<Map>(
+    DraftService.boxName,
+  ); // Non-encrypted for high-frequency drafts
   await container.read(appSettingsControllerProvider.notifier).init(cipher);
 
   try {
@@ -50,13 +64,18 @@ Future<void> main() async {
 
     // If a region was previously selected, initialize the regional Firebase app
     try {
-      final savedRegion = await container.read(regionServiceProvider).getSavedRegion();
+      final savedRegion =
+          await container.read(regionServiceProvider).getSavedRegion();
       if (savedRegion != null && savedRegion != 'KL') {
-        final config = await container.read(regionServiceProvider).fetchRegionConfig(savedRegion);
-        if (config != null) {
-          await container.read(regionServiceProvider).initRegionalFirebase(config);
-          await container.read(regionServiceProvider).saveRegionPreference(savedRegion, region: config);
+        final config = await container
+            .read(regionServiceProvider)
+            .fetchRegionConfig(savedRegion);
+        if (config == null) {
+          throw StateError('Saved regional configuration is unavailable.');
         }
+        await container
+            .read(regionActivationServiceProvider)
+            .activateRegion(config);
       }
     } catch (e) {
       debugPrint('Regional Firebase init error: $e');
@@ -67,8 +86,9 @@ Future<void> main() async {
     // is initialized from permission_onboarding_screen.dart after the user grants
     // the permission. On subsequent launches (permission already granted) we init
     // here normally. On iOS there is no such restriction.
-    final bool canInitTracking = defaultTargetPlatform != TargetPlatform.android
-        || await Permission.notification.isGranted;
+    final bool canInitTracking =
+        defaultTargetPlatform != TargetPlatform.android ||
+        await Permission.notification.isGranted;
 
     if (canInitTracking) {
       await BackgroundTrackingService.initialize();
@@ -76,10 +96,13 @@ Future<void> main() async {
 
     container.read(syncServiceProvider).start();
     container.read(refreshControllerProvider).start();
-    await container.read(notificationServiceProvider).init().timeout(
-      const Duration(seconds: 5),
-      onTimeout: () => debugPrint('Notification initialization timed out'),
-    );
+    await container
+        .read(notificationServiceProvider)
+        .init()
+        .timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => debugPrint('Notification initialization timed out'),
+        );
   } catch (e) {
     debugPrint('Initialization error: $e');
   }

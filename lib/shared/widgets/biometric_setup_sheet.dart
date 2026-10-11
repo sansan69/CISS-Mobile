@@ -10,17 +10,15 @@ import '../../../core/models/auth_session.dart';
 import '../../features/auth/application/biometric_setup_controller.dart';
 import '../../../shared/widgets/status_chip.dart';
 
-/// Fingerprint unlock enrollment sheet — the "register your fingerprint"
-/// surface for guards and field officers.
+/// Biometric app-lock enrollment sheet for guards and field officers.
 ///
 /// Guides the user through the industry-standard enable flow:
-/// 1. Device has a fingerprint scanner (optical/ultrasonic) — verified via
-///    [FingerprintAvailability]; face/iris-only devices are rejected.
-/// 2. If no fingerprint is enrolled on the device, deep-link to the OS
-///    fingerprint enrollment screen.
-/// 3. Enable: verify PIN/password against the backend, then a fingerprint
-///    gesture, then bind the credential to the saved account.
-/// 4. Disable: confirm with a fingerprint gesture, then remove the binding.
+/// 1. Device has an enrolled biometric — verified via
+///    [FingerprintAvailability].
+/// 2. If no qualifying biometric is enrolled, deep-link to device enrollment.
+/// 3. Enable: verify PIN/password against the backend, then confirm a strong
+///    biometric gesture before enabling the account's app lock.
+/// 4. Disable: confirm with a biometric gesture before clearing it.
 class BiometricSetupSheet extends ConsumerStatefulWidget {
   const BiometricSetupSheet({super.key, required this.session});
 
@@ -44,9 +42,7 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref
-          .read(biometricSetupProvider.notifier)
-          .load(session: widget.session);
+      ref.read(biometricSetupProvider.notifier).load(session: widget.session);
     });
   }
 
@@ -57,12 +53,16 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
   }
 
   Future<void> _enable() async {
-    final password = _passwordController.text.trim();
+    final enteredCredential = _passwordController.text;
+    // Guard PINs are normalized; Field Officer passwords are opaque and must
+    // reach Firebase exactly as the officer entered them.
+    final password = _isGuard ? enteredCredential.trim() : enteredCredential;
     if (password.isEmpty) {
       setState(() {
-        _message = _isGuard
-            ? 'Enter your duty PIN to continue.'
-            : 'Enter your account password to continue.';
+        _message =
+            _isGuard
+                ? 'Enter your duty PIN to continue.'
+                : 'Enter your account password to continue.';
         _messageIsError = true;
       });
       return;
@@ -158,7 +158,7 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Fingerprint unlock',
+                          'Biometric app lock',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w800,
@@ -179,10 +179,7 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
                     ),
                   ),
                   if (state.accountEnabled)
-                    const StatusChip(
-                      label: 'ON',
-                      tone: StatusChipTone.success,
-                    ),
+                    const StatusChip(label: 'ON', tone: StatusChipTone.success),
                 ],
               ),
               const SizedBox(height: 18),
@@ -191,20 +188,19 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
                   availability == FingerprintAvailability.unknown) ...[
                 _InfoBlock(
                   icon: Icons.smartphone_rounded,
-                  title: 'No fingerprint scanner',
+                  title: 'No biometric authentication available',
                   message:
-                      'This device does not have a fingerprint sensor '
-                      '(optical or ultrasonic). Fingerprint unlock is not '
-                      'available here.',
+                      'This device does not have an enrolled biometric '
+                      'available for app lock.',
                 ),
               ] else if (availability ==
                   FingerprintAvailability.notEnrolled) ...[
                 _InfoBlock(
                   icon: Icons.fingerprint_rounded,
-                  title: 'No fingerprint set up on this device',
+                  title: 'No biometric set up on this device',
                   message:
-                      'Register a fingerprint in your phone Settings first, '
-                      'then come back to enable fingerprint unlock.',
+                      'Register a biometric in your phone Settings '
+                      'first, then come back to enable the app lock.',
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -212,7 +208,7 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
                   child: OutlinedButton.icon(
                     onPressed: _openFingerprintSettings,
                     icon: const Icon(Icons.settings_rounded, size: 18),
-                    label: const Text('OPEN FINGERPRINT SETTINGS'),
+                    label: const Text('OPEN BIOMETRIC SETTINGS'),
                     style: OutlinedButton.styleFrom(
                       minimumSize: const Size.fromHeight(48),
                     ),
@@ -222,11 +218,11 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
                 if (state.accountEnabled) ...[
                   _InfoBlock(
                     icon: Icons.check_circle_rounded,
-                    title: 'Fingerprint unlock is on',
+                    title: 'Biometric app lock is on',
                     message:
-                        'Sign in with your fingerprint on this device. '
-                        'Your PIN or password is stored securely on-device '
-                        'and is only released after a fingerprint match.',
+                        'Biometric authentication is required to reopen this active '
+                        'account session on this device. Your PIN or password '
+                        'is not stored on-device.',
                     tone: _InfoTone.success,
                   ),
                   const SizedBox(height: 12),
@@ -235,7 +231,7 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
                     child: OutlinedButton.icon(
                       onPressed: _verifying ? null : _disable,
                       icon: const Icon(Icons.fingerprint_rounded, size: 18),
-                      label: const Text('DISABLE FINGERPRINT UNLOCK'),
+                      label: const Text('DISABLE STRONG BIOMETRIC APP LOCK'),
                       style: OutlinedButton.styleFrom(
                         minimumSize: const Size.fromHeight(48),
                         foregroundColor: tokens.danger,
@@ -246,21 +242,23 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
                 ] else ...[
                   _InfoBlock(
                     icon: Icons.shield_rounded,
-                    title: 'Register your fingerprint',
-                    message: _isGuard
-                        ? 'Enter your duty PIN to verify, then place your '
-                            'finger on the scanner to register.'
-                        : 'Enter your account password to verify, then place '
-                            'your finger on the scanner to register.',
+                    title: 'Enable biometric app lock',
+                    message:
+                        _isGuard
+                            ? 'Enter your duty PIN to verify, then verify your '
+                                'biometric authentication to enable the app lock.'
+                            : 'Enter your account password to verify, then verify '
+                                'biometric authentication to enable the app lock.',
                   ),
                   const SizedBox(height: 14),
                   TextField(
                     controller: _passwordController,
                     obscureText: true,
                     enabled: !_verifying,
-                    keyboardType: _isGuard
-                        ? TextInputType.number
-                        : TextInputType.visiblePassword,
+                    keyboardType:
+                        _isGuard
+                            ? TextInputType.number
+                            : TextInputType.visiblePassword,
                     decoration: InputDecoration(
                       labelText: _isGuard ? 'Duty PIN' : 'Account password',
                       helperText:
@@ -275,32 +273,30 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
                   ),
                   const SizedBox(height: 12),
                   if (_message != null) ...[
-                    _MessageLine(
-                      message: _message!,
-                      isError: _messageIsError,
-                    ),
+                    _MessageLine(message: _message!, isError: _messageIsError),
                     const SizedBox(height: 8),
                   ],
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
                       onPressed: _verifying ? null : _enable,
-                      icon: _verifying
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
+                      icon:
+                          _verifying
+                              ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
                                 ),
-                              ),
-                            )
-                          : const Icon(Icons.fingerprint_rounded, size: 18),
+                              )
+                              : const Icon(Icons.fingerprint_rounded, size: 18),
                       label: Text(
                         _verifying
                             ? 'VERIFYING...'
-                            : 'ENABLE FINGERPRINT UNLOCK',
+                            : 'ENABLE STRONG BIOMETRIC APP LOCK',
                       ),
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(48),
@@ -309,10 +305,7 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
                   ),
                   if (_message != null && !_messageIsError) ...[
                     const SizedBox(height: 8),
-                    _MessageLine(
-                      message: _message!,
-                      isError: false,
-                    ),
+                    _MessageLine(message: _message!, isError: false),
                   ],
                 ],
               ],
@@ -320,11 +313,8 @@ class _BiometricSetupSheetState extends ConsumerState<BiometricSetupSheet> {
               const SizedBox(height: 8),
               Center(
                 child: Text(
-                  'Fingerprint data never leaves your device.',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: tokens.inkMuted,
-                  ),
+                  'Biometric data never leaves your device.',
+                  style: TextStyle(fontSize: 11, color: tokens.inkMuted),
                 ),
               ),
             ],
@@ -354,7 +344,8 @@ class _InfoBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
     final color = tone == _InfoTone.success ? tokens.success : tokens.primary;
-    final soft = tone == _InfoTone.success ? tokens.successSoft : tokens.primarySoft;
+    final soft =
+        tone == _InfoTone.success ? tokens.successSoft : tokens.primarySoft;
 
     return Container(
       width: double.infinity,

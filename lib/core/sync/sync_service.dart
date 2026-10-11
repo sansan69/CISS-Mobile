@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' as foundation;
 
 import '../network/mobile_repository.dart';
+import '../network/api_client.dart';
 import '../location/background_tracking_service.dart';
 import '../offline/offline_queue.dart';
 import '../offline/offline_request.dart';
@@ -125,33 +126,66 @@ class SyncService {
     var currentRequest = request;
     try {
       final dio = _repository.apiClient.dio;
+      final body = Map<String, dynamic>.from(request.body);
+      var verificationToken =
+          body['attendanceVerificationToken'] is String
+              ? body['attendanceVerificationToken'] as String
+              : null;
+      final isPublicAttendance =
+          request.path == '/api/attendance/submit' &&
+          verificationToken?.trim().isNotEmpty == true;
+
+      // Public attendance proofs intentionally expire. A request can remain
+      // in the offline queue longer than that lifetime, so refresh the proof
+      // from the canonical identity endpoint before replaying the upload.
+      // Keep the original queued token if re-identification returns no proof;
+      // the normal server response will still determine whether the request
+      // can be accepted.
+      if (isPublicAttendance) {
+        final employeeId = body['employeeId']?.toString().trim() ?? '';
+        final phoneNumber = body['employeePhoneNumber']?.toString().trim();
+        if (employeeId.isNotEmpty) {
+          final identified = await _repository.fetchAttendanceEmployee(
+            employeeId,
+            phoneNumber,
+          );
+          final freshToken = identified?.verificationToken;
+          if (freshToken != null && freshToken.isNotEmpty) {
+            verificationToken = freshToken;
+            body['attendanceVerificationToken'] = freshToken;
+          }
+        }
+      }
+
       final options = Options(
         method: request.method,
-        headers: await _repository.authHeaders(),
+        headers: isPublicAttendance ? null : await _repository.authHeaders(),
+        extra:
+            isPublicAttendance ? <String, dynamic>{kSkipApiAuth: true} : null,
       );
-
-      final body = Map<String, dynamic>.from(request.body);
       bool bodyChanged = false;
 
       // 1. Handle single photo upload if present
       if (body.containsKey('photoDataUrl')) {
         final dataUrl = body.remove('photoDataUrl') as String;
         final employeeDocId = body['employeeDocId'] as String?;
-        final uploadPath =
-            employeeDocId != null
-                ? 'employees/$employeeDocId/attendance/${DateTime.now().millisecondsSinceEpoch}.jpg'
-                : 'temp/attendance/${DateTime.now().millisecondsSinceEpoch}.jpg';
+        if (employeeDocId == null || employeeDocId.trim().isEmpty) {
+          throw Exception('Attendance photo upload requires an employee id.');
+        }
 
         final result = await _repository.uploadAttendancePhoto(
-          path: uploadPath,
+          employeeDocId: employeeDocId.trim(),
           dataUrl: dataUrl,
           siteId: body['siteId'] as String? ?? '',
+          verificationToken: isPublicAttendance ? verificationToken : null,
+          authenticated: !isPublicAttendance,
         );
         final uploadedUrl = result['url'];
         if (uploadedUrl == null || uploadedUrl is! String) {
           throw Exception('Photo upload did not return a URL');
         }
         body['photoUrl'] = uploadedUrl;
+        body['photoStoragePath'] = result['path'];
         bodyChanged = true;
       }
 
@@ -185,6 +219,29 @@ class SyncService {
           photoUrls.add(url);
         }
         body['photoUrls'] = photoUrls;
+        bodyChanged = true;
+      }
+
+      if (body.containsKey('clientReportDataUrls')) {
+        final dataUrls = List<String>.from(
+          body.remove('clientReportDataUrls') as List,
+        );
+        String? clientReportUrl;
+        final ts = DateTime.now().millisecondsSinceEpoch;
+        final uid = _repository.currentUser?.uid ?? 'unknown';
+        for (var i = 0; i < dataUrls.length; i++) {
+          final result = await _repository.uploadReportPhoto(
+            path:
+                'foReports/trainingReportFiles/$uid/${ts}_client_report_$i.jpg',
+            dataUrl: dataUrls[i],
+          );
+          final url = result['url'];
+          if (url is! String || url.isEmpty) {
+            throw Exception('Client report upload did not return a URL');
+          }
+          clientReportUrl = url;
+        }
+        if (clientReportUrl != null) body['clientReportUrl'] = clientReportUrl;
         bodyChanged = true;
       }
 

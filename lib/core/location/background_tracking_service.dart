@@ -486,7 +486,7 @@ void onStart(ServiceInstance service) async {
   //  - 10 min while stable in-zone (battery saver)
   //  - 15 min while stable in-zone and battery below 20%
 
-  Duration _nextInterval({
+  Duration nextInterval({
     required bool inside,
     double? speed,
     double? batteryLevel,
@@ -499,10 +499,10 @@ void onStart(ServiceInstance service) async {
     return const Duration(minutes: 10);
   }
 
-  void _armHeartbeatTimer() {
+  void armHeartbeatTimer() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer(
-      _nextInterval(
+      nextInterval(
         inside: isInside,
         speed: _heartbeatLastSpeed,
         batteryLevel: _heartbeatLastBatteryLevel,
@@ -511,7 +511,7 @@ void onStart(ServiceInstance service) async {
         try {
           await sendHeartbeat();
         } finally {
-          _armHeartbeatTimer();
+          armHeartbeatTimer();
         }
       },
     );
@@ -520,7 +520,7 @@ void onStart(ServiceInstance service) async {
   // Send a reading as soon as a shift starts or is recovered, then keep the
   // adaptive cadence running for the live operations dashboard.
   unawaited(sendHeartbeat());
-  _armHeartbeatTimer();
+  armHeartbeatTimer();
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

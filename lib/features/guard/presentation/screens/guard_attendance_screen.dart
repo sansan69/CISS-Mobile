@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -21,6 +20,8 @@ import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
+import '../../../../../shared/widgets/success_overlay.dart';
+import '../../../../../shared/widgets/sync_status_badge.dart';
 import '../widgets/guard_portal_widgets.dart';
 import 'guard_profile_screen.dart';
 
@@ -40,10 +41,19 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   ShiftTemplateModel? _shift;
   String _status = 'In';
   String? _error;
+  bool _isSuccess = false;
   bool _busy = false;
   String? _photoPath;
   String? _clientRequestId; // Stable across retries for idempotency
   Position? _position;
+  final TextEditingController _notesController = TextEditingController();
+  bool _showNotesField = false;
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -324,6 +334,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   }
 
   Future<void> _submitAttendance(GuardProfileModel profile) async {
+    setState(() => _isSuccess = false);
     if (_site == null) {
       setState(() => _error = 'Please select a site.');
       return;
@@ -412,74 +423,106 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         'geofenceRadiusAtTime': _site!.geofenceRadiusMeters,
         'sourceCollection': _site!.sourceCollection,
         'photoCapturedAt': DateTime.now().toUtc().toIso8601String(),
+        'locationCapturedAt': DateTime.now().toUtc().toIso8601String(),
+        'attendanceAttemptId': _clientRequestId ??= _uuid.v4(),
         'deviceInfo': <String, dynamic>{'userAgent': 'flutter-mobile'},
         'clientRequestId': _clientRequestId ??= _uuid.v4(),
+        if (_notesController.text.trim().isNotEmpty) ...{
+          'overrideReason': _notesController.text.trim(),
+          'dutyNotes': _notesController.text.trim(),
+        },
       };
 
       try {
-        final uploadPath =
-            'employees/${profile.id.isNotEmpty ? profile.id : profile.employeeId}/attendance/${DateTime.now().millisecondsSinceEpoch}.jpg';
         final uploadResult = await ref
             .read(mobileRepositoryProvider)
             .uploadAttendancePhoto(
-              path: uploadPath,
+              employeeDocId:
+                  profile.id.isNotEmpty ? profile.id : profile.employeeId,
               dataUrl: dataUrl,
               siteId: _site!.id,
+              attemptId: _clientRequestId,
             );
 
         await ref.read(mobileRepositoryProvider).submitAttendance({
           ...payload,
           'photoUrl': uploadResult['url'],
+          'photoStoragePath': uploadResult['path'],
         });
 
         if (_status == 'In') {
+          // Start the background tracking service (best-effort — a failure
+          // here must never fail the check-in itself).
           if (_site!.lat != null && _site!.lng != null) {
-            await BackgroundTrackingService.start(
-              siteId: _site!.id,
-              siteName: _site!.siteName,
-              lat: _site!.lat!,
-              lng: _site!.lng!,
-              radiusMeters: _site!.geofenceRadiusMeters.toDouble(),
-              employeeId: profile.employeeId,
-              employeeDocId: profile.id,
-              guardName: profile.fullName,
-              clientName: profile.clientName,
-              district: profile.district,
-            );
+            try {
+              await BackgroundTrackingService.start(
+                siteId: _site!.id,
+                siteName: _site!.siteName,
+                lat: _site!.lat!,
+                lng: _site!.lng!,
+                radiusMeters: _site!.geofenceRadiusMeters.toDouble(),
+                employeeId: profile.employeeId,
+                employeeDocId: profile.id,
+                guardName: profile.fullName,
+                clientName: profile.clientName,
+                district: profile.district,
+              );
+            } catch (error) {
+              debugPrint(
+                'Tracking start failed (attendance still saved): $error',
+              );
+            }
           } else {
             debugPrint('Tracking skipped: site coordinates missing.');
           }
-          // Notify field officers
-          await ref
-              .read(notificationServiceProvider)
-              .triggerSystemNotification(
-                type: 'attendance_marked',
-                title:
-                    'Guard ${_status == 'In' ? 'Checked In' : 'Checked Out'}',
-                body:
-                    '${profile.fullName} marked ${_status.toLowerCase()} at ${_site!.siteName}',
-                role: 'fieldOfficer',
-                district: profile.district,
-                data: {'employeeId': profile.employeeId, 'siteId': _site!.id},
-              );
+          // Notify field officers — best-effort. The server rejects
+          // guard-created system notifications, so this must never surface
+          // as a check-in failure.
+          try {
+            await ref
+                .read(notificationServiceProvider)
+                .triggerSystemNotification(
+                  type: 'attendance_marked',
+                  title:
+                      'Guard ${_status == 'In' ? 'Checked In' : 'Checked Out'}',
+                  body:
+                      '${profile.fullName} marked ${_status.toLowerCase()} at ${_site!.siteName}',
+                  role: 'fieldOfficer',
+                  district: profile.district,
+                  data: {'employeeId': profile.employeeId, 'siteId': _site!.id},
+                );
+          } catch (error) {
+            debugPrint(
+              'FO attendance notification failed (attendance saved): $error',
+            );
+          }
         } else {
           await BackgroundTrackingService.stop();
         }
 
         if (mounted) {
           Haptics.heavy();
+          _notesController.clear();
           setState(() {
             _photoPath = null;
-            _error = 'Attendance submitted successfully.';
+            _isSuccess = true;
+            _error = null;
+            _showNotesField = false;
+            // After a successful punch the next action is the opposite one,
+            // so the form reflects the guard's current clocked state.
+            _status = _status == 'In' ? 'Out' : 'In';
           });
           ref.invalidate(attendanceHistoryProvider);
+          unawaited(
+            SuccessOverlay.show(
+              context,
+              title: _status == 'In' ? 'Checked in' : 'Checked out',
+              message: 'Your attendance was recorded.',
+            ),
+          );
         }
       } catch (uploadOrSubmitError) {
-        if (uploadOrSubmitError is DioException &&
-            (uploadOrSubmitError.type == DioExceptionType.connectionTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.sendTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.receiveTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.connectionError)) {
+        if (CissError.isRetryableNetworkError(uploadOrSubmitError)) {
           // If network failed, queue the request WITH the base64 photo data.
           // The backend /api/attendance/submit must be updated to handle
           // 'photoDataUrl' directly if 'photoUrl' is missing.
@@ -498,7 +541,10 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
             if (mounted) {
               setState(() {
                 _photoPath = null;
-                _error = 'Offline: Attendance queued for sync.';
+                _isSuccess = true;
+                _error =
+                    'No internet — your attendance is saved and will be sent automatically when connected.';
+                _status = _status == 'In' ? 'Out' : 'In';
               });
               ref.invalidate(attendanceHistoryProvider);
             }
@@ -530,11 +576,15 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     return ScreenScaffold(
       title: 'Attendance',
       subtitle: 'Mark attendance with site, duty point, shift, photo, and GPS',
+      showBackButton: false,
       onRefresh: () async {
         ref.invalidate(attendanceSitesProvider);
         ref.invalidate(guardProfileProvider);
       },
       actions: <Widget>[
+        SyncStatusBadge(
+          onTap: () => ref.read(syncServiceProvider).processQueue(),
+        ),
         IconButton(
           onPressed: () => ref.invalidate(attendanceSitesProvider),
           icon: const Icon(Icons.refresh_rounded),
@@ -650,13 +700,13 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                       items: <GuardMetricItem>[
                         GuardMetricItem(
                           label: 'Mode',
-                          value: _status == 'In' ? 'Check-in' : 'Check-out',
+                          value: _status == 'In' ? 'In' : 'Out',
                           icon:
                               _status == 'In'
                                   ? Icons.login_rounded
                                   : Icons.logout_rounded,
                           color:
-                              _status == 'In' ? tokens.success : tokens.warning,
+                              _status == 'In' ? tokens.success : tokens.primary,
                         ),
                         GuardMetricItem(
                           label: 'GPS',
@@ -723,6 +773,13 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                     ],
                     // ── Stale session warning ──────────────────────────────
                     _StaleSessionBanner(),
+                    // ── 2026 Geofence Radar Card ───────────────────────────
+                    _GeofenceRadarCard(
+                      site: _site,
+                      position: _position,
+                      onRecalibrate: _captureLocation,
+                    ),
+                    const SizedBox(height: 14),
                     GuardFormCard(
                       children: <Widget>[
                         InkWell(
@@ -736,121 +793,246 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                                       ? '${_site!.siteName} • ${_site!.district}'
                                       : '',
                               decoration: const InputDecoration(
-                                labelText: 'Site',
+                                labelText: 'Assigned Site / Post',
                                 suffixIcon: Icon(Icons.search_rounded),
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<DutyPointModel>(
-                          isExpanded: true,
-                          value: _dutyPoint,
-                          items:
-                              dutyPoints
-                                  .map(
-                                    (
-                                      dutyPoint,
-                                    ) => DropdownMenuItem<DutyPointModel>(
-                                      value: dutyPoint,
-                                      child: Text(
-                                        '${dutyPoint.name} • ${dutyPoint.dutyHours} hrs',
+                        if (dutyPoints.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<DutyPointModel>(
+                            isExpanded: true,
+                            value: _dutyPoint,
+                            items:
+                                dutyPoints
+                                    .map(
+                                      (
+                                        dutyPoint,
+                                      ) => DropdownMenuItem<DutyPointModel>(
+                                        value: dutyPoint,
+                                        child: Text(
+                                          '${dutyPoint.name} • ${dutyPoint.dutyHours} hrs',
+                                        ),
                                       ),
+                                    )
+                                    .toList(),
+                            onChanged: (dutyPoint) {
+                              setState(() {
+                                _dutyPoint = dutyPoint;
+                                _shift = resolveAttendanceShiftTemplate(
+                                  dutyPoint?.shiftTemplates ??
+                                      const <ShiftTemplateModel>[],
+                                );
+                              });
+                            },
+                            decoration: const InputDecoration(
+                              labelText: 'Duty Point',
+                            ),
+                          ),
+                        ],
+                        if ((_dutyPoint?.shiftTemplates ??
+                                const <ShiftTemplateModel>[])
+                            .isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<ShiftTemplateModel>(
+                            isExpanded: true,
+                            value: _shift,
+                            items:
+                                (_dutyPoint?.shiftTemplates ??
+                                        const <ShiftTemplateModel>[])
+                                    .map(
+                                      (
+                                        shift,
+                                      ) => DropdownMenuItem<ShiftTemplateModel>(
+                                        value: shift,
+                                        child: Text(
+                                          '${shift.label} • ${shift.startTime}-${shift.endTime}',
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                            onChanged:
+                                (shift) => setState(() => _shift = shift),
+                            decoration: const InputDecoration(
+                              labelText: 'Shift Template',
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        // ── Tactical In/Out Switcher ──
+                        Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  Haptics.light();
+                                  setState(() => _status = 'In');
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: _status == 'In'
+                                        ? tokens.glowEmerald.withValues(alpha: 0.15)
+                                        : tokens.surfaceMuted,
+                                    borderRadius: BorderRadius.circular(AppRadius.md),
+                                    border: Border.all(
+                                      color: _status == 'In'
+                                          ? tokens.glowEmerald
+                                          : tokens.border,
+                                      width: _status == 'In' ? 1.5 : 1.0,
                                     ),
-                                  )
-                                  .toList(),
-                          onChanged:
-                              dutyPoints.isEmpty
-                                  ? null
-                                  : (dutyPoint) {
-                                    setState(() {
-                                      _dutyPoint = dutyPoint;
-                                      _shift = resolveAttendanceShiftTemplate(
-                                        dutyPoint?.shiftTemplates ??
-                                            const <ShiftTemplateModel>[],
-                                      );
-                                    });
-                                  },
-                          decoration: const InputDecoration(
-                            labelText: 'Duty Point',
+                                    boxShadow: _status == 'In'
+                                        ? AppShadows.glow(tokens.glowEmerald)
+                                        : null,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.login_rounded,
+                                        size: 18,
+                                        color: _status == 'In'
+                                            ? tokens.glowEmerald
+                                            : tokens.inkMuted,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'CLOCK IN',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.8,
+                                          color: _status == 'In'
+                                              ? tokens.glowEmerald
+                                              : tokens.inkMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  Haptics.light();
+                                  setState(() => _status = 'Out');
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: _status == 'Out'
+                                        ? tokens.glowAmber.withValues(alpha: 0.15)
+                                        : tokens.surfaceMuted,
+                                    borderRadius: BorderRadius.circular(AppRadius.md),
+                                    border: Border.all(
+                                      color: _status == 'Out'
+                                          ? tokens.glowAmber
+                                          : tokens.border,
+                                      width: _status == 'Out' ? 1.5 : 1.0,
+                                    ),
+                                    boxShadow: _status == 'Out'
+                                        ? AppShadows.glow(tokens.glowAmber)
+                                        : null,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.logout_rounded,
+                                        size: 18,
+                                        color: _status == 'Out'
+                                            ? tokens.glowAmber
+                                            : tokens.inkMuted,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'CLOCK OUT',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.8,
+                                          color: _status == 'Out'
+                                              ? tokens.glowAmber
+                                              : tokens.inkMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        // ── Biometric HUD Photo Card ──
+                        _BiometricPhotoCard(
+                          photoPath: _photoPath,
+                          onCapture: _capturePhoto,
+                        ),
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed:
+                                () => setState(
+                                  () => _showNotesField = !_showNotesField,
+                                ),
+                            icon: Icon(
+                              _showNotesField
+                                  ? Icons.keyboard_arrow_up_rounded
+                                  : Icons.add_comment_outlined,
+                              size: 16,
+                              color: tokens.primary,
+                            ),
+                            label: Text(
+                              _showNotesField
+                                  ? 'Hide duty notes'
+                                  : 'Add handover notes (optional)',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: tokens.primary,
+                              ),
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<ShiftTemplateModel>(
-                          isExpanded: true,
-                          value: _shift,
-                          items:
-                              (_dutyPoint?.shiftTemplates ??
-                                      const <ShiftTemplateModel>[])
-                                  .map(
-                                    (
-                                      shift,
-                                    ) => DropdownMenuItem<ShiftTemplateModel>(
-                                      value: shift,
-                                      child: Text(
-                                        '${shift.label} • ${shift.startTime}-${shift.endTime}',
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                          onChanged:
-                              (_dutyPoint?.shiftTemplates.isNotEmpty == true)
-                                  ? (shift) => setState(() => _shift = shift)
-                                  : null,
-                          decoration: const InputDecoration(labelText: 'Shift'),
-                        ),
-                        const SizedBox(height: 12),
-                        SegmentedButton<String>(
-                          segments: const <ButtonSegment<String>>[
-                            ButtonSegment<String>(
-                              value: 'In',
-                              label: Text('Mark In'),
-                            ),
-                            ButtonSegment<String>(
-                              value: 'Out',
-                              label: Text('Mark Out'),
-                            ),
-                          ],
-                          selected: <String>{_status},
-                          onSelectionChanged: (Set<String> selected) {
-                            setState(() => _status = selected.first);
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 12,
-                          children: <Widget>[
-                            OutlinedButton.icon(
-                              onPressed: _captureLocation,
-                              icon: const Icon(Icons.my_location_rounded),
-                              label: Text(
-                                _position == null
-                                    ? 'Capture GPS'
-                                    : 'GPS ${_position!.latitude.toStringAsFixed(4)}, ${_position!.longitude.toStringAsFixed(4)}',
+                        if (_showNotesField) ...[
+                          const SizedBox(height: 4),
+                          TextField(
+                            controller: _notesController,
+                            maxLines: 2,
+                            maxLength: 500,
+                            decoration: InputDecoration(
+                              hintText:
+                                  'e.g. Relieved Guard Rajesh, perimeter secure, key handed over...',
+                              labelText: 'Duty / Handover Notes',
+                              hintStyle: TextStyle(
+                                fontSize: 12,
+                                color: tokens.inkMuted,
+                              ),
+                              filled: true,
+                              fillColor: tokens.surfaceMuted,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.sm,
+                                ),
+                                borderSide: BorderSide(color: tokens.border),
                               ),
                             ),
-                            OutlinedButton.icon(
-                              onPressed: _capturePhoto,
-                              icon: const Icon(Icons.camera_alt_rounded),
-                              label: Text(
-                                _photoPath == null
-                                    ? 'Capture Photo'
-                                    : 'Photo captured',
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
+                          ),
+                        ],
+                        const SizedBox(height: 8),
                         if (_error != null)
                           Container(
                             padding: const EdgeInsets.all(AppSpacing.sm),
                             decoration: BoxDecoration(
                               color:
-                                  _error!.toLowerCase().contains('success') ||
-                                          _error!.toLowerCase().contains(
-                                            'queued',
-                                          )
+                                  _isSuccess
                                       ? tokens.successSoft
                                       : tokens.dangerSoft,
                               borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -859,36 +1041,86 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                               _error!,
                               style: TextStyle(
                                 color:
-                                    _error!.toLowerCase().contains('success') ||
-                                            _error!.toLowerCase().contains(
-                                              'queued',
-                                            )
-                                        ? tokens.success
-                                        : tokens.danger,
+                                    _isSuccess ? tokens.success : tokens.danger,
                               ),
                             ),
                           ),
-                        const SizedBox(height: 12),
-                        SizedBox(
-                          width: double.infinity,
-                          child: FilledButton(
-                            onPressed:
-                                _busy ? null : () => _submitAttendance(profile),
-                            child:
-                                _busy
-                                    ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator.adaptive(
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                    : Text(
-                                      'Submit ${_status == 'In' ? 'Check-In' : 'Check-Out'}',
+                        const SizedBox(height: 14),
+                        // ── Tactile Glowing Submit Button ──
+                        GestureDetector(
+                          onTap: _busy ? null : () => _submitAttendance(profile),
+                          child: Container(
+                            width: double.infinity,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: _status == 'In'
+                                    ? [const Color(0xFF059669), tokens.glowEmerald]
+                                    : [const Color(0xFFD97706), tokens.glowAmber],
+                              ),
+                              borderRadius: BorderRadius.circular(AppRadius.pill),
+                              boxShadow: _status == 'In'
+                                  ? AppShadows.glow(tokens.glowEmerald)
+                                  : AppShadows.glow(tokens.glowAmber),
+                            ),
+                            child: Center(
+                              child: _busy
+                                  ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator.adaptive(
+                                      strokeWidth: 2.5,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                     ),
+                                  )
+                                  : Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        _status == 'In'
+                                            ? Icons.fingerprint_rounded
+                                            : Icons.verified_user_rounded,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'CONFIRM & SUBMIT ${_status == 'In' ? 'CLOCK-IN' : 'CLOCK-OUT'}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 14,
+                                          letterSpacing: 0.8,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                            ),
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 12),
+                        // ── Offline Resilience Badge ──
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.cloud_done_rounded,
+                              size: 14,
+                              color: tokens.glowEmerald,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'ZERO-LOSS OFFLINE QUEUE ACTIVE',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.8,
+                                color: tokens.inkMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
                       ],
                     ),
                     GuardRecordCard(
@@ -1360,9 +1592,9 @@ class _AttendanceHistorySection extends ConsumerWidget {
       statusLabel = 'Late In';
       chipTone = StatusChipTone.warning;
     } else if (isOut) {
-      accentColor = tokens.warning;
+      accentColor = tokens.primary;
       statusLabel = 'Check-out';
-      chipTone = StatusChipTone.warning;
+      chipTone = StatusChipTone.info;
     } else if (isAbsent) {
       accentColor = tokens.danger;
       statusLabel = 'Absent';
@@ -1551,6 +1783,379 @@ class _AttendanceHistorySection extends ConsumerWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _GeofenceRadarCard extends StatelessWidget {
+  const _GeofenceRadarCard({
+    required this.site,
+    required this.position,
+    required this.onRecalibrate,
+  });
+
+  final SiteOptionModel? site;
+  final Position? position;
+  final VoidCallback onRecalibrate;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    final hasSiteCoords = site?.lat != null && site?.lng != null;
+    final hasPosition = position != null;
+
+    double? distanceMeters;
+    bool isInside = false;
+    if (hasSiteCoords && hasPosition) {
+      distanceMeters = Geolocator.distanceBetween(
+        position!.latitude,
+        position!.longitude,
+        site!.lat!,
+        site!.lng!,
+      );
+      isInside = distanceMeters <= site!.geofenceRadiusMeters;
+    }
+
+    final Color toneColor = !hasPosition || site == null
+        ? tokens.inkMuted
+        : isInside
+            ? tokens.glowEmerald
+            : tokens.glowAmber;
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(
+          color: toneColor.withValues(alpha: 0.35),
+          width: 1.2,
+        ),
+        boxShadow: isInside ? AppShadows.glow(tokens.glowEmerald) : null,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: toneColor.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: toneColor.withValues(alpha: 0.4),
+                width: 1.5,
+              ),
+            ),
+            child: Icon(
+              hasPosition && site != null
+                  ? (isInside ? Icons.radar_rounded : Icons.location_off_rounded)
+                  : Icons.my_location_rounded,
+              color: toneColor,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'GEOFENCE RADAR',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.0,
+                        color: toneColor,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (hasPosition && site != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: toneColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                        ),
+                        child: Text(
+                          isInside ? 'SECURED IN ZONE' : 'OUTSIDE ZONE',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: toneColor,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  site == null
+                      ? 'Select an assigned post to calibrate radar'
+                      : !hasPosition
+                          ? 'Awaiting high-precision GPS lock...'
+                          : isInside
+                              ? 'Within perimeter (${distanceMeters!.round()}m from center)'
+                              : 'Distance: ${distanceMeters!.round()}m (Limit: ${site!.geofenceRadiusMeters}m)',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: tokens.ink,
+                  ),
+                ),
+                if (site != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    '${site!.siteName} • ${site!.district}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: tokens.inkMuted,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            onPressed: onRecalibrate,
+            icon: Icon(
+              Icons.refresh_rounded,
+              size: 18,
+              color: tokens.inkMuted,
+            ),
+            tooltip: 'Recalibrate GPS',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BiometricPhotoCard extends StatelessWidget {
+  const _BiometricPhotoCard({
+    required this.photoPath,
+    required this.onCapture,
+  });
+
+  final String? photoPath;
+  final VoidCallback onCapture;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+
+    if (photoPath != null) {
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+            color: tokens.glowEmerald.withValues(alpha: 0.4),
+            width: 1.5,
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          child: Stack(
+            children: [
+              Image.file(
+                File(photoPath!),
+                height: 180,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+              Positioned(
+                top: 10,
+                left: 10,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                    border: Border.all(color: tokens.glowEmerald, width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: tokens.glowEmerald,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'BIOMETRIC VERIFIED',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                          color: tokens.glowEmerald,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                bottom: 10,
+                right: 10,
+                child: GestureDetector(
+                  onTap: onCapture,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.75),
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.camera_alt_rounded, size: 14, color: Colors.white),
+                        SizedBox(width: 6),
+                        Text(
+                          'Retake',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: onCapture,
+      child: Container(
+        height: 130,
+        decoration: BoxDecoration(
+          color: tokens.surfaceMuted.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(AppRadius.card),
+          border: Border.all(
+            color: tokens.specularBorder,
+            width: 1,
+          ),
+        ),
+        child: Stack(
+          children: [
+            // HUD Corner bracket styling
+            Positioned(
+              top: 12,
+              left: 12,
+              child: Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: tokens.glowCyan, width: 2),
+                    left: BorderSide(color: tokens.glowCyan, width: 2),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 12,
+              right: 12,
+              child: Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  border: Border(
+                    top: BorderSide(color: tokens.glowCyan, width: 2),
+                    right: BorderSide(color: tokens.glowCyan, width: 2),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 12,
+              left: 12,
+              child: Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: tokens.glowCyan, width: 2),
+                    left: BorderSide(color: tokens.glowCyan, width: 2),
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 12,
+              right: 12,
+              child: Container(
+                width: 14,
+                height: 14,
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: tokens.glowCyan, width: 2),
+                    right: BorderSide(color: tokens.glowCyan, width: 2),
+                  ),
+                ),
+              ),
+            ),
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: tokens.glowCyan.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: tokens.glowCyan.withValues(alpha: 0.3),
+                        width: 1,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.face_retouching_natural_rounded,
+                      color: tokens.glowCyan,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'CAPTURE BIOMETRIC PHOTO',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                      color: tokens.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'GPS and timestamp automatically embedded',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: tokens.inkMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

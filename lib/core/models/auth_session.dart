@@ -10,7 +10,6 @@ class AuthSession {
     this.email,
     this.employeeDocId,
     this.assignedDistricts = const <String>[],
-    this.clientId,
     this.clientName,
     this.district,
     this.stateCode,
@@ -24,7 +23,6 @@ class AuthSession {
   final String? email;
   final String? employeeDocId;
   final List<String> assignedDistricts;
-  final String? clientId;
   final String? clientName;
   final String? district;
   final String? stateCode;

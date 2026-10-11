@@ -17,12 +17,17 @@ class OfflineQueue extends ChangeNotifier {
       String? key = await _secureStorage.read(key: _keyName);
       if (key == null) {
         final newKey = Hive.generateSecureKey();
-        await _secureStorage.write(key: _keyName, value: base64UrlEncode(newKey));
+        await _secureStorage.write(
+          key: _keyName,
+          value: base64UrlEncode(newKey),
+        );
         return HiveAesCipher(newKey);
       }
       return HiveAesCipher(base64Url.decode(key));
     } catch (e) {
-      debugPrint('Encryption cipher error — queue will operate unencrypted: $e');
+      debugPrint(
+        'Encryption cipher error — queue will operate unencrypted: $e',
+      );
       return null;
     }
   }
@@ -39,7 +44,15 @@ class OfflineQueue extends ChangeNotifier {
     return Hive.box<Map>(boxName);
   }
 
-  int get queueSize => _box.length;
+  /// Whether the persistent queue has been opened by app bootstrap.
+  ///
+  /// Widgets can be built while startup is still recovering from a storage
+  /// or encryption error. Reading the queue count must not crash the whole
+  /// screen in that window; mutating operations still fail loudly until the
+  /// queue is initialized.
+  bool get isInitialized => Hive.isBoxOpen(boxName);
+
+  int get queueSize => isInitialized ? _box.length : 0;
 
   static const int maxQueueSize = 100;
 
@@ -52,7 +65,9 @@ class OfflineQueue extends ChangeNotifier {
     if (_box.length >= maxQueueSize) {
       final oldest = _box.keys.first;
       await _box.delete(oldest);
-      debugPrint('OfflineQueue: evicted oldest request $oldest (max $maxQueueSize reached)');
+      debugPrint(
+        'OfflineQueue: evicted oldest request $oldest (max $maxQueueSize reached)',
+      );
     }
     final id = _uuid.v4();
     final request = OfflineRequest(

@@ -26,24 +26,27 @@ class PortalSurfaceCard extends StatelessWidget {
     return Card(
       margin: margin ?? const EdgeInsets.only(bottom: AppSpacing.xs),
       clipBehavior: Clip.antiAlias,
+      elevation: 0,
+      color: tokens.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         side: BorderSide(
           color:
               accentColor == null
-                  ? tokens.border
-                  : resolvedAccent.withValues(alpha: 0.32),
+                  ? tokens.specularBorder
+                  : resolvedAccent.withValues(alpha: 0.35),
+          width: 1,
         ),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.md),
+        borderRadius: BorderRadius.circular(AppRadius.card),
         child: DecoratedBox(
           decoration: BoxDecoration(
             color:
                 accentColor == null
                     ? tokens.surface
-                    : resolvedAccent.withValues(alpha: 0.035),
+                    : resolvedAccent.withValues(alpha: 0.04),
           ),
           child: Padding(
             padding: padding ?? const EdgeInsets.all(AppSpacing.md),
@@ -76,11 +79,12 @@ class PortalSectionHeading extends StatelessWidget {
         children: <Widget>[
           Expanded(
             child: Text(
-              title.toUpperCase(),
+              title,
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                 color: tokens.inkMuted,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+                fontSize: 13,
               ),
             ),
           ),

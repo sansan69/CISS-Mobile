@@ -1,18 +1,20 @@
 import 'dart:io';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/patrol_models.dart';
 import '../../../../../core/network/providers.dart';
+import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../shared/widgets/camera_capture_screen.dart';
 import '../../../../../shared/widgets/portal_primitives.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/state_block.dart';
+import '../../../../../shared/widgets/sync_status_badge.dart';
+import '../../../../../shared/widgets/time_counter_chip.dart';
 import '../widgets/guard_portal_widgets.dart';
 
 final FutureProvider<GuardPatrolStatusModel> guardPatrolStatusProvider =
@@ -97,9 +99,12 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
         final uploadResult = await ref
             .read(mobileRepositoryProvider)
             .uploadAttendancePhoto(
-              path:
-                  'patrol/${status.employeeId}/${DateTime.now().millisecondsSinceEpoch}.jpg',
+              employeeDocId:
+                  status.employeeDocId.isNotEmpty
+                      ? status.employeeDocId
+                      : status.employeeId,
               dataUrl: dataUrl,
+              siteId: activeDuty.siteId,
             );
         photoUrl = uploadResult['url'] as String?;
       }
@@ -140,13 +145,41 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
       );
     } catch (error) {
       if (!mounted) return;
-      if (error is DioException) {
-        ref
+      if (CissError.isRetryableNetworkError(error)) {
+        // Queue the full activity (patrol point, notes, photo) so the sync
+        // retry records the complete check — mirroring the attendance flow.
+        final queuedPhoto =
+            _photoPath != null
+                ? await ref
+                    .read(mobileRepositoryProvider)
+                    .encodeFileToDataUrl(
+                      await File(_photoPath!).readAsBytes(),
+                      'image/jpeg',
+                    )
+                : null;
+        await ref
             .read(offlineQueueProvider)
             .enqueue(
               path: '/api/guard/patrol',
               method: 'POST',
-              body: <String, dynamic>{'type': type},
+              body: <String, dynamic>{
+                'type': type,
+                'siteId': activeDuty.siteId,
+                // Required by the sync processor to re-upload a queued photo.
+                'employeeDocId':
+                    status.employeeDocId.isNotEmpty
+                        ? status.employeeDocId
+                        : status.employeeId,
+                if (activeDuty.dutyPointId != null)
+                  'dutyPointId': activeDuty.dutyPointId,
+                if (activeDuty.shiftCode != null)
+                  'shiftCode': activeDuty.shiftCode,
+                if (patrolPoint != null) 'patrolPointId': patrolPoint.id,
+                if (queuedPhoto != null) 'photoDataUrl': queuedPhoto,
+                if (_notesController.text.trim().isNotEmpty)
+                  'notes': _notesController.text.trim(),
+                'activityAt': DateTime.now().toUtc().toIso8601String(),
+              },
             );
         setState(() => _error = 'Offline: Patrol activity queued for sync.');
         ref.invalidate(guardPatrolStatusProvider);
@@ -213,6 +246,9 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
           title: 'Patrol',
           subtitle: status.clientName,
           actions: <Widget>[
+            SyncStatusBadge(
+              onTap: () => ref.read(syncServiceProvider).processQueue(),
+            ),
             IconButton(
               onPressed: () => ref.invalidate(guardPatrolStatusProvider),
               icon: const Icon(Icons.refresh_rounded),
@@ -220,7 +256,7 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
           ],
           children: <Widget>[
             GuardHeroPanel(
-              eyebrow: 'Patrol monitor',
+              eyebrow: 'Patrol',
               title:
                   activeDuty == null ? 'No active duty' : activeDuty.siteName,
               subtitle:
@@ -282,17 +318,26 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                         color: tokens.primarySoft,
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Icon(Icons.place_rounded, color: tokens.primaryStrong, size: 22),
+                      child: Icon(
+                        Icons.place_rounded,
+                        color: tokens.primaryStrong,
+                        size: 22,
+                      ),
                     ),
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                          Text(activeDuty.siteName, style: AppTypography.bodyStrong(context)),
+                          Text(
+                            activeDuty.siteName,
+                            style: AppTypography.bodyStrong(context),
+                          ),
                           Text(
                             '${activeDuty.district} • ${activeDuty.dutyPointName ?? 'Duty point'} • ${activeDuty.shiftLabel ?? 'Shift'}',
-                            style: AppTypography.micro(context).copyWith(color: tokens.inkMuted),
+                            style: AppTypography.micro(
+                              context,
+                            ).copyWith(color: tokens.inkMuted),
                           ),
                         ],
                       ),
@@ -308,22 +353,71 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    PortalSectionHeading(
-                      title: 'Night Proof',
-                      action:
-                          status.hourlyRequirement.enabled
-                              ? Icon(
-                                status.hourlyRequirement.dueNow
-                                    ? Icons.alarm_on_rounded
-                                    : Icons.schedule_rounded,
-                                color:
-                                    status.hourlyRequirement.dueNow
-                                        ? tokens.danger
-                                        : tokens.primary,
-                              )
-                              : null,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const PortalSectionHeading(title: 'Night Photos'),
+                        if (status.hourlyRequirement.enabled &&
+                            status.hourlyRequirement.nextDueAt != null)
+                          TimeCounterChip(
+                            targetTime: DateTime.tryParse(
+                              status.hourlyRequirement.nextDueAt!,
+                            )?.toLocal(),
+                            compact: true,
+                          ),
+                      ],
                     ),
                     const SizedBox(height: AppSpacing.sm),
+                    if (status.hourlyRequirement.enabled &&
+                        (status.hourlyRequirement.dueNow ||
+                            status.hourlyRequirement.overdueMinutes > 0))
+                      Container(
+                        margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+                        padding: const EdgeInsets.all(AppSpacing.sm),
+                        decoration: BoxDecoration(
+                          color: tokens.dangerSoft,
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                          border: Border.all(
+                            color: tokens.danger.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.alarm_on_rounded,
+                              color: tokens.danger,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    status.hourlyRequirement.overdueMinutes > 0
+                                        ? 'CHECK OVERDUE BY ${status.hourlyRequirement.overdueMinutes} MIN'
+                                        : 'HOURLY NIGHT CHECK DUE NOW',
+                                    style: TextStyle(
+                                      color: tokens.danger,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 12,
+                                      letterSpacing: 0.3,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Capture a clear photo of your post to confirm attendance.',
+                                    style: TextStyle(
+                                      color: tokens.ink,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     Text(
                       status.hourlyRequirement.enabled
                           ? (status.hourlyRequirement.dueNow
@@ -343,6 +437,26 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                         context,
                       ).textTheme.bodySmall?.copyWith(color: tokens.inkMuted),
                     ),
+                    const SizedBox(height: AppSpacing.md),
+                    OutlinedButton.icon(
+                      onPressed: _submitting ? null : _capturePhoto,
+                      icon: const Icon(Icons.add_a_photo_rounded),
+                      label: Text(
+                        _photoPath == null ? 'Capture photo' : 'Retake photo',
+                      ),
+                    ),
+                    if (_photoPath != null) ...<Widget>[
+                      const SizedBox(height: AppSpacing.sm),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        child: Image.file(
+                          File(_photoPath!),
+                          height: 140,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: AppSpacing.md),
                     FilledButton.icon(
                       onPressed:
@@ -472,9 +586,7 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                       onPressed: _submitting ? null : _capturePhoto,
                       icon: const Icon(Icons.add_a_photo_rounded),
                       label: Text(
-                        _photoPath == null
-                            ? 'Capture proof photo'
-                            : 'Retake photo',
+                        _photoPath == null ? 'Capture photo' : 'Retake photo',
                       ),
                     ),
                     if (_photoPath != null) ...<Widget>[

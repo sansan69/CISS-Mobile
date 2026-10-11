@@ -194,14 +194,8 @@ class _PermissionOnboardingScreenState
   Widget build(BuildContext context) {
     return ScreenScaffold(
       title: 'Guard setup',
-      subtitle: 'Enable the required permissions before starting duty',
+      subtitle: 'Prepare this device for duty before starting',
       children: <Widget>[
-        const BrandBanner(
-          showBackButton: true,
-          title: 'Prepare this device for duty',
-          subtitle:
-              'Attendance proof, geofencing, and live updates depend on a small set of permissions.',
-        ),
         const StateBlock(
           icon: Icons.verified_user_rounded,
           title: 'Why this matters',

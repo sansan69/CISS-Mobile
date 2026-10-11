@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/training_models.dart';
+import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../widgets/guard_portal_widgets.dart';
 import 'guard_training_quiz_screen.dart';
@@ -37,34 +38,49 @@ class GuardTrainingDetailScreen extends ConsumerWidget {
         assignment.status.toLowerCase().contains('viewed') ||
         assignment.status.toLowerCase().contains('acknowledged');
     final contentType = assignment.contentType?.toLowerCase() ?? '';
-    final hasViewableContent = assignment.contentUrl != null &&
-        assignment.contentUrl!.isNotEmpty;
+    final hasViewableContent =
+        assignment.contentUrl != null && assignment.contentUrl!.isNotEmpty;
 
-    final bool isImage = hasViewableContent &&
+    final bool isImage =
+        hasViewableContent &&
         (contentType == 'image' ||
             contentType == 'jpg' ||
             contentType == 'jpeg' ||
             contentType == 'png' ||
             contentType == 'gif' ||
-            assignment.contentUrl!.contains(RegExp(r'\.(jpg|jpeg|png|gif|webp)$', caseSensitive: false)));
+            assignment.contentUrl!.contains(
+              RegExp(r'\.(jpg|jpeg|png|gif|webp)$', caseSensitive: false),
+            ));
 
-    final bool isPdf = hasViewableContent &&
+    final bool isPdf =
+        hasViewableContent &&
         (contentType == 'pdf' ||
-            assignment.contentUrl!.contains(RegExp(r'\.pdf$', caseSensitive: false)));
+            assignment.contentUrl!.contains(
+              RegExp(r'\.pdf$', caseSensitive: false),
+            ));
 
-    final bool isPptx = hasViewableContent &&
-        (contentType == 'pptx' || contentType == 'ppt' ||
-            assignment.contentUrl!.contains(RegExp(r'\.(pptx|ppt)$', caseSensitive: false)));
+    final bool isPptx =
+        hasViewableContent &&
+        (contentType == 'pptx' ||
+            contentType == 'ppt' ||
+            assignment.contentUrl!.contains(
+              RegExp(r'\.(pptx|ppt)$', caseSensitive: false),
+            ));
 
-    final bool isOfficeDoc = hasViewableContent &&
+    final bool isOfficeDoc =
+        hasViewableContent &&
         (isPptx ||
-            contentType == 'docx' || contentType == 'doc' ||
-            assignment.contentUrl!.contains(RegExp(r'\.(docx|doc|xlsx|xls)$', caseSensitive: false)));
+            contentType == 'docx' ||
+            contentType == 'doc' ||
+            assignment.contentUrl!.contains(
+              RegExp(r'\.(docx|doc|xlsx|xls)$', caseSensitive: false),
+            ));
 
     final bool canViewInline = isImage || isPdf || isOfficeDoc;
 
     return Scaffold(
       backgroundColor: tokens.canvas,
+      appBar: const CissAppBar(title: 'Training', subtitle: 'Learning module'),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.only(bottom: 32),
@@ -72,18 +88,21 @@ class GuardTrainingDetailScreen extends ConsumerWidget {
             GuardHeroPanel(
               eyebrow: isComplete ? 'Completed module' : 'Assigned module',
               title: assignment.title,
-              subtitle: assignment.dueLabel.isEmpty
-                  ? 'No due date'
-                  : _formatDate(assignment.dueLabel),
-              icon: isComplete
-                  ? Icons.check_circle_rounded
-                  : Icons.assignment_rounded,
+              subtitle:
+                  assignment.dueLabel.isEmpty
+                      ? 'No due date'
+                      : _formatDate(assignment.dueLabel),
+              icon:
+                  isComplete
+                      ? Icons.check_circle_rounded
+                      : Icons.assignment_rounded,
               accentColor: isComplete ? tokens.success : tokens.accent,
               trailing: StatusChip(
                 label: assignment.status,
-                tone: isComplete
-                    ? StatusChipTone.success
-                    : StatusChipTone.warning,
+                tone:
+                    isComplete
+                        ? StatusChipTone.success
+                        : StatusChipTone.warning,
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
@@ -123,7 +142,9 @@ class GuardTrainingDetailScreen extends ConsumerWidget {
                       const SizedBox(width: AppSpacing.sm),
                       Text(
                         'Training content',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleMedium?.copyWith(
                           color: tokens.ink,
                           fontWeight: FontWeight.w800,
                         ),
@@ -143,9 +164,10 @@ class GuardTrainingDetailScreen extends ConsumerWidget {
                         border: Border.all(color: tokens.border),
                       ),
                       clipBehavior: Clip.antiAlias,
-                      child: isImage
-                          ? _buildImageViewer(context, tokens)
-                          : _buildOfficeEmbedViewer(context, tokens),
+                      child:
+                          isImage
+                              ? _buildImageViewer(context, tokens)
+                              : _buildOfficeEmbedViewer(context, tokens),
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     TextButton.icon(
@@ -155,8 +177,8 @@ class GuardTrainingDetailScreen extends ConsumerWidget {
                         isPptx
                             ? 'Open in PowerPoint Online'
                             : isPdf
-                                ? 'Open PDF'
-                                : 'Open content in browser',
+                            ? 'Open PDF'
+                            : 'Open content in browser',
                       ),
                     ),
                     const SizedBox(height: AppSpacing.md),
@@ -166,24 +188,26 @@ class GuardTrainingDetailScreen extends ConsumerWidget {
                   if (hasViewableContent && !canViewInline)
                     GuardRecordCard(
                       title: 'Open content',
-                      subtitle: assignment.contentFileName ?? 'Training material',
-                      icon: contentType == 'video'
-                          ? Icons.play_circle_outline_rounded
-                          : Icons.picture_as_pdf_outlined,
-                      chip: assignment.contentType == null
-                          ? null
-                          : StatusChip(
-                              label: assignment.contentType!,
-                              tone: StatusChipTone.info,
-                            ),
+                      subtitle:
+                          assignment.contentFileName ?? 'Training material',
+                      icon:
+                          contentType == 'video'
+                              ? Icons.play_circle_outline_rounded
+                              : Icons.picture_as_pdf_outlined,
+                      chip:
+                          assignment.contentType == null
+                              ? null
+                              : StatusChip(
+                                label: assignment.contentType!,
+                                tone: StatusChipTone.info,
+                              ),
                       onTap: () => _openUrl(context),
                     ),
 
                   if (!hasViewableContent)
                     const GuardRecordCard(
                       title: 'No content file',
-                      subtitle:
-                          'This module does not have an attachment yet.',
+                      subtitle: 'This module does not have an attachment yet.',
                       icon: Icons.insert_drive_file_outlined,
                     ),
 
@@ -210,7 +234,9 @@ class GuardTrainingDetailScreen extends ConsumerWidget {
                       const SizedBox(width: AppSpacing.sm),
                       Text(
                         'Assessment',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        style: Theme.of(
+                          context,
+                        ).textTheme.titleMedium?.copyWith(
                           color: tokens.ink,
                           fontWeight: FontWeight.w800,
                         ),
@@ -233,9 +259,10 @@ class GuardTrainingDetailScreen extends ConsumerWidget {
                       onPressed: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => GuardTrainingQuizScreen(
-                              assignmentId: assignment.id,
-                            ),
+                            builder:
+                                (_) => GuardTrainingQuizScreen(
+                                  assignmentId: assignment.id,
+                                ),
                           ),
                         );
                       },
@@ -269,51 +296,53 @@ class GuardTrainingDetailScreen extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   CircularProgressIndicator(
-                    value: progress.expectedTotalBytes != null
-                        ? progress.cumulativeBytesLoaded /
-                            progress.expectedTotalBytes!
-                        : null,
+                    value:
+                        progress.expectedTotalBytes != null
+                            ? progress.cumulativeBytesLoaded /
+                                progress.expectedTotalBytes!
+                            : null,
                     color: tokens.primary,
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Loading image...',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: tokens.inkMuted,
-                    ),
+                    style: TextStyle(fontSize: 12, color: tokens.inkMuted),
                   ),
                 ],
               ),
             );
           },
-          errorBuilder: (context, error, stackTrace) => Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Icon(Icons.broken_image_rounded,
-                    size: 48, color: tokens.danger),
-                const SizedBox(height: 8),
-                Text('Could not load image',
-                    style: TextStyle(color: tokens.inkMuted)),
-              ],
-            ),
-          ),
+          errorBuilder:
+              (context, error, stackTrace) => Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.broken_image_rounded,
+                      size: 48,
+                      color: tokens.danger,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Could not load image',
+                      style: TextStyle(color: tokens.inkMuted),
+                    ),
+                  ],
+                ),
+              ),
         ),
       ),
     );
   }
 
-  Widget _buildOfficeEmbedViewer(
-      BuildContext context, CissThemeTokens tokens) {
+  Widget _buildOfficeEmbedViewer(BuildContext context, CissThemeTokens tokens) {
     if (isPdf) {
       // Render PDF as a document viewer card with open action
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Icon(Icons.picture_as_pdf_rounded,
-                size: 64, color: tokens.danger),
+            Icon(Icons.picture_as_pdf_rounded, size: 64, color: tokens.danger),
             const SizedBox(height: 12),
             Text(
               assignment.contentFileName ?? 'PDF Document',
@@ -344,9 +373,7 @@ class GuardTrainingDetailScreen extends ConsumerWidget {
 
     // Office docs (PPTX, DOCX) — show a preview card + embed link
     final label = isPptx ? 'PowerPoint' : 'Office Document';
-    final icon = isPptx
-        ? Icons.slideshow_rounded
-        : Icons.description_rounded;
+    final icon = isPptx ? Icons.slideshow_rounded : Icons.description_rounded;
     final color = isPptx ? Colors.deepOrange : tokens.primary;
 
     return Center(
@@ -368,8 +395,7 @@ class GuardTrainingDetailScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
-            onPressed: () =>
-                _openUrl(context, office: true),
+            onPressed: () => _openUrl(context, office: true),
             icon: const Icon(Icons.open_in_browser_rounded, size: 18),
             label: Text('View in Office Online'),
           ),
@@ -385,30 +411,46 @@ class GuardTrainingDetailScreen extends ConsumerWidget {
 
   bool get isPdf =>
       assignment.contentType?.toLowerCase() == 'pdf' ||
-      (assignment.contentUrl?.contains(RegExp(r'\.pdf$', caseSensitive: false)) ?? false);
+      (assignment.contentUrl?.contains(
+            RegExp(r'\.pdf$', caseSensitive: false),
+          ) ??
+          false);
 
   bool get isPptx =>
       assignment.contentType?.toLowerCase() == 'pptx' ||
       assignment.contentType?.toLowerCase() == 'ppt' ||
-      (assignment.contentUrl?.contains(RegExp(r'\.(pptx|ppt)$', caseSensitive: false)) ?? false);
+      (assignment.contentUrl?.contains(
+            RegExp(r'\.(pptx|ppt)$', caseSensitive: false),
+          ) ??
+          false);
 
   bool get isImage {
     final ct = assignment.contentType?.toLowerCase() ?? '';
-    if (ct == 'image' || ct == 'jpg' || ct == 'jpeg' || ct == 'png' || ct == 'gif') return true;
-    return assignment.contentUrl?.contains(RegExp(r'\.(jpg|jpeg|png|gif|webp)$', caseSensitive: false)) ?? false;
+    if (ct == 'image' ||
+        ct == 'jpg' ||
+        ct == 'jpeg' ||
+        ct == 'png' ||
+        ct == 'gif') {
+      return true;
+    }
+    return assignment.contentUrl?.contains(
+          RegExp(r'\.(jpg|jpeg|png|gif|webp)$', caseSensitive: false),
+        ) ??
+        false;
   }
 
   Future<void> _openUrl(BuildContext context, {bool office = false}) async {
-    final url = office && isPptx
-        ? _officeEmbedUrl(assignment.contentUrl!)
-        : assignment.contentUrl!;
+    final url =
+        office && isPptx
+            ? _officeEmbedUrl(assignment.contentUrl!)
+            : assignment.contentUrl!;
     final uri = Uri.tryParse(url);
     if (uri != null && await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open content')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Could not open content')));
     }
   }
 }

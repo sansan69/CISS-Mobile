@@ -28,9 +28,15 @@ class MetricCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: tokens.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: tokens.border, width: 1),
-        boxShadow: AppShadows.subtle,
+        borderRadius: BorderRadius.circular(AppRadius.card),
+        border: Border.all(color: tokens.specularBorder, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -41,12 +47,12 @@ class MetricCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  label,
+                  label.toUpperCase(),
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     color: tokens.inkMuted,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
                   ),
                 ),
               ),
@@ -58,9 +64,8 @@ class MetricCard extends StatelessWidget {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: effectiveColor.withValues(alpha: 0.4),
+                      color: effectiveColor.withValues(alpha: 0.6),
                       blurRadius: 6,
-                      spreadRadius: 1,
                     ),
                   ],
                 ),
@@ -72,7 +77,7 @@ class MetricCard extends StatelessWidget {
             value,
             style: TextStyle(
               fontSize: 26,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
               color: tokens.ink,
               height: 1.0,
             ),

@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/region/region_service.dart';
+import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 
 /// One 5-minute breadcrumb from `guardLocations/{employeeDocId}/locationHistory`.
@@ -68,8 +69,7 @@ class GuardDayTimelineScreen extends StatefulWidget {
   final String? employeeId;
 
   @override
-  State<GuardDayTimelineScreen> createState() =>
-      _GuardDayTimelineScreenState();
+  State<GuardDayTimelineScreen> createState() => _GuardDayTimelineScreenState();
 }
 
 class _GuardDayTimelineScreenState extends State<GuardDayTimelineScreen> {
@@ -86,10 +86,7 @@ class _GuardDayTimelineScreenState extends State<GuardDayTimelineScreen> {
       day.month,
       day.day,
     ).subtract(const Duration(hours: 5, minutes: 30));
-    return (
-      startUtc,
-      startUtc.add(const Duration(days: 1)),
-    );
+    return (startUtc, startUtc.add(const Duration(days: 1)));
   }
 
   void _fitRoute(List<_HistoryPoint> points) {
@@ -152,8 +149,18 @@ class _GuardDayTimelineScreenState extends State<GuardDayTimelineScreen> {
 
   String _formatDay(DateTime day) {
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     final today = DateTime.now();
     final isToday =
@@ -174,10 +181,11 @@ class _GuardDayTimelineScreenState extends State<GuardDayTimelineScreen> {
 
   Future<Map<String, dynamic>?> _loadGuardLocationDoc() async {
     try {
-      final doc = await RegionService.instance.activeFirestore
-          .collection('guardLocations')
-          .doc(widget.employeeDocId)
-          .get();
+      final doc =
+          await RegionService.instance.activeFirestore
+              .collection('guardLocations')
+              .doc(widget.employeeDocId)
+              .get();
       return doc.data();
     } catch (_) {
       return null;
@@ -187,19 +195,19 @@ class _GuardDayTimelineScreenState extends State<GuardDayTimelineScreen> {
   Future<List<_HistoryPoint>> _loadHistory(DateTime day) async {
     final (startUtc, endUtc) = _dayBounds(day);
     try {
-      final snapshot = await RegionService.instance.activeFirestore
-          .collection('guardLocations')
-          .doc(widget.employeeDocId)
-          .collection('locationHistory')
-          .where('recordedAt', isGreaterThanOrEqualTo: startUtc)
-          .where('recordedAt', isLessThan: endUtc)
-          .orderBy('recordedAt', descending: false)
-          .get();
+      final snapshot =
+          await RegionService.instance.activeFirestore
+              .collection('guardLocations')
+              .doc(widget.employeeDocId)
+              .collection('locationHistory')
+              .where('recordedAt', isGreaterThanOrEqualTo: startUtc)
+              .where('recordedAt', isLessThan: endUtc)
+              .orderBy('recordedAt', descending: false)
+              .get();
       return snapshot.docs
           .map((doc) {
             final data = doc.data();
-            final recordedAt =
-                (data['recordedAt'] as Timestamp?)?.toDate();
+            final recordedAt = (data['recordedAt'] as Timestamp?)?.toDate();
             final lat = (data['lat'] as num?)?.toDouble();
             final lng = (data['lng'] as num?)?.toDouble();
             if (recordedAt == null || lat == null || lng == null) return null;
@@ -247,17 +255,7 @@ class _GuardDayTimelineScreenState extends State<GuardDayTimelineScreen> {
 
     return Scaffold(
       backgroundColor: tokens.canvas,
-      appBar: AppBar(
-        title: Text(
-          widget.guardName,
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 20,
-            color: tokens.ink,
-          ),
-        ),
-        backgroundColor: tokens.canvas,
-      ),
+      appBar: CissAppBar(title: widget.guardName, subtitle: 'Day timeline'),
       body: FutureBuilder<(List<_HistoryPoint>, Map<String, dynamic>?)>(
         future: _loadDayData(_selectedDay),
         builder: (context, historySnapshot) {
@@ -407,16 +405,13 @@ class _TimelineContent extends StatelessWidget {
             ),
             children: [
               TileLayer(
-                urlTemplate:
-                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.ciss.mobile',
               ),
               PolylineLayer(
                 polylines: [
                   Polyline(
-                    points: points
-                        .map((p) => LatLng(p.lat, p.lng))
-                        .toList(),
+                    points: points.map((p) => LatLng(p.lat, p.lng)).toList(),
                     strokeWidth: 3.5,
                     color: tokens.primary,
                     borderStrokeWidth: 1.5,
@@ -508,9 +503,10 @@ class _TimelineContent extends StatelessWidget {
               _SummaryStat(
                 tokens: tokens,
                 label: 'DISTANCE',
-                value: routeDistance >= 1000
-                    ? '${(routeDistance / 1000).toStringAsFixed(1)} km'
-                    : '${routeDistance.round()} m',
+                value:
+                    routeDistance >= 1000
+                        ? '${(routeDistance / 1000).toStringAsFixed(1)} km'
+                        : '${routeDistance.round()} m',
               ),
               _SummaryStat(
                 tokens: tokens,
@@ -609,13 +605,14 @@ class _TimelineRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final battery = point.batteryLevel;
-    final batteryColor = battery == null
-        ? tokens.inkMuted
-        : battery < 0.15
-        ? tokens.danger
-        : battery < 0.5
-        ? tokens.warning
-        : tokens.success;
+    final batteryColor =
+        battery == null
+            ? tokens.inkMuted
+            : battery < 0.15
+            ? tokens.danger
+            : battery < 0.5
+            ? tokens.warning
+            : tokens.success;
 
     final activityTone = switch (activity) {
       _Activity.still => StatusChipTone.neutral,
@@ -644,19 +641,17 @@ class _TimelineRow extends StatelessWidget {
           Expanded(
             child: Row(
               children: [
-                StatusChip(
-                  label: _activityLabel(activity),
-                  tone: activityTone,
-                ),
+                StatusChip(label: _activityLabel(activity), tone: activityTone),
                 const SizedBox(width: 8),
                 Icon(
                   point.wifiConnected == true
                       ? Icons.wifi_rounded
                       : Icons.wifi_off_rounded,
                   size: 15,
-                  color: point.wifiConnected == true
-                      ? tokens.success
-                      : tokens.inkMuted,
+                  color:
+                      point.wifiConnected == true
+                          ? tokens.success
+                          : tokens.inkMuted,
                 ),
                 const SizedBox(width: 6),
                 Icon(
@@ -677,10 +672,7 @@ class _TimelineRow extends StatelessWidget {
                 ],
                 const Spacer(),
                 if (point.isOutOfZone)
-                  StatusChip(
-                    label: 'ZONE',
-                    tone: StatusChipTone.danger,
-                  ),
+                  StatusChip(label: 'ZONE', tone: StatusChipTone.danger),
               ],
             ),
           ),

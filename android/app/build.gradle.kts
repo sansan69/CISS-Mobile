@@ -71,5 +71,8 @@ flutter {
 }
 
 dependencies {
+    // local_auth uses AndroidX biometric fragments, which require an AppCompat
+    // host theme when MainActivity is a FlutterFragmentActivity (minSdk 24).
+    implementation("androidx.appcompat:appcompat:1.7.0")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

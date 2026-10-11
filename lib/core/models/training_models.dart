@@ -38,6 +38,99 @@ class TrainingAssignmentModel {
   }
 }
 
+/// A single ranked row on the guard training leaderboard.
+class GuardTrainingLeaderboardEntry {
+  const GuardTrainingLeaderboardEntry({
+    required this.rank,
+    required this.id,
+    required this.employeeName,
+    required this.trainingScore,
+    required this.totalTrainingsCompleted,
+    required this.trainingAttempts,
+    this.employeeId = '',
+    this.employeeCode = '',
+    this.clientName = '',
+    this.district = '',
+    this.profilePicUrl,
+    this.lastAttemptAt,
+  });
+
+  final int rank;
+
+  /// Firestore employee document id (stable per guard).
+  final String id;
+  final String employeeName;
+  final String employeeId;
+  final String employeeCode;
+  final String clientName;
+  final String district;
+  final String? profilePicUrl;
+
+  /// Most recent quiz score (0–100). Used as the primary ranking metric.
+  final int trainingScore;
+  final int totalTrainingsCompleted;
+  final int trainingAttempts;
+  final DateTime? lastAttemptAt;
+
+  factory GuardTrainingLeaderboardEntry.fromJson(Map<String, dynamic> json) {
+    return GuardTrainingLeaderboardEntry(
+      rank: (json['rank'] as num?)?.toInt() ?? 0,
+      id: (json['id'] as String?) ?? '',
+      employeeName: (json['employeeName'] as String?) ?? '',
+      employeeId: (json['employeeId'] as String?) ?? '',
+      employeeCode: (json['employeeCode'] as String?) ?? '',
+      clientName: (json['clientName'] as String?) ?? '',
+      district: (json['district'] as String?) ?? '',
+      profilePicUrl: json['profilePicUrl'] as String?,
+      trainingScore: (json['trainingScore'] as num?)?.toInt() ?? 0,
+      totalTrainingsCompleted:
+          (json['totalTrainingsCompleted'] as num?)?.toInt() ?? 0,
+      trainingAttempts: (json['trainingAttempts'] as num?)?.toInt() ?? 0,
+      lastAttemptAt: DateTime.tryParse(json['lastAttemptAt']?.toString() ?? ''),
+    );
+  }
+}
+
+/// Container for the guard training leaderboard response.
+class GuardTrainingLeaderboard {
+  const GuardTrainingLeaderboard({
+    required this.district,
+    required this.currentMonth,
+    required this.entries,
+    this.myRank,
+    this.myEntry,
+  });
+
+  final String district;
+  final String currentMonth;
+  final List<GuardTrainingLeaderboardEntry> entries;
+  final int? myRank;
+  final GuardTrainingLeaderboardEntry? myEntry;
+
+  factory GuardTrainingLeaderboard.fromJson(Map<String, dynamic> json) {
+    final rawScores = json['scores'] as List<dynamic>? ?? const <dynamic>[];
+    final dynamic myEntryJson = json['myEntry'];
+    return GuardTrainingLeaderboard(
+      district: (json['district'] as String?) ?? '',
+      currentMonth: (json['currentMonth'] as String?) ?? '',
+      entries: rawScores
+          .whereType<Map>()
+          .map(
+            (entry) => GuardTrainingLeaderboardEntry.fromJson(
+              Map<String, dynamic>.from(entry),
+            ),
+          )
+          .toList(),
+      myRank: (json['myRank'] as num?)?.toInt(),
+      myEntry: myEntryJson is Map
+          ? GuardTrainingLeaderboardEntry.fromJson(
+              Map<String, dynamic>.from(myEntryJson),
+            )
+          : null,
+    );
+  }
+}
+
 class EvaluationModel {
   const EvaluationModel({
     required this.id,

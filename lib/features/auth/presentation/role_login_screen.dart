@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/auth/biometric_service.dart';
+import '../../../core/auth/guard_login_identifier.dart';
 import '../../../core/auth/saved_accounts_service.dart';
 import '../../../core/haptics.dart';
 import '../../../core/models/auth_session.dart';
@@ -59,7 +60,9 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
   final FocusNode _passwordFocus = FocusNode();
 
   bool _loading = false;
+  bool _resettingPassword = false;
   String? _error;
+  String? _passwordResetMessage;
   List<SavedAccount> _savedAccounts = <SavedAccount>[];
   bool _accountsLoaded = false;
   bool _biometricAvailable = false;
@@ -94,6 +97,12 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
     );
   }
 
+  void _clearStalePasswordResetMessage() {
+    if (_passwordResetMessage != null) {
+      setState(() => _passwordResetMessage = null);
+    }
+  }
+
   @override
   void dispose() {
     _usernameController.dispose();
@@ -116,69 +125,28 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
   }
 
   void _fillAccount(SavedAccount account) {
+    if (_loading || _resettingPassword) return;
     setState(() {
       _usernameController.text = account.loginId;
       _passwordController.clear();
       _error = null;
+      _passwordResetMessage = null;
     });
     _passwordFocus.requestFocus();
   }
 
   Future<void> _removeSavedAccount(SavedAccount account) async {
-    await ref
-        .read(savedAccountsServiceProvider)
-        .removeAccount(account.role, account.loginId);
-    await _loadSavedAccounts();
-  }
-
-  Future<void> _tryBiometricLogin(SavedAccount account) async {
-    if (!_biometricAvailable) {
-      _fillAccount(account);
-      return;
-    }
-
-    setState(() => _loading = true);
+    if (_loading || _resettingPassword) return;
     try {
-      final bioService = ref.read(biometricServiceProvider);
-      final outcome = await bioService.authenticateFingerprint(
-        localizedReason:
-            'Authenticate to sign in as ${account.displayName}',
-      );
-      if (outcome != BiometricAuthOutcome.success || !mounted) {
-        setState(() => _loading = false);
-        return;
-      }
-
-      final password = await ref
+      await ref
           .read(authControllerProvider)
-          .getStoredPassword(role: account.role, loginId: account.loginId);
-
-      if (password == null || password.isEmpty) {
-        if (!mounted) return;
-        setState(() {
-          _loading = false;
-          _error = 'Stored credentials not found. Please enter your password manually.';
-        });
-        _fillAccount(account);
-        return;
-      }
-
-      _usernameController.text = account.loginId;
-      _passwordController.text = password;
-
-      Haptics.heavy(); // Biometric auth success
-
-      if (widget.role == LoginRole.guard) {
-        await _doSignInGuard(account.loginId, password);
-      } else {
-        await _doSignInFieldOfficer(account.loginId, password);
-      }
-    } catch (e) {
+          .removeSavedAccount(role: account.role, loginId: account.loginId);
+      await _loadSavedAccounts();
+    } catch (_) {
       if (!mounted) return;
-      setState(() {
-        _loading = false;
-        _error = 'Could not sign in with saved login. Please enter your details and try again.';
-      });
+      setState(
+        () => _error = 'Could not remove this saved account. Try again.',
+      );
     }
   }
 
@@ -198,7 +166,9 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
       Haptics.error();
       setState(() {
         _loading = false;
-        _error = CissError.parse(error);
+        _error =
+            'Unable to sign in with those details. Check your ID and PIN, '
+            'or set up a PIN if this is your first sign-in.';
       });
       _loadSavedAccounts();
     }
@@ -234,60 +204,106 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
     }
   }
 
+  String? _validateLoginInput({
+    required String loginId,
+    required String password,
+  }) {
+    if (widget.role == LoginRole.guard) {
+      if (loginId.isEmpty) {
+        return 'Enter your employee ID or phone number.';
+      }
+      if (!RegExp(r'^\d{4,6}$').hasMatch(password)) {
+        return 'Enter a 4 to 6 digit PIN.';
+      }
+      return null;
+    }
+
+    if (loginId.isEmpty) {
+      return 'Enter your official email address.';
+    }
+    if (!_isValidEmail(loginId)) {
+      return 'Enter a valid email address.';
+    }
+    if (password.isEmpty) {
+      return 'Enter your password.';
+    }
+    return null;
+  }
+
+  bool _isValidEmail(String value) {
+    return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value);
+  }
+
+  Future<void> _sendFieldOfficerPasswordReset() async {
+    final email = _usernameController.text.trim();
+    if (email.isEmpty) {
+      setState(() {
+        _error = 'Enter your official email address to reset your password.';
+        _passwordResetMessage = null;
+      });
+      return;
+    }
+    if (!_isValidEmail(email)) {
+      setState(() {
+        _error = 'Enter a valid email address to reset your password.';
+        _passwordResetMessage = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _resettingPassword = true;
+      _error = null;
+      _passwordResetMessage = null;
+    });
+
+    try {
+      await ref
+          .read(authControllerProvider)
+          .sendFieldOfficerPasswordResetEmail(email: email);
+      if (!mounted) return;
+      setState(() {
+        _passwordResetMessage =
+            'If an account exists, reset instructions have been sent.';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      Haptics.error();
+      setState(() => _error = CissError.parse(error));
+    } finally {
+      if (mounted) {
+        setState(() => _resettingPassword = false);
+      }
+    }
+  }
+
   Future<void> _submit() async {
+    if (_loading || _resettingPassword) return;
+
     final String loginId = _usernameController.text.trim();
-    final String pin = _passwordController.text.trim();
+    final String pin =
+        widget.role == LoginRole.guard
+            ? _passwordController.text.trim()
+            : _passwordController.text;
 
     Haptics.medium();
 
-    if (widget.role == LoginRole.guard) {
+    final validationError = _validateLoginInput(
+      loginId: loginId,
+      password: pin,
+    );
+    if (validationError != null) {
       setState(() {
-        _loading = true;
-        _error = null;
+        _error = validationError;
+        _passwordResetMessage = null;
       });
-
-      try {
-        final status = await ref
-            .read(authControllerProvider)
-            .checkGuardPinStatus(loginIdOrPhone: loginId);
-
-        if (!status.found) {
-          setState(() {
-            _error = 'No employee was found for those details.';
-            _loading = false;
-          });
-          return;
-        }
-
-        if (!status.hasPin) {
-          if (!mounted) return;
-          final bool looksLikePhone = RegExp(
-            r'^\d{8,15}$',
-          ).hasMatch(loginId.replaceAll(RegExp(r'\D+'), ''));
-          setState(() {
-            _loading = false;
-          });
-          final params = <String, String>{
-            if (looksLikePhone) 'phoneNumber': loginId,
-            if (!looksLikePhone && loginId.isNotEmpty) 'employeeId': loginId,
-          };
-          context.go(
-            Uri(path: '/login/guard/setup', queryParameters: params).toString(),
-          );
-          return;
-        }
-      } catch (error) {
-        setState(() {
-          _loading = false;
-          _error = CissError.parse(error);
-        });
-        return;
-      }
+      return;
     }
 
     setState(() {
       _loading = true;
       _error = null;
+      _passwordResetMessage = null;
     });
 
     if (widget.role == LoginRole.guard) {
@@ -301,20 +317,16 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
   // Build helpers
   // ──────────────────────────────────────────────────────────────────────────
 
-  Animation<double> _fade(double begin, double end) => Tween<double>(
-        begin: 0.0,
-        end: 1.0,
-      ).animate(
+  Animation<double> _fade(double begin, double end) =>
+      Tween<double>(begin: 0.0, end: 1.0).animate(
         CurvedAnimation(
           parent: _animCtrl,
           curve: Interval(begin, end, curve: Curves.easeOutCubic),
         ),
       );
 
-  Animation<Offset> _slide(double begin, double end) => Tween<Offset>(
-        begin: const Offset(0, 0.12),
-        end: Offset.zero,
-      ).animate(
+  Animation<Offset> _slide(double begin, double end) =>
+      Tween<Offset>(begin: const Offset(0, 0.12), end: Offset.zero).animate(
         CurvedAnimation(
           parent: _animCtrl,
           curve: Interval(begin, end, curve: Curves.easeOutCubic),
@@ -329,20 +341,24 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
 
     // Role-specific accent colors
     final Color heroColor = isGuard ? tokens.primary : tokens.accent;
-    final Color heroSoft = isGuard ? tokens.primarySoft : tokens.accent.withValues(alpha: 0.1);
-    final IconData roleIcon = isGuard
-        ? Icons.verified_user_rounded
-        : Icons.admin_panel_settings_rounded;
+    final Color heroSoft =
+        isGuard ? tokens.primarySoft : tokens.accent.withValues(alpha: 0.1);
+    final IconData roleIcon =
+        isGuard
+            ? Icons.verified_user_rounded
+            : Icons.admin_panel_settings_rounded;
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: SecurityGridBackground(
-        gridColor: isGuard
-            ? tokens.primary.withValues(alpha: 0.06)
-            : tokens.accent.withValues(alpha: 0.06),
-        dotColor: isGuard
-            ? tokens.primary.withValues(alpha: 0.04)
-            : tokens.accent.withValues(alpha: 0.04),
+        gridColor:
+            isGuard
+                ? tokens.primary.withValues(alpha: 0.06)
+                : tokens.accent.withValues(alpha: 0.06),
+        dotColor:
+            isGuard
+                ? tokens.primary.withValues(alpha: 0.04)
+                : tokens.accent.withValues(alpha: 0.04),
         child: SafeArea(
           child: CustomScrollView(
             slivers: <Widget>[
@@ -381,11 +397,7 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: <Widget>[
-                              Icon(
-                                roleIcon,
-                                size: 14,
-                                color: heroColor,
-                              ),
+                              Icon(roleIcon, size: 14, color: heroColor),
                               const SizedBox(width: 6),
                               Text(
                                 isGuard ? 'Guard login' : 'Field Officer login',
@@ -420,12 +432,15 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: heroColor,
+                            boxShadow: [
+                              BoxShadow(
+                                color: heroColor.withValues(alpha: 0.35),
+                                blurRadius: 28,
+                                spreadRadius: 2,
+                              ),
+                            ],
                           ),
-                          child: Icon(
-                            roleIcon,
-                            color: Colors.white,
-                            size: 40,
-                          ),
+                          child: Icon(roleIcon, color: Colors.white, size: 40),
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -479,14 +494,18 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                           controller: _usernameController,
                           label: widget.usernameLabel,
                           hint: widget.usernameHint,
-                          prefixIcon: isGuard
-                              ? Icons.badge_rounded
-                              : Icons.alternate_email_rounded,
-                          keyboardType: isGuard
-                              ? TextInputType.text
-                              : TextInputType.emailAddress,
+                          prefixIcon:
+                              isGuard
+                                  ? Icons.badge_rounded
+                                  : Icons.alternate_email_rounded,
+                          keyboardType:
+                              isGuard
+                                  ? TextInputType.text
+                                  : TextInputType.emailAddress,
                           textInputAction: TextInputAction.next,
                           onSubmitted: (_) => _passwordFocus.requestFocus(),
+                          onChanged: (_) => _clearStalePasswordResetMessage(),
+                          enabled: !_resettingPassword,
                           accentColor: heroColor,
                           tokens: tokens,
                         ),
@@ -499,11 +518,17 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                           hint: widget.passwordHint,
                           prefixIcon: Icons.lock_outline_rounded,
                           obscureText: true,
-                          keyboardType: isGuard
-                              ? TextInputType.number
-                              : TextInputType.visiblePassword,
+                          keyboardType:
+                              isGuard
+                                  ? TextInputType.number
+                                  : TextInputType.visiblePassword,
                           textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => _loading ? null : _submit(),
+                          onSubmitted: (_) {
+                            if (!_loading && !_resettingPassword) {
+                              _submit();
+                            }
+                          },
+                          onChanged: (_) => _clearStalePasswordResetMessage(),
                           accentColor: heroColor,
                           tokens: tokens,
                         ),
@@ -542,18 +567,61 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                             ),
                           ),
                         ],
+                        if (_passwordResetMessage != null) ...<Widget>[
+                          const SizedBox(height: 16),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: tokens.successSoft,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: tokens.success.withValues(alpha: 0.2),
+                              ),
+                            ),
+                            child: Row(
+                              children: <Widget>[
+                                Icon(
+                                  Icons.mark_email_read_outlined,
+                                  color: tokens.success,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    _passwordResetMessage!,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: tokens.success,
+                                      fontWeight: FontWeight.w600,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 24),
                         // Submit button
-                        SizedBox(
+                        Container(
                           width: double.infinity,
                           height: 52,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow:
+                                _loading || _resettingPassword
+                                    ? null
+                                    : AppShadows.glow(heroColor),
+                          ),
                           child: FilledButton(
-                            onPressed: _loading ? null : _submit,
+                            onPressed:
+                                _loading || _resettingPassword ? null : _submit,
                             style: FilledButton.styleFrom(
                               backgroundColor: heroColor,
                               foregroundColor: Colors.white,
-                              disabledBackgroundColor:
-                                  heroColor.withValues(alpha: 0.4),
+                              disabledBackgroundColor: heroColor.withValues(
+                                alpha: 0.4,
+                              ),
                               elevation: 0,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(14),
@@ -564,19 +632,20 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                                 letterSpacing: 0.3,
                               ),
                             ),
-                            child: _loading
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
-                                      valueColor:
-                                          AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
+                            child:
+                                _loading
+                                    ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.5,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                              Colors.white,
+                                            ),
                                       ),
-                                    ),
-                                  )
-                                : Text(widget.buttonLabel),
+                                    )
+                                    : Text(widget.buttonLabel),
                           ),
                         ),
                         if (isGuard) ...<Widget>[
@@ -584,33 +653,23 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                           Align(
                             alignment: Alignment.centerLeft,
                             child: TextButton(
-                              onPressed: _loading
-                                  ? null
-                                  : () {
-                                      final loginId =
-                                          _usernameController.text.trim();
-                                      final bool looksLikePhone = RegExp(
-                                        r'^\d{8,15}$',
-                                      ).hasMatch(
-                                        loginId.replaceAll(
-                                          RegExp(r'\D+'),
-                                          '',
-                                        ),
-                                      );
-                                      final params = <String, String>{
-                                        if (looksLikePhone && loginId.isNotEmpty)
-                                          'phoneNumber': loginId,
-                                        if (!looksLikePhone &&
-                                            loginId.isNotEmpty)
-                                          'employeeId': loginId,
-                                      };
-                                      context.go(
-                                        Uri(
-                                          path: '/login/guard/setup',
-                                          queryParameters: params,
-                                        ).toString(),
-                                      );
-                                    },
+                              onPressed:
+                                  _loading
+                                      ? null
+                                      : () {
+                                        final loginId =
+                                            _usernameController.text.trim();
+                                        final params =
+                                            GuardLoginIdentifier.setupQueryParameters(
+                                              loginId,
+                                            );
+                                        context.go(
+                                          Uri(
+                                            path: '/login/guard/setup',
+                                            queryParameters: params,
+                                          ).toString(),
+                                        );
+                                      },
                               style: TextButton.styleFrom(
                                 foregroundColor: tokens.primary,
                                 padding: const EdgeInsets.symmetric(
@@ -630,16 +689,18 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                           Align(
                             alignment: Alignment.centerLeft,
                             child: TextButton(
-                              onPressed: _loading
-                                  ? null
-                                  : () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const GuardForgotPinScreen(),
-                                        ),
-                                      );
-                                    },
+                              onPressed:
+                                  _loading
+                                      ? null
+                                      : () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder:
+                                                (_) =>
+                                                    const GuardForgotPinScreen(),
+                                          ),
+                                        );
+                                      },
                               style: TextButton.styleFrom(
                                 foregroundColor: tokens.inkMuted,
                                 padding: const EdgeInsets.symmetric(
@@ -653,6 +714,40 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
+                            ),
+                          ),
+                        ] else ...<Widget>[
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton(
+                              onPressed:
+                                  _loading || _resettingPassword
+                                      ? null
+                                      : _sendFieldOfficerPasswordReset,
+                              style: TextButton.styleFrom(
+                                foregroundColor: tokens.accent,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 12,
+                                ),
+                              ),
+                              child:
+                                  _resettingPassword
+                                      ? const SizedBox(
+                                        width: 18,
+                                        height: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                      : Text(
+                                        'Forgot password?',
+                                        style: theme.textTheme.bodyMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
                             ),
                           ),
                         ],
@@ -698,20 +793,26 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                             child: ListView.separated(
                               scrollDirection: Axis.horizontal,
                               itemCount: _savedAccounts.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(width: 10),
+                              separatorBuilder:
+                                  (_, __) => const SizedBox(width: 10),
                               itemBuilder: (context, index) {
                                 final account = _savedAccounts[index];
+                                final savedAccountActionsEnabled =
+                                    !_loading && !_resettingPassword;
                                 return _SavedAccountChip(
                                   account: account,
                                   tokens: tokens,
                                   heroColor: heroColor,
                                   heroSoft: heroSoft,
-                                  biometricAvailable: _biometricAvailable,
-                                  onTap: () => _fillAccount(account),
-                                  onBiometricTap: () =>
-                                      _tryBiometricLogin(account),
-                                  onRemove: () => _removeSavedAccount(account),
+                                  enabled: savedAccountActionsEnabled,
+                                  onTap:
+                                      savedAccountActionsEnabled
+                                          ? () => _fillAccount(account)
+                                          : null,
+                                  onRemove:
+                                      savedAccountActionsEnabled
+                                          ? () => _removeSavedAccount(account)
+                                          : null,
                                 );
                               },
                             ),
@@ -723,7 +824,8 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                 ),
               ],
 
-              // Biometric toggle
+              // Per-account strong-biometric app-lock preference. This never
+              // stores a PIN/password and takes effect only after sign-in.
               if (_biometricAvailable) ...<Widget>[
                 SliverToBoxAdapter(
                   child: Padding(
@@ -732,10 +834,12 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                       fade: _fade(0.55, 0.9),
                       slide: _slide(0.55, 0.9),
                       child: GestureDetector(
-                        onTap: _loading
-                            ? null
-                            : () => setState(
-                                () => _enableBiometric = !_enableBiometric),
+                        onTap:
+                            _loading || _resettingPassword
+                                ? null
+                                : () => setState(
+                                  () => _enableBiometric = !_enableBiometric,
+                                ),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 14,
@@ -753,10 +857,12 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                                 height: 20,
                                 child: Checkbox(
                                   value: _enableBiometric,
-                                  onChanged: _loading
-                                      ? null
-                                      : (v) => setState(
-                                          () => _enableBiometric = v ?? false),
+                                  onChanged:
+                                      _loading || _resettingPassword
+                                          ? null
+                                          : (v) => setState(
+                                            () => _enableBiometric = v ?? false,
+                                          ),
                                   materialTapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
                                   visualDensity: VisualDensity.compact,
@@ -765,7 +871,7 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  'Enable fingerprint login for next time',
+                                  'Use biometrics to unlock this account after sign in',
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: tokens.inkMuted,
                                     fontWeight: FontWeight.w500,
@@ -862,11 +968,7 @@ class _IconButtonCircle extends StatelessWidget {
           width: 40,
           height: 40,
           alignment: Alignment.center,
-          child: Icon(
-            icon,
-            size: 18,
-            color: tokens.ink,
-          ),
+          child: Icon(icon, size: 18, color: tokens.ink),
         ),
       ),
     );
@@ -886,6 +988,8 @@ class _LoginTextField extends StatefulWidget {
     this.keyboardType = TextInputType.text,
     this.textInputAction = TextInputAction.done,
     this.onSubmitted,
+    this.onChanged,
+    this.enabled = true,
   });
 
   final TextEditingController controller;
@@ -897,6 +1001,8 @@ class _LoginTextField extends StatefulWidget {
   final TextInputType keyboardType;
   final TextInputAction textInputAction;
   final void Function(String)? onSubmitted;
+  final void Function(String)? onChanged;
+  final bool enabled;
   final Color accentColor;
   final CissThemeTokens tokens;
 
@@ -919,10 +1025,12 @@ class _LoginTextFieldState extends State<_LoginTextField> {
     return TextField(
       controller: widget.controller,
       focusNode: widget.focusNode,
+      enabled: widget.enabled,
       obscureText: _obscured,
       keyboardType: widget.keyboardType,
       textInputAction: widget.textInputAction,
       onSubmitted: widget.onSubmitted,
+      onChanged: widget.onChanged,
       autocorrect: false,
       enableSuggestions: false,
       style: TextStyle(
@@ -933,26 +1041,21 @@ class _LoginTextFieldState extends State<_LoginTextField> {
       decoration: InputDecoration(
         labelText: widget.label,
         hintText: widget.hint,
-        hintStyle: TextStyle(
-          color: tokens.inkMuted.withValues(alpha: 0.5),
-        ),
-        prefixIcon: Icon(
-          widget.prefixIcon,
-          size: 20,
-          color: tokens.inkMuted,
-        ),
-        suffixIcon: widget.obscureText
-            ? IconButton(
-                icon: Icon(
-                  _obscured
-                      ? Icons.visibility_outlined
-                      : Icons.visibility_off_outlined,
-                  size: 20,
-                  color: tokens.inkMuted,
-                ),
-                onPressed: () => setState(() => _obscured = !_obscured),
-              )
-            : null,
+        hintStyle: TextStyle(color: tokens.inkMuted.withValues(alpha: 0.5)),
+        prefixIcon: Icon(widget.prefixIcon, size: 20, color: tokens.inkMuted),
+        suffixIcon:
+            widget.obscureText
+                ? IconButton(
+                  icon: Icon(
+                    _obscured
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                    size: 20,
+                    color: tokens.inkMuted,
+                  ),
+                  onPressed: () => setState(() => _obscured = !_obscured),
+                )
+                : null,
         filled: true,
         fillColor: tokens.surface,
         border: OutlineInputBorder(
@@ -965,10 +1068,7 @@ class _LoginTextFieldState extends State<_LoginTextField> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(
-            color: widget.accentColor,
-            width: 2,
-          ),
+          borderSide: BorderSide(color: widget.accentColor, width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
@@ -989,9 +1089,8 @@ class _SavedAccountChip extends StatelessWidget {
     required this.tokens,
     required this.heroColor,
     required this.heroSoft,
-    required this.biometricAvailable,
+    required this.enabled,
     required this.onTap,
-    required this.onBiometricTap,
     required this.onRemove,
   });
 
@@ -999,37 +1098,24 @@ class _SavedAccountChip extends StatelessWidget {
   final CissThemeTokens tokens;
   final Color heroColor;
   final Color heroSoft;
-  final bool biometricAvailable;
-  final VoidCallback onTap;
-  final VoidCallback onBiometricTap;
-  final VoidCallback onRemove;
+  final bool enabled;
+  final VoidCallback? onTap;
+  final VoidCallback? onRemove;
 
   static final DateFormat _timeFmt = DateFormat('d MMM');
 
   @override
   Widget build(BuildContext context) {
-    final canBiometric = biometricAvailable && account.biometricEnabled;
-
     return GestureDetector(
-      onTap: canBiometric ? onBiometricTap : onTap,
+      onTap: enabled ? onTap : null,
       child: Container(
         width: 160,
-        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+        padding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
         decoration: BoxDecoration(
           color: tokens.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: canBiometric
-                ? heroColor.withValues(alpha: 0.3)
-                : tokens.border,
-          ),
-          boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: tokens.ink.withValues(alpha: 0.06),
-              blurRadius: 8,
-              offset: Offset(0, 3),
-            ),
-          ],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: tokens.specularBorder),
+          boxShadow: AppShadows.card,
         ),
         child: Row(
           children: <Widget>[
@@ -1071,30 +1157,14 @@ class _SavedAccountChip extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     _timeFmt.format(account.lastLoginAt),
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: tokens.inkMuted,
-                    ),
+                    style: TextStyle(fontSize: 11, color: tokens.inkMuted),
                   ),
                 ],
               ),
             ),
-            // Biometric or arrow indicator
-            if (canBiometric)
-              Icon(
-                Icons.fingerprint_rounded,
-                size: 18,
-                color: heroColor,
-              )
-            else
-              Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 12,
-                color: tokens.inkMuted,
-              ),
             // Remove button
             GestureDetector(
-              onTap: onRemove,
+              onTap: enabled ? onRemove : null,
               behavior: HitTestBehavior.opaque,
               child: Padding(
                 padding: const EdgeInsets.all(4),

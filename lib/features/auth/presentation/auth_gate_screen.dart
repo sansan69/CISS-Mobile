@@ -10,8 +10,10 @@ import '../application/auth_controller.dart';
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/models/app_role.dart';
 import '../../../core/models/auth_session.dart';
-import '../../../app/theme/theme_mode_controller.dart';
+import '../../../core/auth/saved_accounts_service.dart';
 import '../../../core/auth/biometric_service.dart';
+import '../../../core/auth/app_lock_lifecycle.dart';
+import '../../../core/auth/app_lock_preferences.dart';
 import '../../../core/brand.dart';
 import '../../../core/location/background_tracking_service.dart';
 import '../../../core/network/providers.dart';
@@ -28,7 +30,8 @@ class AuthGateScreen extends ConsumerStatefulWidget {
   ConsumerState<AuthGateScreen> createState() => _AuthGateScreenState();
 }
 
-class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
+class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
+    with WidgetsBindingObserver {
   bool _authenticated = false;
   bool _isAuthenticating = false;
   bool _permissionsChecked = false;
@@ -37,9 +40,49 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
   String? _bioMessage;
   String? _trackingReconciledUid;
   AuthSession? _lastSession;
+  String? _biometricSessionKey;
+  bool? _requiresBiometricAppLock;
+  final AppLockLifecycle _appLockLifecycle = AppLockLifecycle();
 
-  Future<void> _checkBiometrics(bool enabled) async {
-    if (!enabled || _authenticated || _isAuthenticating) return;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appLockLifecycle.didChangeAppLifecycleState(
+      state,
+      appLockEnabled: _requiresBiometricAppLock == true,
+      biometricPromptActive: _isAuthenticating,
+    );
+    if (!_appLockLifecycle.consumeLockOnResume(
+      state: state,
+      appLockEnabled: _requiresBiometricAppLock == true,
+      biometricPromptActive: _isAuthenticating,
+    )) {
+      return;
+    }
+    setState(() {
+      _authenticated = false;
+      _bioTriggered = false;
+      _bioMessage = null;
+    });
+  }
+
+  Future<void> _checkBiometrics() async {
+    if (_requiresBiometricAppLock != true ||
+        _authenticated ||
+        _isAuthenticating) {
+      return;
+    }
     if (!mounted) return;
 
     setState(() {
@@ -49,7 +92,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
     try {
       final biometricService = ref.read(biometricServiceProvider);
       final outcome = await biometricService.authenticateFingerprint(
-        localizedReason: 'Authenticate to access your duty workspace',
+        localizedReason: 'Verify to access your duty workspace',
       );
 
       if (!mounted) return;
@@ -66,38 +109,58 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
           setState(() {
             _isAuthenticating = false;
             _bioMessage =
-                'Fingerprint unlock is not available right now. '
+                'Biometric app lock is not available right now. '
                 'Sign in with your PIN or password to continue.';
           });
         case BiometricAuthOutcome.permanentlyLockedOut:
           setState(() {
             _isAuthenticating = false;
             _bioMessage =
-                'Fingerprint was permanently locked on this device. '
+                'Biometric app lock was permanently locked on this device. '
                 'Sign in with your PIN or password to continue.';
           });
         case BiometricAuthOutcome.lockedOut:
           setState(() {
             _isAuthenticating = false;
             _bioMessage =
-                'Fingerprint is temporarily locked. Unlock your phone '
+                'Biometric app lock is temporarily locked. Unlock your phone '
                 'with its PIN or pattern, then retry.';
           });
         case BiometricAuthOutcome.failed:
         case BiometricAuthOutcome.error:
           setState(() {
             _isAuthenticating = false;
-            _bioMessage = 'Could not verify with fingerprint. Try again.';
+            _bioMessage = 'Could not verify with biometrics. Try again.';
           });
       }
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _isAuthenticating = false;
-        _bioMessage = 'Could not verify with fingerprint. Please try again.';
+        _bioMessage = 'Could not verify with biometrics. Please try again.';
       });
     }
   }
+
+  Future<void> _loadBiometricAppLock(AuthSession session) async {
+    try {
+      final enabled = await ref
+          .read(savedAccountsServiceProvider)
+          .isBiometricAppLockEnabledFor(session);
+      if (!mounted || _biometricSessionKey != _sessionKey(session)) return;
+      ref.read(appLockPreferencesProvider.notifier).setFor(session, enabled);
+    } catch (_) {
+      // We cannot determine whether this UID is locally locked. Do not leave
+      // AuthGate indefinitely loading or expose the workspace without that
+      // decision; sign out to recover through credentials instead.
+      if (mounted && _biometricSessionKey == _sessionKey(session)) {
+        unawaited(ref.read(authControllerProvider).signOut());
+      }
+    }
+  }
+
+  String _sessionKey(AuthSession session) =>
+      '${session.role.name}:${session.uid}';
 
   /// Trigger biometric check once, after the first frame with a valid session.
   void _maybeTriggerBiometrics() {
@@ -105,8 +168,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
     _bioTriggered = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        final settings = ref.read(appSettingsControllerProvider);
-        _checkBiometrics(settings.biometricsEnabled);
+        _checkBiometrics();
       }
     });
   }
@@ -114,8 +176,26 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
   @override
   Widget build(BuildContext context) {
     final sessionAsync = ref.watch(authSessionProvider);
-    final settings = ref.watch(appSettingsControllerProvider);
+    final appLockPreferences = ref.watch(appLockPreferencesProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    ref.listen<Map<String, bool>>(appLockPreferencesProvider, (previous, next) {
+      final sessionKey = _biometricSessionKey;
+      if (sessionKey == null ||
+          previous?[sessionKey] == true ||
+          next[sessionKey] != true) {
+        return;
+      }
+      _requiresBiometricAppLock = true;
+      _appLockLifecycle.reset();
+      if (mounted) {
+        setState(() {
+          _authenticated = false;
+          _bioTriggered = false;
+          _bioMessage = null;
+        });
+      }
+    });
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value:
@@ -129,46 +209,61 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
       child: sessionAsync.when(
         // Show a branded skeleton on initial load instead of a bare spinner.
         loading: () => const _AppLoadingScreen(),
-        error:
-            (Object error, StackTrace stackTrace) => Scaffold(
-              body: SafeArea(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.error_outline,
-                          size: 48,
-                          color: CissThemeTokens.of(context).danger,
-                        ),
-                        const SizedBox(height: 16),
-                        Text('Could not sign in. Please try again.', textAlign: TextAlign.center),
-                        const SizedBox(height: 24),
-                        FilledButton.tonal(
-                          onPressed: () => ref.invalidate(authSessionProvider),
-                          child: const Text('Retry'),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            ref.read(authControllerProvider).signOut();
-                          },
-                          child: const Text('Sign out'),
-                        ),
-                      ],
-                    ),
+        error: (Object error, StackTrace stackTrace) {
+          final regionService = ref.read(regionServiceProvider);
+          if (!regionService.hasActiveSelectedRegion) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) GoRouter.of(context).go('/region-select');
+            });
+            return const _AppLoadingScreen();
+          }
+          return Scaffold(
+            body: SafeArea(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48,
+                        color: CissThemeTokens.of(context).danger,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Could not sign in. Please try again.',
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      FilledButton.tonal(
+                        onPressed: () => ref.invalidate(authSessionProvider),
+                        child: const Text('Retry'),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          ref.read(authControllerProvider).signOut();
+                        },
+                        child: const Text('Sign out'),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
+          );
+        },
         data: (session) {
           // Reset permission check when session changes (new login).
-          if (_lastSession?.uid != session?.uid) {
+          if (_lastSession?.uid != session?.uid ||
+              _lastSession?.role != session?.role) {
             _permissionsChecked = false;
             _bioTriggered = false;
             _authenticated = false;
             _trackingReconciledUid = null;
+            _biometricSessionKey = null;
+            _requiresBiometricAppLock = null;
+            _appLockLifecycle.reset();
           }
           _lastSession = session;
 
@@ -178,10 +273,10 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
               WidgetsBinding.instance.addPostFrameCallback((_) async {
                 if (!mounted) return;
                 final router = GoRouter.of(context);
-                final saved =
-                    await ref.read(regionServiceProvider).getSavedRegion();
+                final regionService = ref.read(regionServiceProvider);
+                final saved = await regionService.getSavedRegion();
                 if (!mounted) return;
-                if (saved == null) {
+                if (saved == null || !regionService.hasActiveSelectedRegion) {
                   router.go('/region-select');
                 }
               });
@@ -189,9 +284,29 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
             return const LoginHubScreen();
           }
 
+          final sessionKey = _sessionKey(session);
+          if (_biometricSessionKey != sessionKey) {
+            _biometricSessionKey = sessionKey;
+            _requiresBiometricAppLock = null;
+            if (!appLockPreferences.containsKey(sessionKey)) {
+              unawaited(_loadBiometricAppLock(session));
+            }
+          }
+
+          final appLockEnabled = appLockPreferences[sessionKey];
+          if (appLockEnabled != null) {
+            _requiresBiometricAppLock = appLockEnabled;
+          }
+
+          // Do not reveal the session workspace before its account-scoped
+          // strong-biometric preference has been read.
+          if (_requiresBiometricAppLock == null) {
+            return const _AppLoadingScreen();
+          }
+
           // Biometric Gate — triggered once via post-frame callback,
           // NOT called directly in build to avoid infinite prompt loops.
-          if (settings.biometricsEnabled && !_authenticated) {
+          if (_requiresBiometricAppLock! && !_authenticated) {
             _maybeTriggerBiometrics();
             return _BiometricLockScreen(
               onRetry:
@@ -371,7 +486,7 @@ class _BiometricLockScreen extends StatelessWidget {
                   const SizedBox(height: 10),
                   Text(
                     message ??
-                        'Place your finger on the scanner to continue '
+                        'Verify with your device biometrics to continue '
                             'accessing your workspace',
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -408,7 +523,7 @@ class _BiometricLockScreen extends StatelessWidget {
                           ),
                         ),
                         icon: const Icon(Icons.fingerprint_rounded, size: 20),
-                        label: const Text('Try fingerprint again'),
+                        label: const Text('Try biometrics again'),
                       ),
                     ),
                     const SizedBox(height: 12),

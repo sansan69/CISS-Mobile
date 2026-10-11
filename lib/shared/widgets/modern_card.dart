@@ -11,7 +11,9 @@ class ModernCard extends StatelessWidget {
     this.onTap,
     this.borderColor,
     this.backgroundColor,
-    this.radius = 16,
+    this.radius = AppRadius.card,
+    this.hasGlow = false,
+    this.glowColor,
   });
 
   final Widget? child;
@@ -21,6 +23,8 @@ class ModernCard extends StatelessWidget {
   final Color? borderColor;
   final Color? backgroundColor;
   final double radius;
+  final bool hasGlow;
+  final Color? glowColor;
 
   @override
   Widget build(BuildContext context) {
@@ -39,10 +43,12 @@ class ModernCard extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(radius),
               border: Border.all(
-                color: borderColor ?? tokens.border,
+                color: borderColor ?? tokens.specularBorder,
                 width: 1,
               ),
-              boxShadow: AppShadows.card,
+              boxShadow: hasGlow
+                  ? AppShadows.glow(glowColor ?? tokens.primary)
+                  : AppShadows.card,
             ),
             child: child,
           ),

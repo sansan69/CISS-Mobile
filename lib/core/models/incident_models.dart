@@ -7,6 +7,9 @@ class IncidentModel {
     required this.siteName,
     required this.reportedAtLabel,
     required this.summary,
+    this.district,
+    this.photoUrls = const [],
+    this.locationText,
   });
 
   final String id;
@@ -16,8 +19,22 @@ class IncidentModel {
   final String siteName;
   final String reportedAtLabel;
   final String summary;
+  final String? district;
+  final List<String> photoUrls;
+  final String? locationText;
 
   factory IncidentModel.fromJson(Map<String, dynamic> json) {
+    final rawPhotos = json['photoUrls'] ?? json['photos'];
+    final photos = <String>[];
+    if (rawPhotos is List) {
+      for (final p in rawPhotos) {
+        if (p is String && p.isNotEmpty) photos.add(p);
+      }
+    } else if (json['photoUrl'] is String &&
+        (json['photoUrl'] as String).isNotEmpty) {
+      photos.add(json['photoUrl'] as String);
+    }
+
     return IncidentModel(
       id: (json['id'] as String?) ?? '',
       category: (json['category'] as String?) ?? '',
@@ -32,6 +49,9 @@ class IncidentModel {
           (json['description'] as String?) ??
           (json['summary'] as String?) ??
           '',
+      district: (json['district'] as String?),
+      photoUrls: photos,
+      locationText: (json['locationText'] as String?),
     );
   }
 }

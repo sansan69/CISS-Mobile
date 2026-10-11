@@ -4,14 +4,18 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/haptics.dart';
+import '../../../core/auth/firebase_auth_state_source.dart';
+import '../../../core/network/providers.dart';
 import '../../../core/region/region_service.dart';
+import '../../auth/application/auth_controller.dart';
 import '../../../shared/widgets/auth/login_background.dart';
 
 class RegionSelectorScreen extends ConsumerStatefulWidget {
   const RegionSelectorScreen({super.key});
 
   @override
-  ConsumerState<RegionSelectorScreen> createState() => _RegionSelectorScreenState();
+  ConsumerState<RegionSelectorScreen> createState() =>
+      _RegionSelectorScreenState();
 }
 
 class _RegionSelectorScreenState extends ConsumerState<RegionSelectorScreen> {
@@ -28,14 +32,33 @@ class _RegionSelectorScreenState extends ConsumerState<RegionSelectorScreen> {
     });
 
     try {
-      final service = ref.read(regionServiceProvider);
-      final fullConfig = await service.fetchRegionConfig(region.code);
+      final fullConfig = await ref
+          .read(regionConfigurationServiceProvider)
+          .fetchRegionConfig(region.code);
       if (fullConfig == null) {
         throw Exception('Region configuration is not available yet.');
       }
+      if (fullConfig.code != region.code) {
+        throw Exception('Region configuration did not match your selection.');
+      }
 
-      await service.initRegionalFirebase(fullConfig);
-      await service.saveRegionPreference(fullConfig.code, region: fullConfig);
+      await ref
+          .read(regionActivationServiceProvider)
+          .activateRegion(fullConfig);
+
+      // RegionService selects the named Firebase app, but these providers hold
+      // the previous FirebaseAuth/API/session instances until rebuilt. Do that
+      // before entering login so the first regional sign-in cannot target the
+      // default project.
+      ref.read(authSessionProvider.notifier).clearSession();
+      ref.read(regionGraphRevisionProvider.notifier).state++;
+      ref.invalidate(firebaseAuthStateSourceProvider);
+      ref.invalidate(firebaseAuthProvider);
+      ref.invalidate(apiClientProvider);
+      ref.invalidate(mobileRepositoryProvider);
+      ref.invalidate(authRepositoryProvider);
+      ref.invalidate(authSessionProvider);
+      await ref.read(authSessionProvider.future);
 
       if (!mounted) return;
       Haptics.heavy();
@@ -68,14 +91,14 @@ class _RegionSelectorScreenState extends ConsumerState<RegionSelectorScreen> {
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [tokens.primary, tokens.primaryStrong],
-                    ),
+                    color: tokens.primary,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.map_rounded, size: 40, color: Colors.white),
+                  child: const Icon(
+                    Icons.map_rounded,
+                    size: 40,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 24),
 
@@ -103,35 +126,55 @@ class _RegionSelectorScreenState extends ConsumerState<RegionSelectorScreen> {
                       decoration: BoxDecoration(
                         color: tokens.danger.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: tokens.danger.withValues(alpha: 0.3)),
+                        border: Border.all(
+                          color: tokens.danger.withValues(alpha: 0.3),
+                        ),
                       ),
-                      child: Text(_error!, style: TextStyle(color: tokens.danger, fontSize: 13)),
+                      child: Text(
+                        _error!,
+                        style: TextStyle(color: tokens.danger, fontSize: 13),
+                      ),
                     ),
                   ),
 
                 // Region list
                 Expanded(
                   child: regionsAsync.when(
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.cloud_off, size: 48, color: tokens.inkMuted),
-                          const SizedBox(height: 12),
-                          Text('Could not load regions', style: TextStyle(color: tokens.inkMuted)),
-                          const SizedBox(height: 12),
-                          TextButton(
-                            onPressed: () => ref.invalidate(availableRegionsProvider),
-                            child: const Text('Retry'),
+                    loading:
+                        () => const Center(child: CircularProgressIndicator()),
+                    error:
+                        (e, _) => Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.cloud_off,
+                                size: 48,
+                                color: tokens.inkMuted,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Could not load regions',
+                                style: TextStyle(color: tokens.inkMuted),
+                              ),
+                              const SizedBox(height: 12),
+                              TextButton(
+                                onPressed:
+                                    () => ref.invalidate(
+                                      availableRegionsProvider,
+                                    ),
+                                child: const Text('Retry'),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
+                        ),
                     data: (regions) {
                       if (regions.isEmpty) {
                         return Center(
-                          child: Text('No regions available', style: TextStyle(color: tokens.inkMuted)),
+                          child: Text(
+                            'No regions available',
+                            style: TextStyle(color: tokens.inkMuted),
+                          ),
                         );
                       }
                       return ListView.separated(
@@ -144,19 +187,24 @@ class _RegionSelectorScreenState extends ConsumerState<RegionSelectorScreen> {
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
-                                color: isSelected
-                                    ? tokens.primary
-                                    : tokens.border.withValues(alpha: 0.3),
+                                color:
+                                    isSelected
+                                        ? tokens.primary
+                                        : tokens.border.withValues(alpha: 0.3),
                               ),
-                              color: isSelected
-                                  ? tokens.primarySoft
-                                  : tokens.surface,
+                              color:
+                                  isSelected
+                                      ? tokens.primarySoft
+                                      : tokens.surface,
                             ),
                             child: Material(
                               color: Colors.transparent,
                               child: InkWell(
                                 borderRadius: BorderRadius.circular(14),
-                                onTap: _loading ? null : () => _selectRegion(region),
+                                onTap:
+                                    _loading
+                                        ? null
+                                        : () => _selectRegion(region),
                                 child: Padding(
                                   padding: const EdgeInsets.all(16),
                                   child: Row(
@@ -165,8 +213,12 @@ class _RegionSelectorScreenState extends ConsumerState<RegionSelectorScreen> {
                                         width: 44,
                                         height: 44,
                                         decoration: BoxDecoration(
-                                          color: tokens.primary.withValues(alpha: 0.1),
-                                          borderRadius: BorderRadius.circular(12),
+                                          color: tokens.primary.withValues(
+                                            alpha: 0.1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
                                         ),
                                         child: Center(
                                           child: Text(
@@ -183,7 +235,8 @@ class _RegionSelectorScreenState extends ConsumerState<RegionSelectorScreen> {
                                       const SizedBox(width: 14),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Text(
                                               region.name,
@@ -195,7 +248,10 @@ class _RegionSelectorScreenState extends ConsumerState<RegionSelectorScreen> {
                                             ),
                                             const SizedBox(height: 2),
                                             Text(
-                                              region.apiUrl.replaceAll('https://', ''),
+                                              region.apiUrl.replaceAll(
+                                                'https://',
+                                                '',
+                                              ),
                                               style: TextStyle(
                                                 fontSize: 12,
                                                 color: tokens.inkMuted,
@@ -208,7 +264,9 @@ class _RegionSelectorScreenState extends ConsumerState<RegionSelectorScreen> {
                                         const SizedBox(
                                           width: 20,
                                           height: 20,
-                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
                                         )
                                       else
                                         Icon(

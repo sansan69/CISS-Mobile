@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../core/network/providers.dart';
+import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
@@ -62,14 +63,12 @@ class _GuardAttendanceLogsScreenState
       ).subtract(Duration(days: _selectedRangeDays - 1));
       final entries = await ref
           .read(mobileRepositoryProvider)
-          .fetchFieldOfficerGuardAttendanceRange(
-            start: start,
-            end: now,
-          );
+          .fetchFieldOfficerGuardAttendanceRange(start: start, end: now);
       if (!mounted) return;
       setState(() {
-        _entries = entries.where(_isForGuard).toList()
-          ..sort((a, b) => b.dateLabel.compareTo(a.dateLabel));
+        _entries =
+            entries.where(_isForGuard).toList()
+              ..sort((a, b) => b.dateLabel.compareTo(a.dateLabel));
         _loading = false;
       });
     } catch (error) {
@@ -88,17 +87,7 @@ class _GuardAttendanceLogsScreenState
 
     return Scaffold(
       backgroundColor: tokens.canvas,
-      appBar: AppBar(
-        title: Text(
-          widget.guardName,
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 20,
-            color: tokens.ink,
-          ),
-        ),
-        backgroundColor: tokens.canvas,
-      ),
+      appBar: CissAppBar(title: widget.guardName, subtitle: 'Attendance logs'),
       body: Column(
         children: [
           // Range selector
@@ -108,14 +97,15 @@ class _GuardAttendanceLogsScreenState
               children: [
                 Expanded(
                   child: SegmentedButton<int>(
-                    segments: _rangeDays
-                        .map(
-                          (days) => ButtonSegment<int>(
-                            value: days,
-                            label: Text('$days days'),
-                          ),
-                        )
-                        .toList(),
+                    segments:
+                        _rangeDays
+                            .map(
+                              (days) => ButtonSegment<int>(
+                                value: days,
+                                label: Text('$days days'),
+                              ),
+                            )
+                            .toList(),
                     selected: <int>{_selectedRangeDays},
                     onSelectionChanged: (selection) {
                       setState(() => _selectedRangeDays = selection.first);
@@ -133,10 +123,7 @@ class _GuardAttendanceLogsScreenState
                 const SizedBox(width: 8),
                 IconButton(
                   onPressed: _load,
-                  icon: Icon(
-                    Icons.refresh_rounded,
-                    color: tokens.inkMuted,
-                  ),
+                  icon: Icon(Icons.refresh_rounded, color: tokens.inkMuted),
                   tooltip: 'Refresh',
                 ),
               ],
@@ -144,9 +131,7 @@ class _GuardAttendanceLogsScreenState
           ),
 
           if (_loading)
-            const Expanded(
-              child: Center(child: CircularProgressIndicator()),
-            )
+            const Expanded(child: Center(child: CircularProgressIndicator()))
           else if (_error != null)
             Expanded(
               child: StateBlock(
@@ -170,9 +155,7 @@ class _GuardAttendanceLogsScreenState
               ),
             )
           else
-            Expanded(
-              child: _AttendanceList(entries: entries),
-            ),
+            Expanded(child: _AttendanceList(entries: entries)),
         ],
       ),
     );
@@ -188,13 +171,10 @@ class _AttendanceList extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
 
-    final presentCount =
-        entries.where((e) => e.checkIn != null).length;
+    final presentCount = entries.where((e) => e.checkIn != null).length;
     final flaggedCount =
         entries
-            .where(
-              (e) => e.isMockLocationSuspected || e.requiresAdminReview,
-            )
+            .where((e) => e.isMockLocationSuspected || e.requiresAdminReview)
             .length;
 
     return ListView(
@@ -291,8 +271,7 @@ class _EntryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    final flagged =
-        entry.isMockLocationSuspected || entry.requiresAdminReview;
+    final flagged = entry.isMockLocationSuspected || entry.requiresAdminReview;
 
     final statusTone = switch (entry.status.toLowerCase()) {
       'in' || 'present' || 'complete' => StatusChipTone.success,
@@ -339,10 +318,7 @@ class _EntryCard extends StatelessWidget {
                   ),
                 ),
                 if (flagged)
-                  StatusChip(
-                    label: 'FLAGGED',
-                    tone: StatusChipTone.danger,
-                  )
+                  StatusChip(label: 'FLAGGED', tone: StatusChipTone.danger)
                 else
                   StatusChip(
                     label: entry.status.toUpperCase(),
@@ -420,10 +396,7 @@ class _EntryCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       entry.mockLocationReason!,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: tokens.warning,
-                      ),
+                      style: TextStyle(fontSize: 12, color: tokens.warning),
                     ),
                   ),
                 ],

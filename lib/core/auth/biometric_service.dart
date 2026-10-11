@@ -5,12 +5,12 @@ import 'package:local_auth_android/local_auth_android.dart';
 import 'package:local_auth_darwin/local_auth_darwin.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Whether this device can be used for fingerprint unlock.
+/// Whether this device can be used for the biometric app lock.
 ///
-/// The user requirement is fingerprint sensors only (optical or ultrasonic).
-/// On Android, fingerprint sensors report as [BiometricType.fingerprint] or
-/// [BiometricType.strong] (Class 3). Face-only and iris-only devices do NOT
-/// qualify — [BiometricType.face] / [BiometricType.weak] are rejected.
+/// `local_auth` exposes enrolled modality names but does not let this app
+/// enforce a uniform biometric strength or fingerprint-only policy across
+/// platforms. The app therefore accepts any enrolled biometric that the
+/// installed plugin can authenticate.
 enum FingerprintAvailability { supported, noSensor, notEnrolled, unknown }
 
 /// Typed outcome of a biometric prompt so UI can react to the OS error codes
@@ -25,6 +25,12 @@ enum BiometricAuthOutcome {
   permanentlyLockedOut,
   error,
 }
+
+/// `local_auth` cannot enforce a cross-platform strength or modality policy,
+/// so the app-lock policy deliberately accepts any enrolled biometric exposed
+/// by the installed plugin.
+bool supportsBiometricAppLock(List<BiometricType> enrolledBiometrics) =>
+    enrolledBiometrics.isNotEmpty;
 
 class FingerprintSupport {
   const FingerprintSupport({
@@ -63,15 +69,14 @@ class BiometricService {
     return await _auth.getAvailableBiometrics();
   }
 
-  /// Industry-standard capability probe for fingerprint unlock:
+  /// Capability probe for the biometric app lock:
   /// 1. `isDeviceSupported` — does the platform expose any biometric API.
   /// 2. `getAvailableBiometrics` — which types are ENROLLED right now.
   /// 3. `canCheckBiometrics` — distinguishes "no sensor" from "sensor
   ///    present but nothing enrolled" (canCheckBiometrics is hardware-only).
   ///
-  /// Fingerprint = [BiometricType.fingerprint] or [BiometricType.strong]
-  /// (Android Class 3 — covers optical and ultrasonic sensors). Face and
-  /// weak-class devices are deliberately excluded.
+  /// Any enrolled biometric classification qualifies because `local_auth`
+  /// cannot enforce a stronger policy consistently on every supported device.
   Future<FingerprintSupport> checkFingerprintSupport() async {
     var deviceSupported = false;
     try {
@@ -89,10 +94,7 @@ class BiometricService {
       available = await _auth.getAvailableBiometrics();
     } catch (_) {}
 
-    final hasFingerprint =
-        available.contains(BiometricType.fingerprint) ||
-        available.contains(BiometricType.strong);
-    if (hasFingerprint) {
+    if (supportsBiometricAppLock(available)) {
       return FingerprintSupport(
         availability: FingerprintAvailability.supported,
         enrolledBiometrics: available,
@@ -146,7 +148,8 @@ class BiometricService {
             goToSettingsButton: 'Go to Settings',
             goToSettingsDescription:
                 'Please set up biometric authentication in Settings',
-            lockOut: 'Biometric authentication is disabled. '
+            lockOut:
+                'Biometric authentication is disabled. '
                 'Please lock and unlock your screen to enable it.',
           ),
         ],
@@ -191,7 +194,7 @@ class BiometricService {
     }
   }
 
-  /// Fingerprint-gated authentication with a typed outcome so the UI can
+  /// Biometric app-lock authentication with a typed outcome so the UI can
   /// guide the user through OS error states (per local_auth error codes).
   Future<BiometricAuthOutcome> authenticateFingerprint({
     required String localizedReason,
@@ -210,7 +213,7 @@ class BiometricService {
           ? BiometricAuthOutcome.success
           : BiometricAuthOutcome.failed;
     } on PlatformException catch (e) {
-      debugPrint('Fingerprint auth PlatformException: ${e.message}');
+      debugPrint('Biometric app-lock PlatformException: ${e.message}');
       switch (e.code) {
         case 'NotAvailable':
           return BiometricAuthOutcome.notAvailable;
@@ -224,7 +227,7 @@ class BiometricService {
           return BiometricAuthOutcome.error;
       }
     } catch (e) {
-      debugPrint('Fingerprint auth error: $e');
+      debugPrint('Biometric app-lock error: $e');
       return BiometricAuthOutcome.error;
     }
   }

@@ -8,6 +8,7 @@ import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../widgets/guard_portal_widgets.dart';
+import 'guard_training_leaderboard_screen.dart';
 
 final FutureProvider<List<EvaluationModel>> guardEvaluationsProvider =
     FutureProvider<List<EvaluationModel>>((Ref ref) {
@@ -36,6 +37,16 @@ class GuardEvaluationsScreen extends ConsumerWidget {
           subtitle: 'Quiz and performance records',
           onRefresh: () async => ref.invalidate(guardEvaluationsProvider),
           actions: <Widget>[
+            IconButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const GuardTrainingLeaderboardScreen(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.emoji_events_rounded),
+            ),
             IconButton(
               onPressed: () => ref.invalidate(guardEvaluationsProvider),
               icon: const Icon(Icons.refresh_rounded),
@@ -78,6 +89,20 @@ class GuardEvaluationsScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: AppSpacing.lg),
+            GuardRecordCard(
+              title: 'Training Leaderboard',
+              subtitle: 'See how you rank against guards in your district',
+              icon: Icons.emoji_events_rounded,
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const GuardTrainingLeaderboardScreen(),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            _AwardsSection(evaluations: evaluations, tokens: tokens),
             if (evaluations.isEmpty)
               const StateBlock(
                 icon: Icons.workspace_premium_rounded,
@@ -249,6 +274,151 @@ class _EvaluationCardState extends State<_EvaluationCard> {
               ),
               textAlign: TextAlign.right,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AwardsSection extends StatelessWidget {
+  const _AwardsSection({required this.evaluations, required this.tokens});
+
+  final List<EvaluationModel> evaluations;
+  final CissThemeTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    if (evaluations.isEmpty) return const SizedBox.shrink();
+
+    final hasHighPerformer = evaluations.any(
+      (e) =>
+          e.totalScore >= 80 ||
+          e.scoreLabel.contains('8') ||
+          e.scoreLabel.contains('9') ||
+          e.scoreLabel.contains('100'),
+    );
+    final hasUniformBadge = evaluations.any((e) => e.uniformScore >= 8);
+    final hasPunctualityBadge = evaluations.any((e) => e.punctualityScore >= 8);
+
+    if (!hasHighPerformer && !hasUniformBadge && !hasPunctualityBadge) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'HONORS & RECOGNITIONS',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.5,
+            color: tokens.inkMuted,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              if (hasHighPerformer)
+                _BadgeCard(
+                  icon: Icons.emoji_events_rounded,
+                  title: 'Top Performer',
+                  subtitle: '80%+ Performance Score',
+                  color: tokens.accent,
+                  tokens: tokens,
+                ),
+              if (hasUniformBadge)
+                _BadgeCard(
+                  icon: Icons.shield_rounded,
+                  title: 'Best Turnout',
+                  subtitle: 'Exemplary Uniform & Gear',
+                  color: tokens.primary,
+                  tokens: tokens,
+                ),
+              if (hasPunctualityBadge)
+                _BadgeCard(
+                  icon: Icons.verified_rounded,
+                  title: 'Zero Late Check-in',
+                  subtitle: 'Exemplary Punctuality',
+                  color: tokens.success,
+                  tokens: tokens,
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+      ],
+    );
+  }
+}
+
+class _BadgeCard extends StatelessWidget {
+  const _BadgeCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.tokens,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final CissThemeTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.08),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: tokens.ink,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: tokens.inkMuted,
+                ),
+              ),
+            ],
           ),
         ],
       ),

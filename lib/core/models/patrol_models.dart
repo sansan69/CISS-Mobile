@@ -172,6 +172,7 @@ class GuardPatrolStatusModel {
     required this.enabled,
     required this.guardName,
     required this.employeeId,
+    required this.employeeDocId,
     required this.clientId,
     required this.clientName,
     required this.settings,
@@ -184,6 +185,7 @@ class GuardPatrolStatusModel {
   final bool enabled;
   final String guardName;
   final String employeeId;
+  final String employeeDocId;
   final String clientId;
   final String clientName;
   final PatrolSettingsModel settings;
@@ -197,6 +199,7 @@ class GuardPatrolStatusModel {
       enabled: json['enabled'] == true,
       guardName: (json['guardName'] as String?) ?? '',
       employeeId: (json['employeeId'] as String?) ?? '',
+      employeeDocId: (json['employeeDocId'] as String?) ?? '',
       clientId: (json['clientId'] as String?) ?? '',
       clientName: (json['clientName'] as String?) ?? '',
       settings: PatrolSettingsModel.fromJson(

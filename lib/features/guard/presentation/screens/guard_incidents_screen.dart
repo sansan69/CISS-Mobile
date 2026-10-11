@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -15,6 +14,7 @@ import '../../../../../core/offline/draft_service.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
+import '../../../../../shared/widgets/sync_status_badge.dart';
 import '../widgets/guard_portal_widgets.dart';
 import 'guard_attendance_screen.dart';
 import 'guard_profile_screen.dart';
@@ -131,11 +131,14 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
       try {
         List<String> photoUrls = [];
         if (photoDataUrl != null) {
-          final uploadPath =
-              'incidents/${profile.id}/${DateTime.now().millisecondsSinceEpoch}.jpg';
           final uploadResult = await ref
               .read(mobileRepositoryProvider)
-              .uploadAttendancePhoto(path: uploadPath, dataUrl: photoDataUrl);
+              .uploadAttendancePhoto(
+                employeeDocId:
+                    profile.id.isNotEmpty ? profile.id : profile.employeeId,
+                dataUrl: photoDataUrl,
+                siteId: _selectedSite!.id,
+              );
           photoUrls.add(uploadResult['url']);
         }
 
@@ -156,11 +159,7 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
           });
         }
       } catch (uploadOrSubmitError) {
-        if (uploadOrSubmitError is DioException &&
-            (uploadOrSubmitError.type == DioExceptionType.connectionTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.sendTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.receiveTimeout ||
-                uploadOrSubmitError.type == DioExceptionType.connectionError)) {
+        if (CissError.isRetryableNetworkError(uploadOrSubmitError)) {
           await ref
               .read(offlineQueueProvider)
               .enqueue(
@@ -229,6 +228,9 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
               subtitle: 'Report and track incidents',
               onRefresh: () async => ref.invalidate(guardIncidentsProvider),
               actions: <Widget>[
+                SyncStatusBadge(
+                  onTap: () => ref.read(syncServiceProvider).processQueue(),
+                ),
                 IconButton(
                   onPressed: () => ref.invalidate(guardIncidentsProvider),
                   icon: const Icon(Icons.refresh_rounded),
@@ -236,7 +238,7 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
               ],
               children: <Widget>[
                 GuardHeroPanel(
-                  eyebrow: 'Incident desk',
+                  eyebrow: 'Incidents',
                   title: 'Report from field',
                   subtitle:
                       '${incidents.length} incident${incidents.length == 1 ? '' : 's'} recorded • ${profile.district}',
@@ -254,7 +256,11 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                     ),
                     GuardMetricItem(
                       label: 'Severity',
-                      value: _severity.toUpperCase(),
+                      value:
+                          _severity.isEmpty
+                              ? '-'
+                              : _severity[0].toUpperCase() +
+                                  _severity.substring(1),
                       icon: Icons.priority_high_rounded,
                       color: tokens.warning,
                     ),
@@ -298,7 +304,9 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                               .map(
                                 (s) => DropdownMenuItem(
                                   value: s,
-                                  child: Text(s.toUpperCase()),
+                                  child: Text(
+                                    s[0].toUpperCase() + s.substring(1),
+                                  ),
                                 ),
                               )
                               .toList(),

@@ -9,6 +9,7 @@ import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../widgets/guard_portal_widgets.dart';
 import 'guard_training_detail_screen.dart';
+import 'guard_training_leaderboard_screen.dart';
 
 String _formatDueLabel(String value) {
   final parsed = DateTime.tryParse(value);
@@ -73,7 +74,7 @@ class GuardTrainingScreen extends ConsumerWidget {
           ],
           children: <Widget>[
             GuardHeroPanel(
-              eyebrow: 'Training centre',
+              eyebrow: 'Training',
               title:
                   assignments.isEmpty
                       ? 'No modules assigned'
@@ -107,6 +108,19 @@ class GuardTrainingScreen extends ConsumerWidget {
                   color: tokens.success,
                 ),
               ],
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            GuardRecordCard(
+              title: 'Training Leaderboard',
+              subtitle: 'See how you rank against guards in your district',
+              icon: Icons.emoji_events_rounded,
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const GuardTrainingLeaderboardScreen(),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: AppSpacing.lg),
             _ProgressCard(progress: progress, percentage: percentage),
