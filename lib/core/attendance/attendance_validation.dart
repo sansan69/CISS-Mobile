@@ -1,3 +1,15 @@
+import '../settings/module_flags.dart';
+
+/// Whether the client should run the server-authoritative attendance
+/// pre-check before check-in/out.
+///
+/// Per the controller ruling (2026-10-11) the **entire** pre-check is opt-in
+/// behind `ipAttendance` (default OFF). `geoFence` — which defaults ON — must
+/// not enable it on its own, so the check-in/out critical path stays unchanged
+/// (no `fetchPublicIp()` + `/attendance/validate` round trip) by default; the
+/// server still enforces geo + IP on submit.
+bool shouldRunAttendancePreCheck(ModuleFlags flags) => flags.ipAttendance;
+
 /// Outcome of the server-authoritative attendance pre-check.
 ///
 /// The server owns the geofence math and the client-IP/network decision, so

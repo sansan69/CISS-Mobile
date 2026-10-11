@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/attendance/attendance_session.dart';
+import '../../../../../core/attendance/attendance_validation.dart';
 import '../../../../../core/attendance/early_checkout.dart';
 import '../../../../../core/haptics.dart';
 import '../../../../../core/models/attendance_models.dart';
@@ -16,6 +17,7 @@ import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/settings/module_gate.dart';
+import '../../../../../core/settings/remote_config_provider.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/location/background_tracking_service.dart';
 import '../../../../../core/location/public_ip.dart';
@@ -536,17 +538,18 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
 
   /// Server-authoritative geo + IP pre-check before check-in/out.
   ///
-  /// Gated by the `geoFence` / `ipAttendance` module flags. Returns true when
-  /// the submit must be aborted because the server said the guard is not
-  /// allowed. Fails open on any error — the submit endpoint re-enforces the
-  /// same checks server-side, so an unreachable pre-check must never block.
+  /// Opt-in behind the `ipAttendance` module flag only (default OFF) per the
+  /// controller ruling: by default the check-in/out path is unchanged (no
+  /// `fetchPublicIp()` + `/attendance/validate` round trip) and the server
+  /// still enforces geo + IP on submit. Returns true when the submit must be
+  /// aborted because the server said the guard is not allowed. Fails open on
+  /// any error — an unreachable pre-check must never block.
   Future<bool> _validateBeforeSubmit() async {
     if (!mounted) return false;
 
-    final enabled =
-        moduleEnabled(ref, 'geoFence', fallback: true) ||
-        moduleEnabled(ref, 'ipAttendance', fallback: false);
-    if (!enabled) return false;
+    if (!shouldRunAttendancePreCheck(ref.read(remoteConfigProvider).modules)) {
+      return false;
+    }
 
     final position = _position;
     final site = _site;
@@ -563,7 +566,8 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       );
     }
 
-    // Best-effort public IP hint; never fatal.
+    // Best-effort public IP hint; never fatal. Only fetched when the IP-based
+    // pre-check is enabled, so the default path adds no latency.
     final publicIp = await fetchPublicIp();
 
     try {
