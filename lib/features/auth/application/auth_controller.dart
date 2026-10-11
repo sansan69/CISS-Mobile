@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_core/firebase_core.dart';
 
 import '../../../core/auth/biometric_service.dart';
 import '../../../core/auth/firebase_auth_state_source.dart';
@@ -143,7 +144,12 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
   /// changed users during sign-in, in which case the caller must fail closed.
   bool setSession(AuthSession session) {
     final authStateUid = ref.read(firebaseAuthStateSourceProvider).currentUid;
-    final directUid = ref.read(firebaseAuthProvider).currentUser?.uid;
+    // The live Firebase session is only a fallback for when the auth-state
+    // source has not yet reported a uid. Reading it when no Firebase app exists
+    // (unit tests, very early startup) would throw, so guard it.
+    final String? directUid = Firebase.apps.isNotEmpty
+        ? ref.read(firebaseAuthProvider).currentUser?.uid
+        : null;
     final activeUid = authStateUid ?? directUid;
     if (_disposed || activeUid != session.uid) {
       _controllerSignInInProgress = false;
