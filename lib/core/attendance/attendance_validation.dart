@@ -18,21 +18,23 @@ bool shouldRunAttendancePreCheck(ModuleFlags flags) => flags.ipAttendance;
 /// pre-check as permission to bypass them.
 class AttendanceValidationResult {
   AttendanceValidationResult({
-    required this.allowed,
+    required this.canSubmit,
     this.reason,
     this.checks = const {},
   });
 
-  final bool allowed;
+  /// The server's authoritative flag. The live contract returns `canSubmit`;
+  /// a legacy `allowed` key is also honoured for backward compatibility.
+  final bool canSubmit;
   final String? reason;
   final Map<String, dynamic> checks;
 
   /// Whether the client should abort the submit because the server said no.
-  bool get blocksSubmit => !allowed;
+  bool get blocksSubmit => !canSubmit;
 
   factory AttendanceValidationResult.fromJson(Map<String, dynamic> j) =>
       AttendanceValidationResult(
-        allowed: j['allowed'] == true,
+        canSubmit: (j['canSubmit'] ?? j['allowed']) == true,
         reason: j['reason'] as String?,
         checks: (j['checks'] as Map?)?.cast<String, dynamic>() ?? const {},
       );

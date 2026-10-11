@@ -36,8 +36,7 @@ class MobileRepository {
   static const String _mobileTokenPath = '/api/mobile/token';
   static const String _remoteConfigPath = '/api/mobile/settings';
   static const String _attendanceBreakPath = '/api/mobile/attendance/break';
-  static const String _attendanceValidatePath =
-      '/api/mobile/attendance/validate';
+  static const String _attendanceValidatePath = '/api/attendance/validate';
 
   Future<String?> _token() async => _auth.currentUser?.getIdToken(false);
 
@@ -947,17 +946,21 @@ class MobileRepository {
   /// checks, so callers must treat an error here as fail-open rather than as
   /// permission to bypass enforcement.
   Future<AttendanceValidationResult> validateAttendance({
+    required String employeeDocId,
     required String siteId,
     required double lat,
-    required double lng,
-    required double accuracy,
+    required double lon,
+    required String status,
     String? publicIp,
+    String? dutyPointId,
   }) async {
     final data = await _postJson(_attendanceValidatePath, <String, dynamic>{
+      'employeeDocId': employeeDocId,
       'siteId': siteId,
       'lat': lat,
-      'lng': lng,
-      'accuracy': accuracy,
+      'lon': lon,
+      'status': status,
+      'dutyPointId': dutyPointId,
       'publicIp': publicIp,
       'capturedAt': DateTime.now().toUtc().toIso8601String(),
     });
@@ -1758,8 +1761,8 @@ class MobileRepository {
     String ymd(DateTime d) =>
         '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     final data = await _getJson(
-      '/api/field-officer/guard-attendance',
-      queryParameters: <String, dynamic>{'from': ymd(start), 'to': ymd(end)},
+      '/api/field-officer/guard-attendance/range',
+      queryParameters: <String, dynamic>{'start': ymd(start), 'end': ymd(end)},
     );
     final entries =
         (data['attendance'] ?? data['records'] ?? data['logs'] ?? data['data'])

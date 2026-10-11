@@ -3,22 +3,33 @@ import 'package:ciss_mobile/core/settings/module_flags.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('parses allowed/reason and blocks when not allowed', () {
+  test('parses canSubmit/reason and blocks when canSubmit is false', () {
     final r = AttendanceValidationResult.fromJson({
-      'allowed': false,
+      'canSubmit': false,
       'reason': 'Outside site geofence (145 m of 100 m)',
       'checks': {
         'geoFence': {'ok': false},
       },
     });
-    expect(r.allowed, isFalse);
+    expect(r.canSubmit, isFalse);
     expect(r.reason, contains('geofence'));
     expect(r.blocksSubmit, isTrue);
   });
 
-  test('allowed result does not block', () {
-    final r = AttendanceValidationResult.fromJson({'allowed': true});
+  test('canSubmit true does not block', () {
+    final r = AttendanceValidationResult.fromJson({'canSubmit': true});
+    expect(r.canSubmit, isTrue);
     expect(r.blocksSubmit, isFalse);
+  });
+
+  test('honours legacy allowed key for backward compatibility', () {
+    final blocked = AttendanceValidationResult.fromJson({'allowed': false});
+    expect(blocked.canSubmit, isFalse);
+    expect(blocked.blocksSubmit, isTrue);
+
+    final ok = AttendanceValidationResult.fromJson({'allowed': true});
+    expect(ok.canSubmit, isTrue);
+    expect(ok.blocksSubmit, isFalse);
   });
 
   test('pre-check is opt-in behind ipAttendance and off by default', () {

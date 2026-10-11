@@ -544,7 +544,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   /// still enforces geo + IP on submit. Returns true when the submit must be
   /// aborted because the server said the guard is not allowed. Fails open on
   /// any error — an unreachable pre-check must never block.
-  Future<bool> _validateBeforeSubmit() async {
+  Future<bool> _validateBeforeSubmit(GuardProfileModel profile) async {
     if (!mounted) return false;
 
     if (!shouldRunAttendancePreCheck(ref.read(remoteConfigProvider).modules)) {
@@ -574,10 +574,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       final result = await ref
           .read(mobileRepositoryProvider)
           .validateAttendance(
+            employeeDocId: profile.id,
             siteId: site.id,
             lat: position.latitude,
-            lng: position.longitude,
-            accuracy: position.accuracy,
+            lon: position.longitude,
+            status: _status,
             publicIp: publicIp,
           );
       if (!result.blocksSubmit) return false;
@@ -633,7 +634,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     // Server-authoritative geo + IP pre-check (module-gated). Aborts the submit
     // when the server says the guard is not allowed; otherwise the submit
     // endpoint re-enforces the same checks server-side.
-    if (await _validateBeforeSubmit()) return;
+    if (await _validateBeforeSubmit(profile)) return;
 
     setState(() {
       _busy = true;

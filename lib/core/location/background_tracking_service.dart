@@ -344,7 +344,10 @@ void onStart(ServiceInstance service) async {
       isMock: position.isMocked,
       isGPSOn: isGpsOn,
       wifiConnected: telemetry['wifiConnected'] == true,
-      batteryPercentage: (telemetry['batteryLevel'] as num?)?.round(),
+      batteryPercentage: (((telemetry['batteryLevel'] as num?) ?? 0) * 100)
+          .round()
+          .clamp(0, 100)
+          .toInt(),
       networkType: (telemetry['networkType'] ?? 'none').toString(),
       time: DateTime.now().toUtc(),
     );
