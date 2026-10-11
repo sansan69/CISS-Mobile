@@ -667,9 +667,32 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           if (!mounted) return;
           if (reason != null) {
             payload['earlyCheckOutReason'] = reason;
-            await ref.read(mobileRepositoryProvider).submitAttendance(
-              <String, dynamic>{...payload, 'photoUrl': uploadResult['url']},
-            );
+            // Rotate the idempotency key so the re-submit is a genuinely
+            // distinct request. A server deduping on clientRequestId must not
+            // treat the retry as a replay and drop the reason. The original id
+            // stays on the first attempt (and on `_clientRequestId`).
+            payload['clientRequestId'] = _uuid.v4();
+            final retryResponse =
+                await ref
+                    .read(mobileRepositoryProvider)
+                    .submitAttendance(
+                      <String, dynamic>{
+                        ...payload,
+                        'photoUrl': uploadResult['url'],
+                      },
+                    );
+            if (_requiresEarlyCheckoutReason(retryResponse)) {
+              // The server still wants a reason. Do NOT loop — surface the
+              // existing error path and abort this submit attempt.
+              if (mounted) {
+                setState(
+                  () =>
+                      _error =
+                          'The server still requires an early-checkout reason.',
+                );
+              }
+              return;
+            }
           }
         }
 
