@@ -34,6 +34,7 @@ class MobileRepository {
   static const String _mobileNotificationsPath = '/api/mobile/notifications';
   static const String _mobileTokenPath = '/api/mobile/token';
   static const String _remoteConfigPath = '/api/mobile/settings';
+  static const String _attendanceBreakPath = '/api/mobile/attendance/break';
 
   Future<String?> _token() async => _auth.currentUser?.getIdToken(false);
 
@@ -934,6 +935,51 @@ class MobileRepository {
     Map<String, dynamic> payload,
   ) async {
     return _postJson('/api/attendance/submit', payload);
+  }
+
+  /// Starts or stops a break for the guard's open attendance session.
+  ///
+  /// The backend is authoritative for the resulting state, so the response
+  /// (see `AttendanceSession.applyBreakResponse`) is returned to the caller.
+  Future<Map<String, dynamic>> attendanceBreak({
+    required String action,
+    double? lat,
+    double? lng,
+    double? accuracy,
+  }) async {
+    return _postJson(_attendanceBreakPath, <String, dynamic>{
+      'action': action,
+      'lat': lat,
+      'lng': lng,
+      'accuracy': accuracy,
+      'capturedAt': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  Future<Map<String, dynamic>> startBreak({
+    double? lat,
+    double? lng,
+    double? accuracy,
+  }) {
+    return attendanceBreak(
+      action: 'start',
+      lat: lat,
+      lng: lng,
+      accuracy: accuracy,
+    );
+  }
+
+  Future<Map<String, dynamic>> stopBreak({
+    double? lat,
+    double? lng,
+    double? accuracy,
+  }) {
+    return attendanceBreak(
+      action: 'stop',
+      lat: lat,
+      lng: lng,
+      accuracy: accuracy,
+    );
   }
 
   Future<Map<String, dynamic>> fetchGuardTrackingStatus() {

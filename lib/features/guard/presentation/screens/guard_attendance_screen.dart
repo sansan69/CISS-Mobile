@@ -8,11 +8,13 @@ import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
+import '../../../../../core/attendance/attendance_session.dart';
 import '../../../../../core/haptics.dart';
 import '../../../../../core/models/attendance_models.dart';
 import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/network/providers.dart';
+import '../../../../../core/settings/module_gate.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/location/background_tracking_service.dart';
 import '../../../../../core/fcm/providers.dart';
@@ -45,6 +47,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   String? _clientRequestId; // Stable across retries for idempotency
   Position? _position;
 
+  final AttendanceSession _breakSession = AttendanceSession();
+  Timer? _breakTicker;
+  bool _breakBusy = false;
+  bool _checkedIn = false;
+
   @override
   void initState() {
     super.initState();
@@ -52,6 +59,12 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       _initLocationCheck();
       _initStatusFromHistory();
     });
+  }
+
+  @override
+  void dispose() {
+    _breakTicker?.cancel();
+    super.dispose();
   }
 
   /// Determine default IN/OUT status from attendance history.
@@ -69,6 +82,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       // If latest is OUT, the guard probably wants to IN now
       setState(() {
         _status = latest.status == 'In' ? 'Out' : 'In';
+        _checkedIn = latest.status == 'In';
       });
     } catch (e) {
       // Silently ignore — default IN is fine
@@ -323,7 +337,199 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     return nearest;
   }
 
+  bool _isOffline(Object error) {
+    return error is DioException &&
+        (error.type == DioExceptionType.connectionTimeout ||
+            error.type == DioExceptionType.sendTimeout ||
+            error.type == DioExceptionType.receiveTimeout ||
+            error.type == DioExceptionType.connectionError);
+  }
+
+  String _formatBreakElapsed() {
+    final started = _breakSession.breakStartedAt;
+    if (started == null) return '00:00';
+    final elapsed = DateTime.now().difference(started);
+    final minutes = elapsed.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final seconds = elapsed.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return elapsed.inHours > 0
+        ? '${elapsed.inHours.toString().padLeft(2, '0')}:$minutes:$seconds'
+        : '$minutes:$seconds';
+  }
+
+  void _syncBreakTicker() {
+    _breakTicker?.cancel();
+    if (_breakSession.onBreak) {
+      _breakTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
+  Future<void> _toggleBreak() async {
+    if (_breakBusy) return;
+    final action = _breakSession.onBreak ? BreakAction.stop : BreakAction.start;
+    final lat = _position?.latitude;
+    final lng = _position?.longitude;
+    final accuracy = _position?.accuracy;
+
+    setState(() {
+      _breakBusy = true;
+      _error = null;
+    });
+
+    try {
+      final response = await ref
+          .read(mobileRepositoryProvider)
+          .attendanceBreak(
+            action: action.name,
+            lat: lat,
+            lng: lng,
+            accuracy: accuracy,
+          );
+      if (!mounted) return;
+      setState(() => _breakSession.applyBreakResponse(response));
+      _syncBreakTicker();
+      Haptics.light();
+    } catch (error) {
+      if (_isOffline(error)) {
+        await ref
+            .read(offlineQueueProvider)
+            .enqueue(
+              path: '/api/mobile/attendance/break',
+              method: 'POST',
+              body: <String, dynamic>{
+                'action': action.name,
+                'lat': lat,
+                'lng': lng,
+                'accuracy': accuracy,
+                'capturedAt': DateTime.now().toUtc().toIso8601String(),
+              },
+            );
+        if (!mounted) return;
+        // Server state is unavailable offline — reflect the intent locally so
+        // the timer and button stay in sync until the queue syncs.
+        setState(() {
+          _breakSession.onBreak = action == BreakAction.start;
+          _breakSession.breakStartedAt =
+              action == BreakAction.start ? DateTime.now().toUtc() : null;
+          _breakSession.canCheckOut = action == BreakAction.stop;
+        });
+        _syncBreakTicker();
+        Haptics.medium();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Offline: break change queued for sync.'),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          setState(() => _error = CissError.parse(error));
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _breakBusy = false);
+      }
+    }
+  }
+
+  Widget _buildBreakPanel(CissThemeTokens tokens) {
+    final onBreak = _breakSession.onBreak;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: ModernCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Icon(
+                  onBreak
+                      ? Icons.pause_circle_filled_rounded
+                      : Icons.free_breakfast_rounded,
+                  color: onBreak ? tokens.warning : tokens.primary,
+                  size: 22,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text('Break', style: AppTypography.bodyStrong(context)),
+                      Text(
+                        onBreak
+                            ? 'On break • ${_formatBreakElapsed()}'
+                            : 'Take a short break during your shift',
+                        style: AppTypography.micro(
+                          context,
+                        ).copyWith(color: tokens.inkMuted),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _breakBusy ? null : _toggleBreak,
+                icon:
+                    _breakBusy
+                        ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator.adaptive(
+                            strokeWidth: 2,
+                          ),
+                        )
+                        : Icon(
+                          onBreak
+                              ? Icons.stop_rounded
+                              : Icons.play_arrow_rounded,
+                        ),
+                label: Text(onBreak ? 'End break' : 'Start break'),
+              ),
+            ),
+            if (!_breakSession.canCheckOut) ...<Widget>[
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: tokens.warningSoft,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Row(
+                  children: <Widget>[
+                    Icon(
+                      Icons.info_outline_rounded,
+                      color: tokens.warning,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Checkout is disabled until the break is ended.',
+                        style: TextStyle(color: tokens.warning, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _submitAttendance(GuardProfileModel profile) async {
+    if (_status == 'Out' && !_breakSession.canCheckOut) {
+      setState(() => _error = 'Please end your break before checking out.');
+      return;
+    }
     if (_site == null) {
       setState(() => _error = 'Please select a site.');
       return;
@@ -470,6 +676,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           Haptics.heavy();
           setState(() {
             _photoPath = null;
+            _checkedIn = _status == 'In';
             _error = 'Attendance submitted successfully.';
           });
           ref.invalidate(attendanceHistoryProvider);
@@ -498,6 +705,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
             if (mounted) {
               setState(() {
                 _photoPath = null;
+                _checkedIn = _status == 'In';
                 _error = 'Offline: Attendance queued for sync.';
               });
               ref.invalidate(attendanceHistoryProvider);
@@ -723,6 +931,8 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                     ],
                     // ── Stale session warning ──────────────────────────────
                     _StaleSessionBanner(),
+                    if (moduleEnabled(ref, 'break') && _checkedIn)
+                      _buildBreakPanel(tokens),
                     GuardFormCard(
                       children: <Widget>[
                         InkWell(
@@ -873,7 +1083,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                           width: double.infinity,
                           child: FilledButton(
                             onPressed:
-                                _busy ? null : () => _submitAttendance(profile),
+                                _busy ||
+                                        (_status == 'Out' &&
+                                            !_breakSession.canCheckOut)
+                                    ? null
+                                    : () => _submitAttendance(profile),
                             child:
                                 _busy
                                     ? const SizedBox(
@@ -888,6 +1102,15 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                                     ),
                           ),
                         ),
+                        if (_status == 'Out' && !_breakSession.canCheckOut) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Checkout is disabled until the break is ended.',
+                            style: AppTypography.micro(
+                              context,
+                            ).copyWith(color: tokens.warning),
+                          ),
+                        ],
                         const SizedBox(height: 16),
                       ],
                     ),
