@@ -289,6 +289,13 @@ class FieldOfficerAttendanceEntry {
     required this.shiftLabel,
     required this.status,
     this.photoUrl,
+    this.distanceMeters,
+    this.gpsAccuracyMeters,
+    this.geofenceRadiusAtTime,
+    this.isMockLocationSuspected = false,
+    this.mockLocationReason,
+    this.reviewStatus,
+    this.requiresAdminReview = false,
   });
 
   final String id;
@@ -305,6 +312,13 @@ class FieldOfficerAttendanceEntry {
   final String shiftLabel;
   final String status;
   final String? photoUrl;
+  final num? distanceMeters;
+  final num? gpsAccuracyMeters;
+  final num? geofenceRadiusAtTime;
+  final bool isMockLocationSuspected;
+  final String? mockLocationReason;
+  final String? reviewStatus;
+  final bool requiresAdminReview;
 
   factory FieldOfficerAttendanceEntry.fromJson(Map<String, dynamic> json) {
     return FieldOfficerAttendanceEntry(
@@ -322,6 +336,13 @@ class FieldOfficerAttendanceEntry {
       shiftLabel: (json['shiftLabel'] as String?) ?? '',
       status: (json['status'] as String?) ?? '',
       photoUrl: json['photoUrl'] as String?,
+      distanceMeters: json['distanceMeters'] as num?,
+      gpsAccuracyMeters: json['gpsAccuracyMeters'] as num?,
+      geofenceRadiusAtTime: json['geofenceRadiusAtTime'] as num?,
+      isMockLocationSuspected: json['isMockLocationSuspected'] == true,
+      mockLocationReason: json['mockLocationReason'] as String?,
+      reviewStatus: json['reviewStatus'] as String?,
+      requiresAdminReview: json['requiresAdminReview'] == true,
     );
   }
 }

@@ -1671,6 +1671,26 @@ class MobileRepository {
         .toList();
   }
 
+  Future<List<FieldOfficerAttendanceEntry>> fetchFieldOfficerGuardAttendanceRange({
+    required DateTime start,
+    required DateTime end,
+  }) async {
+    String ymd(DateTime d) =>
+        '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    final data = await _getJson(
+      '/api/field-officer/guard-attendance',
+      queryParameters: <String, dynamic>{'from': ymd(start), 'to': ymd(end)},
+    );
+    final entries =
+        (data['attendance'] ?? data['records'] ?? data['logs'] ?? data['data'])
+            as List<dynamic>? ??
+        const <dynamic>[];
+    return entries
+        .whereType<Map<String, dynamic>>()
+        .map(FieldOfficerAttendanceEntry.fromJson)
+        .toList();
+  }
+
   Future<List<VisitReportModel>> fetchVisitReports() async {
     final data = await _getJson('/api/field-officer/visit-reports');
     final reports = data['reports'] as List<dynamic>? ?? const <dynamic>[];
