@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart' hide ActivityType;
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
@@ -16,7 +17,9 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_activity_recognition/flutter_activity_recognition.dart';
 
 import '../network/mobile_repository.dart';
+import '../offline/offline_queue.dart';
 import '../region/region_service.dart';
+import 'tracking_buffer.dart';
 import 'tracking_sample.dart';
 import 'tracking_session_store.dart';
 
@@ -206,6 +209,49 @@ String _currentActivity() {
     return mapActivity(_latestActivityCode);
   } catch (_) {
     return 'unknown';
+  }
+}
+
+// Lazily-initialised buffer for heartbeats that fail to reach the server. The
+// service isolate has its own Hive instance, so it must (re)open the box with
+// the shared encryption cipher. Any failure leaves it null and simply drops the
+// sample rather than interrupting tracking.
+TrackingBuffer? _trackingBuffer;
+bool _trackingBufferInitTried = false;
+
+Future<TrackingBuffer?> _ensureTrackingBuffer() async {
+  if (_trackingBuffer != null) return _trackingBuffer;
+  if (_trackingBufferInitTried) return null;
+  _trackingBufferInitTried = true;
+  try {
+    final boxOpen = Hive.isBoxOpen(TrackingBuffer.boxName);
+    if (!boxOpen) {
+      try {
+        await Hive.initFlutter();
+      } catch (e) {
+        // Already initialised in this isolate — safe to continue.
+        debugPrint('Hive init skipped: $e');
+      }
+    }
+    final cipher =
+        boxOpen ? null : await OfflineQueue().getEncryptionCipher();
+    final buffer = TrackingBuffer();
+    await buffer.init(cipher);
+    _trackingBuffer = buffer;
+    return buffer;
+  } catch (e) {
+    debugPrint('TrackingBuffer unavailable in background isolate: $e');
+    return null;
+  }
+}
+
+/// Persists a failed heartbeat so [SyncService] can flush it in a batch later.
+Future<void> _bufferFailedHeartbeat(Map<String, dynamic> payload) async {
+  try {
+    final buffer = await _ensureTrackingBuffer();
+    await buffer?.add(payload);
+  } catch (e) {
+    debugPrint('Failed to buffer tracking sample: $e');
   }
 }
 
@@ -460,9 +506,12 @@ void onStart(ServiceInstance service) async {
       _heartbeatLastBatteryLevel =
           (telemetry['batteryLevel'] as num?)?.toDouble();
 
-      final heartbeatBody = jsonEncode(
-        await buildHeartbeatBody(position, accuracy, telemetry),
+      final heartbeatPayload = await buildHeartbeatBody(
+        position,
+        accuracy,
+        telemetry,
       );
+      final heartbeatBody = jsonEncode(heartbeatPayload);
 
       try {
         http.Response response = await http
@@ -516,6 +565,11 @@ void onStart(ServiceInstance service) async {
           }
           return;
         } else {
+          // Transient failure (non-2xx after the 401 retry) — keep the sample
+          // so the batch sync can deliver it once the server recovers. The
+          // 403/409 session-closed branch returns above and is intentionally
+          // not buffered (the server would reject the sample too).
+          await _bufferFailedHeartbeat(heartbeatPayload);
           _updateNotification(
             service,
             siteContext,
@@ -525,6 +579,7 @@ void onStart(ServiceInstance service) async {
         }
       } catch (httpErr) {
         debugPrint('Heartbeat upload error (will retry next cycle): $httpErr');
+        await _bufferFailedHeartbeat(heartbeatPayload);
         _updateNotification(
           service,
           siteContext,

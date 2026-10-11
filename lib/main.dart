@@ -44,6 +44,7 @@ Future<void> main() async {
   await Hive.openBox<Map>(DraftService.boxName); // Non-encrypted for high-frequency drafts
   await container.read(appSettingsControllerProvider.notifier).init(cipher);
   await container.read(remoteConfigStoreProvider).init(cipher);
+  await container.read(trackingBufferProvider).init(cipher);
 
   try {
     await Firebase.initializeApp(
