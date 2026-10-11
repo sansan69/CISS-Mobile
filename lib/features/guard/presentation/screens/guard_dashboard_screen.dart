@@ -5,6 +5,7 @@ import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/settings/module_gate.dart';
+import '../../../../../core/settings/remote_config_provider.dart';
 import '../../../../../shared/widgets/modern_hero.dart';
 import '../../../../../shared/widgets/metric_card.dart';
 import '../../../../../shared/widgets/modern_card.dart';
@@ -92,7 +93,10 @@ class _DashboardBody extends ConsumerWidget {
       backgroundColor: tokens.canvas,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () async => ref.invalidate(guardDashboardProvider),
+          onRefresh: () async {
+            await ref.read(remoteConfigProvider.notifier).refresh(force: true);
+            ref.invalidate(guardDashboardProvider);
+          },
           child: ListView(
             padding: const EdgeInsets.only(bottom: AppSpacing.xxl + 80),
             children: <Widget>[

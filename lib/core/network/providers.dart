@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'api_client.dart';
 import 'mobile_repository.dart';
 import '../region/region_service.dart';
+import '../settings/remote_config_provider.dart';
 
 final Provider<FirebaseAuth> firebaseAuthProvider = Provider<FirebaseAuth>((
   Ref ref,
@@ -25,6 +26,8 @@ final Provider<ApiClient> apiClientProvider = Provider<ApiClient>((Ref ref) {
       // getIdToken(true) → infinite token-refresh loop.
       return user.getIdToken(false);
     },
+    onModuleDisabled: () =>
+        ref.read(remoteConfigProvider.notifier).refresh(force: true),
   );
 });
 
