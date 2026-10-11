@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../network/providers.dart';
 import '../region/region_service.dart';
+import '../../features/auth/application/auth_controller.dart';
 import 'remote_config.dart';
 import 'remote_config_store.dart';
 
@@ -52,6 +53,16 @@ class RemoteConfigNotifier extends Notifier<RemoteConfig> {
   RemoteConfig build() {
     if (_isInjected) return RemoteConfig.defaults();
     final store = ref.watch(remoteConfigStoreProvider);
+    // Re-key on a role change so guard/field-officer never share a snapshot
+    // (they can otherwise briefly see each other's flags after a switch). The
+    // periodic refresh repopulates the new key.
+    ref.listen(authSessionProvider, (previous, next) {
+      final previousRole = previous?.valueOrNull?.role.name;
+      final nextRole = next.valueOrNull?.role.name;
+      if (previousRole == nextRole) return;
+      state = store.read(_cacheKey) ?? RemoteConfig.defaults();
+      refresh(force: true);
+    });
     final key = _cacheKey;
     return store.read(key) ?? RemoteConfig.defaults();
   }
@@ -71,12 +82,21 @@ class RemoteConfigNotifier extends Notifier<RemoteConfig> {
     super.state = value;
   }
 
+  /// The active role for the cache key. On the production path this is the
+  /// authenticated [AuthSession]'s role; until the session resolves it stays the
+  /// stable `unknown` placeholder and the auth listener re-keys on change.
+  String get _cacheRole {
+    if (_injectedRole != null) return _injectedRole;
+    if (_isInjected) return 'unknown';
+    return ref.read(authSessionProvider).valueOrNull?.role.name ?? 'unknown';
+  }
+
   String get _cacheKey => RemoteConfigStore.keyFor(
         _injectedRegion ??
             (_isInjected
                 ? 'KL'
                 : ref.read(regionServiceProvider).activeRegion?.code ?? 'KL'),
-        _injectedRole ?? 'unknown',
+        _cacheRole,
       );
 
   RemoteConfigStore? get _store =>

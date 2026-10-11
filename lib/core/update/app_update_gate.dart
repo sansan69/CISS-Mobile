@@ -5,6 +5,16 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'apk_downloader.dart';
 import 'app_update_service.dart';
+import '../settings/remote_config.dart';
+import '../settings/remote_config_provider.dart';
+
+/// Whether an available update must be installed before the app is usable.
+///
+/// Combines the app-update endpoint's own mandatory flag with the server-driven
+/// [RemoteConfig] `app.forceUpdate` flag (spec §2: only `forceUpdate` /
+/// `maintenance` produce a blocking gate).
+bool updateIsMandatory(AppUpdateCheckResult result, RemoteConfig config) =>
+    result.isMandatory || config.app.forceUpdate;
 
 class AppUpdateGate extends ConsumerStatefulWidget {
   const AppUpdateGate({required this.child, super.key});
@@ -31,18 +41,35 @@ class _AppUpdateGateState extends ConsumerState<AppUpdateGate> {
 
   Future<void> _checkForUpdate() async {
     if (!mounted || _dialogOpen) return;
+
+    // Server-driven maintenance gate (spec §2). Blocking, but only reached
+    // post-frame so it never destabilizes startup.
+    final config = ref.read(remoteConfigProvider);
+    if (config.app.maintenance) {
+      _dialogOpen = true;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const _MaintenanceDialog(),
+      );
+      _dialogOpen = false;
+      return;
+    }
+
     final result =
         await ref.read(appUpdateServiceProvider).checkForAndroidUpdate();
     if (!mounted || result == null || !result.hasUpdate || result.update == null) {
       return;
     }
 
+    final mandatory = updateIsMandatory(result, config);
     _dialogOpen = true;
     await showDialog<void>(
       context: context,
-      barrierDismissible: !result.isMandatory,
+      barrierDismissible: !mandatory,
       builder: (ctx) => _UpdateDialog(
         result: result,
+        mandatory: mandatory,
         onLater: () {
           if (ctx.mounted) Navigator.of(ctx).pop();
         },
@@ -67,15 +94,35 @@ class _AppUpdateGateState extends ConsumerState<AppUpdateGate> {
   }
 }
 
+/// Blocking gate shown while the server reports `app.maintenance` (spec §2).
+class _MaintenanceDialog extends StatelessWidget {
+  const _MaintenanceDialog();
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          icon: const Icon(Icons.build_rounded, size: 32),
+          title: const Text('Under maintenance'),
+          content: const Text(
+            'CISS Workforce is temporarily unavailable for scheduled '
+            'maintenance. Please try again shortly.',
+          ),
+        ),
+      );
+}
+
 /// The initial update-available dialog.
 class _UpdateDialog extends ConsumerStatefulWidget {
   const _UpdateDialog({
     required this.result,
+    required this.mandatory,
     required this.onLater,
     required this.onBrowserFallback,
   });
 
   final AppUpdateCheckResult result;
+  final bool mandatory;
   final VoidCallback onLater;
   final void Function(AndroidUpdateInfo) onBrowserFallback;
 
@@ -104,7 +151,7 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
         : null;
 
     return PopScope(
-      canPop: !widget.result.isMandatory && _phase == _UpdatePhase.idle,
+      canPop: !widget.mandatory && _phase == _UpdatePhase.idle,
       child: AlertDialog(
         icon: _phaseIcon(),
         title: Text(_phaseTitle()),
@@ -180,7 +227,7 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
     switch (_phase) {
       case _UpdatePhase.idle:
         return [
-          if (!widget.result.isMandatory)
+          if (!widget.mandatory)
             TextButton(
               onPressed: widget.onLater,
               child: const Text('Later'),
@@ -208,7 +255,7 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
         return [const SizedBox()]; // No actions during verify/install
       case _UpdatePhase.done:
         return [
-          if (!widget.result.isMandatory)
+          if (!widget.mandatory)
             TextButton(
               onPressed: widget.onLater,
               child: const Text('Later'),
@@ -381,7 +428,7 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
   String _phaseTitle() {
     switch (_phase) {
       case _UpdatePhase.idle:
-        if (widget.result.isMandatory) return 'Update required';
+        if (widget.mandatory) return 'Update required';
         return 'Update available';
       case _UpdatePhase.downloading:
         return 'Downloading update...';
