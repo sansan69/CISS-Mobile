@@ -4,7 +4,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
-import 'package:geolocator/geolocator.dart';
+import 'package:geolocator/geolocator.dart' hide ActivityType;
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
@@ -13,9 +13,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter_activity_recognition/flutter_activity_recognition.dart';
 
 import '../network/mobile_repository.dart';
 import '../region/region_service.dart';
+import 'tracking_sample.dart';
 import 'tracking_session_store.dart';
 
 /// Background location tracking service optimized for CISS guard duty.
@@ -155,6 +157,58 @@ double? _heartbeatLastSpeed;
 double? _heartbeatLastBatteryLevel;
 Timer? _heartbeatTimer;
 
+// Latest activity detected by the platform, stored as an Android
+// DetectedActivity type code so it can be fed to [mapActivity]. Null until the
+// first stream event (or when permission is denied) and maps to 'unknown'.
+int? _latestActivityCode;
+StreamSubscription<Activity>? _activitySubscription;
+
+/// Translates the plugin's [ActivityType] enum into the numeric
+/// `DetectedActivity` codes that [mapActivity] understands.
+int? _detectedActivityCode(ActivityType? type) {
+  switch (type) {
+    case ActivityType.IN_VEHICLE:
+      return 0;
+    case ActivityType.ON_BICYCLE:
+      return 1;
+    case ActivityType.STILL:
+      return 3;
+    case ActivityType.WALKING:
+      return 7;
+    case ActivityType.RUNNING:
+      return 8;
+    default:
+      return null;
+  }
+}
+
+/// Best-effort subscription to the activity stream. A missing plugin or denied
+/// permission simply leaves [_latestActivityCode] null, which reports
+/// 'unknown' — it must never crash the tracking service.
+Future<void> _startActivityRecognition() async {
+  try {
+    final recognition = FlutterActivityRecognition.instance;
+    final permission = await recognition.checkPermission();
+    if (permission != ActivityPermission.GRANTED) return;
+    await _activitySubscription?.cancel();
+    _activitySubscription = recognition.activityStream.listen(
+      (activity) => _latestActivityCode = _detectedActivityCode(activity.type),
+      onError: (Object _) {},
+    );
+  } catch (e) {
+    debugPrint('Activity recognition unavailable: $e');
+  }
+}
+
+/// AMS activity label for the current heartbeat, defaulting to 'unknown'.
+String _currentActivity() {
+  try {
+    return mapActivity(_latestActivityCode);
+  } catch (_) {
+    return 'unknown';
+  }
+}
+
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
@@ -228,6 +282,45 @@ void onStart(ServiceInstance service) async {
       'batteryLevel': batteryLevel,
       'wifiConnected': wifiConnected,
       'networkType': networkType,
+    };
+  }
+
+  // Builds the AMS-named heartbeat body once so the initial POST and the
+  // 401-retry POST send an identical payload. `batteryLevel` is retained
+  // alongside `batteryPercentage` for one release of server compatibility.
+  Future<Map<String, dynamic>> buildHeartbeatBody(
+    Position position,
+    double? accuracy,
+    Map<String, dynamic> telemetry,
+  ) async {
+    var isGpsOn = true;
+    try {
+      isGpsOn = await Geolocator.isLocationServiceEnabled();
+    } catch (_) {}
+
+    final sample = TrackingSample(
+      status: siteContext!['status'] as String?,
+      latitude: position.latitude,
+      longitude: position.longitude,
+      accuracy: accuracy ?? position.accuracy,
+      locationAccuracy: accuracy ?? position.accuracy,
+      altitude: position.altitude,
+      bearing: position.heading,
+      speed: position.speed >= 0 ? position.speed : null,
+      activity: _currentActivity(),
+      isMock: position.isMocked,
+      isGPSOn: isGpsOn,
+      wifiConnected: telemetry['wifiConnected'] == true,
+      batteryPercentage: (telemetry['batteryLevel'] as num?)?.round(),
+      networkType: (telemetry['networkType'] ?? 'none').toString(),
+      time: DateTime.now().toUtc(),
+    );
+
+    return {
+      ...sample.toJson(),
+      'siteId': siteContext!['siteId'],
+      // Deprecated: kept for one release so the server can roll over safely.
+      'batteryLevel': telemetry['batteryLevel'],
     };
   }
 
@@ -367,6 +460,10 @@ void onStart(ServiceInstance service) async {
       _heartbeatLastBatteryLevel =
           (telemetry['batteryLevel'] as num?)?.toDouble();
 
+      final heartbeatBody = jsonEncode(
+        await buildHeartbeatBody(position, accuracy, telemetry),
+      );
+
       try {
         http.Response response = await http
             .post(
@@ -375,17 +472,7 @@ void onStart(ServiceInstance service) async {
                 'Content-Type': 'application/json',
                 if (token != null) 'Authorization': 'Bearer $token',
               },
-              body: jsonEncode({
-                'siteId': siteContext!['siteId'],
-                'lat': position.latitude,
-                'lng': position.longitude,
-                'accuracy': accuracy,
-                'batteryLevel': telemetry['batteryLevel'],
-                'speed': position.speed >= 0 ? position.speed : null,
-                'wifiConnected': telemetry['wifiConnected'],
-                'networkType': telemetry['networkType'],
-                'capturedAt': DateTime.now().toUtc().toIso8601String(),
-              }),
+              body: heartbeatBody,
             )
             .timeout(const Duration(seconds: 15));
 
@@ -400,17 +487,7 @@ void onStart(ServiceInstance service) async {
                     'Content-Type': 'application/json',
                     'Authorization': 'Bearer $token',
                   },
-                  body: jsonEncode({
-                    'siteId': siteContext!['siteId'],
-                    'lat': position.latitude,
-                    'lng': position.longitude,
-                    'accuracy': accuracy,
-                    'batteryLevel': telemetry['batteryLevel'],
-                    'speed': position.speed >= 0 ? position.speed : null,
-                    'wifiConnected': telemetry['wifiConnected'],
-                    'networkType': telemetry['networkType'],
-                    'capturedAt': DateTime.now().toUtc().toIso8601String(),
-                  }),
+                  body: heartbeatBody,
                 )
                 .timeout(const Duration(seconds: 15));
           }
@@ -516,6 +593,11 @@ void onStart(ServiceInstance service) async {
       },
     );
   }
+
+  // Begin best-effort activity recognition before the first heartbeat so the
+  // payload can carry still/walking/in-vehicle. Never blocks or crashes the
+  // service when the plugin or permission is unavailable.
+  await _startActivityRecognition();
 
   // Send a reading as soon as a shift starts or is recovered, then keep the
   // adaptive cadence running for the live operations dashboard.

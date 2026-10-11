@@ -21,6 +21,7 @@ firebase_messaging=/Users/mymac/.pub-cache/hosted/pub.dev/firebase_messaging-15.
 firebase_messaging_web=/Users/mymac/.pub-cache/hosted/pub.dev/firebase_messaging_web-3.10.10/
 firebase_storage=/Users/mymac/.pub-cache/hosted/pub.dev/firebase_storage-12.4.10/
 firebase_storage_web=/Users/mymac/.pub-cache/hosted/pub.dev/firebase_storage_web-3.10.17/
+flutter_activity_recognition=/Users/mymac/.pub-cache/hosted/pub.dev/flutter_activity_recognition-4.0.0/
 flutter_background_service=/Users/mymac/.pub-cache/hosted/pub.dev/flutter_background_service-5.1.0/
 flutter_background_service_android=/Users/mymac/.pub-cache/hosted/pub.dev/flutter_background_service_android-6.3.1/
 flutter_background_service_ios=/Users/mymac/.pub-cache/hosted/pub.dev/flutter_background_service_ios-5.0.3/
