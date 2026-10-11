@@ -4,10 +4,15 @@ class ModuleFlags {
   final Map<String, bool> _values;
 
   factory ModuleFlags.fromJson(Map<String, dynamic> json) => ModuleFlags(
-        json.map((k, v) => MapEntry(k, v == true)),
+        <String, bool>{
+          ..._defaults,
+          ...json.map((k, v) => MapEntry(k, v == true)),
+        },
       );
 
-  factory ModuleFlags.defaults() => ModuleFlags(const <String, bool>{
+  factory ModuleFlags.defaults() => ModuleFlags(_defaults);
+
+  static const Map<String, bool> _defaults = <String, bool>{
         'attendance': true,
         'qrAttendance': true,
         'offlineTracking': true,
@@ -37,7 +42,7 @@ class ModuleFlags {
         'dynamicQr': false,
         'ipAttendance': false,
         'uidLogin': false,
-      });
+      };
 
   bool isOn(String key, {required bool fallback}) => _values[key] ?? fallback;
 
