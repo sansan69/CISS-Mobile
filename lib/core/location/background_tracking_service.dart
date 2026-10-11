@@ -5,7 +5,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart' hide ActivityType;
-import 'package:hive_flutter/hive_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
@@ -17,7 +16,6 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_activity_recognition/flutter_activity_recognition.dart';
 
 import '../network/mobile_repository.dart';
-import '../offline/offline_queue.dart';
 import '../region/region_service.dart';
 import 'tracking_buffer.dart';
 import 'tracking_sample.dart';
@@ -212,10 +210,10 @@ String _currentActivity() {
   }
 }
 
-// Lazily-initialised buffer for heartbeats that fail to reach the server. The
-// service isolate has its own Hive instance, so it must (re)open the box with
-// the shared encryption cipher. Any failure leaves it null and simply drops the
-// sample rather than interrupting tracking.
+// Lazily-initialised spool for heartbeats that fail to reach the server. The
+// spool is a shared file (not a Hive box) precisely so the main isolate's
+// SyncService can flush what this background isolate writes. Any failure leaves
+// it null and simply drops the sample rather than interrupting tracking.
 TrackingBuffer? _trackingBuffer;
 bool _trackingBufferInitTried = false;
 
@@ -224,19 +222,8 @@ Future<TrackingBuffer?> _ensureTrackingBuffer() async {
   if (_trackingBufferInitTried) return null;
   _trackingBufferInitTried = true;
   try {
-    final boxOpen = Hive.isBoxOpen(TrackingBuffer.boxName);
-    if (!boxOpen) {
-      try {
-        await Hive.initFlutter();
-      } catch (e) {
-        // Already initialised in this isolate — safe to continue.
-        debugPrint('Hive init skipped: $e');
-      }
-    }
-    final cipher =
-        boxOpen ? null : await OfflineQueue().getEncryptionCipher();
     final buffer = TrackingBuffer();
-    await buffer.init(cipher);
+    await buffer.init();
     _trackingBuffer = buffer;
     return buffer;
   } catch (e) {

@@ -43,8 +43,19 @@ Future<void> main() async {
   await Hive.openBox<Map>(OfflineQueue.boxName, encryptionCipher: cipher);
   await Hive.openBox<Map>(DraftService.boxName); // Non-encrypted for high-frequency drafts
   await container.read(appSettingsControllerProvider.notifier).init(cipher);
-  await container.read(remoteConfigStoreProvider).init(cipher);
-  await container.read(trackingBufferProvider).init(cipher);
+  // These new stores must never fail-closed: a corrupt or cipher-mismatched
+  // box would otherwise throw before runApp and blank the screen. Each init is
+  // isolated so a failure falls back to defaults / a no-op buffer.
+  try {
+    await container.read(remoteConfigStoreProvider).init(cipher);
+  } catch (e) {
+    debugPrint('RemoteConfigStore init failed — falling back to defaults: $e');
+  }
+  try {
+    await container.read(trackingBufferProvider).init();
+  } catch (e) {
+    debugPrint('TrackingBuffer init failed — offline buffering disabled: $e');
+  }
 
   try {
     await Firebase.initializeApp(

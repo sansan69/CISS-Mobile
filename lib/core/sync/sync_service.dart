@@ -20,6 +20,19 @@ class SyncService {
   StreamSubscription<List<ConnectivityResult>>? _subscription;
   bool _isSyncing = false;
 
+  /// Tracking samples posted per batch request. The server rejects an
+  /// oversized payload, so a single request for the entire (up to 5000-sample)
+  /// buffer could be retried forever; chunking keeps each request bounded.
+  static const int trackingBatchChunkSize = 200;
+
+  /// Splits [items] into consecutive chunks of at most [size] elements.
+  static Iterable<List<T>> chunked<T>(List<T> items, int size) sync* {
+    for (var start = 0; start < items.length; start += size) {
+      final end = math.min(start + size, items.length);
+      yield items.sublist(start, end);
+    }
+  }
+
   /// Tracks the last time any request succeeded — used to decay retry counts
   /// after a quiet period (1 hour without failure).
   DateTime? _lastSuccessTime;
@@ -127,43 +140,48 @@ class SyncService {
     }
   }
 
-  /// Uploads every buffered tracking sample in one POST and clears exactly the
-  /// ids that were sent. Never throws: a failure (offline, non-2xx, auth) is
-  /// logged and retried on the next [processQueue] pass.
+  /// Uploads buffered tracking samples in bounded chunks, persisting progress
+  /// after each chunk so a delivered chunk is not re-sent. Never throws: a
+  /// failure (offline, non-2xx, auth) is logged and the un-sent tail is retried
+  /// on the next [processQueue] pass.
   Future<void> _flushTrackingSamples() async {
-    final Map<String, Map<String, dynamic>> pending;
+    final List<Map<String, dynamic>> pending;
     try {
-      pending = _trackingBuffer.pendingWithIds();
+      pending = await _trackingBuffer.readPending();
     } catch (error) {
       // Buffer not initialized yet (early startup) — retry on the next pass.
       return;
     }
     if (pending.isEmpty) return;
 
-    final ids = pending.keys.toList();
-    final samples = <Map<String, dynamic>>[
-      for (final id in ids) pending[id]!,
-    ];
-
-    try {
-      final dio = _repository.apiClient.dio;
-      final response = await dio.post<dynamic>(
-        '/api/mobile/tracking/batch',
-        data: <String, dynamic>{'samples': samples},
-        options: Options(headers: await _repository.authHeaders()),
-      );
-      final data = response.data;
-      if (data is Map && data['success'] == false) {
-        throw Exception(
-          data['error']?.toString() ?? 'Server rejected tracking batch',
+    final chunks = chunked(pending, trackingBatchChunkSize);
+    var sent = 0;
+    for (final chunk in chunks) {
+      try {
+        final dio = _repository.apiClient.dio;
+        final response = await dio.post<dynamic>(
+          '/api/mobile/tracking/batch',
+          data: <String, dynamic>{'samples': chunk},
+          options: Options(headers: await _repository.authHeaders()),
         );
+        final data = response.data;
+        if (data is Map && data['success'] == false) {
+          throw Exception(
+            data['error']?.toString() ?? 'Server rejected tracking batch',
+          );
+        }
+        sent += chunk.length;
+        // Persist progress: keep only the un-sent tail so a crash mid-flush
+        // does not resend the chunks that already landed. An empty remainder
+        // clears the spool.
+        await _trackingBuffer.commit(pending.sublist(sent));
+      } catch (error) {
+        foundation.debugPrint(
+          'Tracking batch sync failed (${pending.length} samples, '
+          '$sent already sent), will retry later: $error',
+        );
+        break;
       }
-      await _trackingBuffer.clear(ids);
-    } catch (error) {
-      foundation.debugPrint(
-        'Tracking batch sync failed (${ids.length} samples), '
-        'will retry later: $error',
-      );
     }
   }
 
