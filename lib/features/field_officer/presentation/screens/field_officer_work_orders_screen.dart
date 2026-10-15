@@ -1,7 +1,9 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
@@ -13,6 +15,13 @@ import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
 import '../widgets/work_order_revision_banner.dart';
+import '../widgets/work_order_willingness_sheet.dart';
+import 'field_officer_assignments_screen.dart';
+import '../../../../../core/settings/module_gate.dart';
+import '../../../../../shared/widgets/action_row.dart';
+import '../../../../features/auth/application/auth_controller.dart';
+import '../../../../features/auth/presentation/protected_workspace_modal.dart';
+import '../../../../core/models/app_role.dart';
 
 final FutureProvider<List<WorkOrderModel>> fieldOfficerWorkOrdersProvider =
     FutureProvider<List<WorkOrderModel>>((Ref ref) {
@@ -20,7 +29,8 @@ final FutureProvider<List<WorkOrderModel>> fieldOfficerWorkOrdersProvider =
     });
 
 class FieldOfficerWorkOrdersScreen extends ConsumerStatefulWidget {
-  const FieldOfficerWorkOrdersScreen({super.key});
+  const FieldOfficerWorkOrdersScreen({super.key, this.initialWorkOrderId});
+  final String? initialWorkOrderId;
 
   @override
   ConsumerState<FieldOfficerWorkOrdersScreen> createState() =>
@@ -33,6 +43,7 @@ class _FieldOfficerWorkOrdersScreenState
     extends ConsumerState<FieldOfficerWorkOrdersScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
+  bool _openedNotification = false;
   _WorkOrderFilter _activeFilter = _WorkOrderFilter.upcoming;
 
   @override
@@ -43,50 +54,99 @@ class _FieldOfficerWorkOrdersScreenState
 
   @override
   Widget build(BuildContext context) {
+    final router = GoRouter.maybeOf(context);
     final workOrdersAsync = ref.watch(fieldOfficerWorkOrdersProvider);
     final tokens = CissThemeTokens.of(context);
 
     return workOrdersAsync.when(
       loading:
           () => const Scaffold(
-            body: Column(
-              children: <Widget>[
-                BrandBanner(
-                  title: 'Operations',
-                  subtitle: 'Loading work orders',
-                ),
-                Expanded(child: Center(child: CircularProgressIndicator())),
-              ],
+            body: SafeArea(
+              child: Column(
+                children: <Widget>[
+                  BrandBanner(
+                    title: 'Operations',
+                    subtitle: 'Loading work orders',
+                  ),
+                  Expanded(child: Center(child: CircularProgressIndicator())),
+                ],
+              ),
             ),
           ),
       error:
           (Object error, StackTrace stackTrace) => Scaffold(
-            body: Column(
-              children: <Widget>[
-                const BrandBanner(title: 'Operations', subtitle: 'Work orders'),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Center(
-                      child: StateBlock(
-                        icon: Icons.assignment_late_rounded,
-                        title: 'Could not load work orders',
-                        message: '$error',
-                        action: FilledButton.tonal(
-                          onPressed:
-                              () => ref.invalidate(
-                                fieldOfficerWorkOrdersProvider,
-                              ),
-                          child: const Text('Try again'),
+            body: SafeArea(
+              child: Column(
+                children: <Widget>[
+                  const BrandBanner(
+                    title: 'Operations',
+                    subtitle: 'Work orders',
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Center(
+                        child: StateBlock(
+                          icon: Icons.assignment_late_rounded,
+                          title: 'Could not load work orders',
+                          message: '$error',
+                          action: FilledButton.tonal(
+                            onPressed:
+                                () => ref.invalidate(
+                                  fieldOfficerWorkOrdersProvider,
+                                ),
+                            child: const Text('Try again'),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
       data: (workOrders) {
+        final target =
+            workOrders
+                .where((w) => w.id == widget.initialWorkOrderId)
+                .firstOrNull;
+        if (!_openedNotification &&
+            target != null &&
+            moduleEnabled(ref, 'workOrders')) {
+          _openedNotification = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                builder:
+                    (ctx) => WorkOrderWillingnessSheet(
+                      workOrderId: target.id,
+                      onAccessRevoked: () => router?.go('/'),
+                      onSelect: (ids) {
+                        Navigator.pop(ctx);
+                        showModalBottomSheet<void>(
+                          context: context,
+                          isScrollControlled: true,
+                          backgroundColor: Colors.transparent,
+                          builder:
+                              (_) => _AssignGuardsSheet(
+                                workOrder: target,
+                                initialEmployeeDocIds: ids,
+                                onAccessRevoked: () => router?.go('/'),
+                                onSaved:
+                                    () => ref.invalidate(
+                                      fieldOfficerWorkOrdersProvider,
+                                    ),
+                              ),
+                        );
+                      },
+                    ),
+              );
+            }
+          });
+        }
+
         final source =
             _activeFilter == _WorkOrderFilter.upcoming
                 ? workOrders
@@ -97,108 +157,131 @@ class _FieldOfficerWorkOrdersScreenState
 
         return Scaffold(
           backgroundColor: tokens.canvas,
-          body: ListView(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.md,
-              0,
-              AppSpacing.md,
-              100,
-            ),
-            children: [
-              const WorkOrderRevisionBanner(),
-              BrandBanner(
-                title: 'Operations',
-                subtitle: 'Manage duty deployments and guard assignments',
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SyncStatusBadge(),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      onPressed:
-                          () => ref.invalidate(fieldOfficerWorkOrdersProvider),
-                      icon: Icon(
-                        Icons.refresh_rounded,
-                        color: tokens.inkMuted,
-                        size: 20,
-                      ),
-                    ),
-                  ],
-                ),
+          // Pushed standalone (Operations from More, work-order notifications),
+          // this screen must clear the system bars rather than paint under them.
+          body: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                0,
+                AppSpacing.md,
+                100,
               ),
-
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SegmentedButton<_WorkOrderFilter>(
-                      segments: const <ButtonSegment<_WorkOrderFilter>>[
-                        ButtonSegment<_WorkOrderFilter>(
-                          value: _WorkOrderFilter.upcoming,
-                          label: Text('Upcoming'),
-                          icon: Icon(Icons.schedule_rounded),
+              children: [
+                if (widget.initialWorkOrderId != null && target == null)
+                  const StateBlock(
+                    icon: Icons.event_busy,
+                    title: 'Work order no longer available',
+                    message: 'Refresh your scoped work orders.',
+                  ),
+                const WorkOrderRevisionBanner(),
+                if (moduleEnabled(ref, 'workOrders'))
+                  ActionRow(
+                    icon: Icons.calendar_month_outlined,
+                    label: 'Scheduled duties',
+                    onTap:
+                        () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder:
+                                (_) => const FieldOfficerAssignmentsScreen(),
+                          ),
                         ),
-                        ButtonSegment<_WorkOrderFilter>(
-                          value: _WorkOrderFilter.all,
-                          label: Text('All Orders'),
-                          icon: Icon(Icons.list_alt_rounded),
+                  ),
+                BrandBanner(
+                  title: 'Operations',
+                  subtitle: 'Manage duty deployments and guard assignments',
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SyncStatusBadge(),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        onPressed:
+                            () =>
+                                ref.invalidate(fieldOfficerWorkOrdersProvider),
+                        icon: Icon(
+                          Icons.refresh_rounded,
+                          color: tokens.inkMuted,
+                          size: 20,
                         ),
-                      ],
-                      selected: <_WorkOrderFilter>{_activeFilter},
-                      onSelectionChanged: (selection) {
-                        setState(() => _activeFilter = selection.first);
-                      },
-                      showSelectedIcon: false,
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _searchController,
-                      onChanged: (value) => setState(() => _query = value),
-                      decoration: InputDecoration(
-                        labelText: 'Search operations',
-                        hintText: 'Site, exam, or district',
-                        prefixIcon: const Icon(Icons.search_rounded),
-                        filled: true,
-                        fillColor: tokens.surface,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
 
-              if (source.isEmpty)
                 Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: StateBlock(
-                    icon: Icons.assignment_turned_in_rounded,
-                    title:
-                        _activeFilter == _WorkOrderFilter.upcoming
-                            ? 'No upcoming duties'
-                            : 'No duties loaded',
-                    message:
-                        _activeFilter == _WorkOrderFilter.upcoming
-                            ? 'All work orders are fully covered.'
-                            : 'Work orders will appear here once published.',
-                  ),
-                )
-              else if (filtered.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(32),
-                  child: StateBlock(
-                    icon: Icons.search_off_rounded,
-                    title: 'No matches found',
-                    message: 'Try a different search term.',
-                  ),
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
-                    children: filtered.map((w) => _WorkOrderCard(w)).toList(),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SegmentedButton<_WorkOrderFilter>(
+                        segments: const <ButtonSegment<_WorkOrderFilter>>[
+                          ButtonSegment<_WorkOrderFilter>(
+                            value: _WorkOrderFilter.upcoming,
+                            label: Text('Upcoming'),
+                            icon: Icon(Icons.schedule_rounded),
+                          ),
+                          ButtonSegment<_WorkOrderFilter>(
+                            value: _WorkOrderFilter.all,
+                            label: Text('All Orders'),
+                            icon: Icon(Icons.list_alt_rounded),
+                          ),
+                        ],
+                        selected: <_WorkOrderFilter>{_activeFilter},
+                        onSelectionChanged: (selection) {
+                          setState(() => _activeFilter = selection.first);
+                        },
+                        showSelectedIcon: false,
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _searchController,
+                        onChanged: (value) => setState(() => _query = value),
+                        decoration: InputDecoration(
+                          labelText: 'Search operations',
+                          hintText: 'Site, exam, or district',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          filled: true,
+                          fillColor: tokens.surface,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-            ],
+
+                if (source.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: StateBlock(
+                      icon: Icons.assignment_turned_in_rounded,
+                      title:
+                          _activeFilter == _WorkOrderFilter.upcoming
+                              ? 'No upcoming duties'
+                              : 'No duties loaded',
+                      message:
+                          _activeFilter == _WorkOrderFilter.upcoming
+                              ? 'All work orders are fully covered.'
+                              : 'Work orders will appear here once published.',
+                    ),
+                  )
+                else if (filtered.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: StateBlock(
+                      icon: Icons.search_off_rounded,
+                      title: 'No matches found',
+                      message: 'Try a different search term.',
+                    ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      children: filtered.map((w) => _WorkOrderCard(w)).toList(),
+                    ),
+                  ),
+              ],
+            ),
           ),
         );
       },
@@ -250,135 +333,146 @@ class _WorkOrderCard extends ConsumerWidget {
           color: tokens.surface,
           borderRadius: BorderRadius.circular(AppRadius.card),
           border: Border.all(
-            color: isCovered
-                ? tokens.glowEmerald.withValues(alpha: 0.35)
-                : tokens.specularBorder,
+            color:
+                isCovered
+                    ? tokens.glowEmerald.withValues(alpha: 0.35)
+                    : tokens.specularBorder,
           ),
-          boxShadow: isCovered
-              ? AppShadows.glow(tokens.glowEmerald)
-              : AppShadows.card,
+          boxShadow:
+              isCovered ? AppShadows.glow(tokens.glowEmerald) : AppShadows.card,
         ),
         child: Material(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(AppRadius.card),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
-            onTap: () => _openAssignSheet(context, ref),
+            onTap:
+                moduleEnabled(ref, 'workOrders')
+                    ? () => _openAssignSheet(context, ref)
+                    : null,
             child: Padding(
               padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          workOrder.siteName.isEmpty
-                              ? 'Duty Site'
-                              : workOrder.siteName,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: tokens.ink,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          workOrder.examName,
-                          style: Theme.of(
-                            context,
-                          ).textTheme.bodySmall?.copyWith(color: tokens.ink),
-                        ),
-                        if (workOrder.clientName.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.business,
-                                size: 12,
-                                color: tokens.inkMuted,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              workOrder.siteName.isEmpty
+                                  ? 'Duty Site'
+                                  : workOrder.siteName,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: tokens.ink,
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                workOrder.clientName,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: tokens.inkMuted,
-                                ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              workOrder.examName,
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(color: tokens.ink),
+                            ),
+                            if (workOrder.clientName.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.business,
+                                    size: 12,
+                                    color: tokens.inkMuted,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    workOrder.clientName,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: tokens.inkMuted,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
-                          ),
-                        ],
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.location_on_outlined,
-                              size: 12,
-                              color: tokens.inkMuted,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              workOrder.district,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: tokens.inkMuted,
-                              ),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.location_on_outlined,
+                                  size: 12,
+                                  color: tokens.inkMuted,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  workOrder.district,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: tokens.inkMuted,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
+                      ),
+                      const SizedBox(width: 8),
+                      _RadialProgress(
+                        progress: progress,
+                        label:
+                            '${workOrder.assignedCount}/${workOrder.totalManpower}',
+                        color: accent,
+                      ),
+                    ],
+                  ),
+                  TextButton(
+                    onPressed:
+                        moduleEnabled(ref, 'workOrders')
+                            ? () => _openWillingness(context, ref)
+                            : null,
+                    child: Text(
+                      '${workOrder.willingCount} willing · ${workOrder.unavailableCount} unavailable',
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  _RadialProgress(
-                    progress: progress,
-                    label:
-                        '${workOrder.assignedCount}/${workOrder.totalManpower}',
-                    color: accent,
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.calendar_today_rounded,
+                        size: 14,
+                        color: tokens.inkMuted,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        formattedDate,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: tokens.inkMuted,
+                        ),
+                      ),
+                      const Spacer(),
+                      StatusChip(
+                        label: isCovered ? 'COVERED' : 'OPEN',
+                        tone:
+                            isCovered
+                                ? StatusChipTone.success
+                                : StatusChipTone.warning,
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Icon(
-                    Icons.calendar_today_rounded,
-                    size: 14,
-                    color: tokens.inkMuted,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    formattedDate,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: tokens.inkMuted,
-                    ),
-                  ),
-                  const Spacer(),
-                  StatusChip(
-                    label: isCovered ? 'COVERED' : 'OPEN',
-                    tone:
-                        isCovered
-                            ? StatusChipTone.success
-                            : StatusChipTone.warning,
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ),
       ),
-    ),
-  ),
-);
+    );
   }
 
   String _formatWorkOrderDate(String raw) {
@@ -406,6 +500,35 @@ class _WorkOrderCard extends ConsumerWidget {
     }
   }
 
+  void _openWillingness(BuildContext context, WidgetRef ref) {
+    final router = GoRouter.maybeOf(context);
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder:
+          (sheetContext) => WorkOrderWillingnessSheet(
+            workOrderId: workOrder.id,
+            onAccessRevoked: () => router?.go('/'),
+            onSelect: (ids) {
+              Navigator.pop(sheetContext);
+              showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: Colors.transparent,
+                builder:
+                    (_) => _AssignGuardsSheet(
+                      workOrder: workOrder,
+                      initialEmployeeDocIds: ids,
+                      onAccessRevoked: () => router?.go('/'),
+                      onSaved:
+                          () => ref.invalidate(fieldOfficerWorkOrdersProvider),
+                    ),
+              );
+            },
+          ),
+    );
+  }
+
   void _openAssignSheet(BuildContext context, WidgetRef ref) {
     showModalBottomSheet<void>(
       context: context,
@@ -414,6 +537,7 @@ class _WorkOrderCard extends ConsumerWidget {
       builder:
           (_) => _AssignGuardsSheet(
             workOrder: workOrder,
+            onAccessRevoked: () => GoRouter.maybeOf(context)?.go('/'),
             onSaved: () => ref.invalidate(fieldOfficerWorkOrdersProvider),
           ),
     );
@@ -465,10 +589,18 @@ class _RadialProgress extends StatelessWidget {
 }
 
 class _AssignGuardsSheet extends ConsumerStatefulWidget {
-  const _AssignGuardsSheet({required this.workOrder, required this.onSaved});
+  const _AssignGuardsSheet({
+    required this.workOrder,
+    required this.onSaved,
+    required this.onAccessRevoked,
+    this.initialEmployeeDocIds = const <String>{},
+  });
+
+  final Set<String> initialEmployeeDocIds;
 
   final WorkOrderModel workOrder;
   final VoidCallback onSaved;
+  final VoidCallback onAccessRevoked;
 
   @override
   ConsumerState<_AssignGuardsSheet> createState() => _AssignGuardsSheetState();
@@ -508,7 +640,8 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
               widget.workOrder.assignedGuards
                   .map((guard) => guard['uid']?.toString() ?? '')
                   .where((id) => id.isNotEmpty)
-                  .toSet();
+                  .toSet()
+                ..addAll(widget.initialEmployeeDocIds);
           _selected =
               guards.where((guard) => assignedIds.contains(guard.id)).toList();
           _loading = false;
@@ -525,6 +658,12 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
   }
 
   Future<void> _save() async {
+    if (!_workspaceAdmitted ||
+        !moduleEnabled(ref, 'workOrders') ||
+        _loading ||
+        _available == null) {
+      return;
+    }
     final tokens = CissThemeTokens.of(context);
     final allOrders =
         ref.read(fieldOfficerWorkOrdersProvider).value ?? <WorkOrderModel>[];
@@ -541,7 +680,8 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
           if (isAssigned) {
             conflicts.add({
               'guard': guard.fullName,
-              'site': order.siteName.isNotEmpty ? order.siteName : 'Another post',
+              'site':
+                  order.siteName.isNotEmpty ? order.siteName : 'Another post',
             });
           }
         }
@@ -551,79 +691,91 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
     if (conflicts.isNotEmpty && mounted) {
       final proceed = await showDialog<bool>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: tokens.surface,
-          title: Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: tokens.warning),
-              const SizedBox(width: 8),
-              Text(
-                'Scheduling Conflict',
-                style: TextStyle(
-                  color: tokens.ink,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
-                ),
+        builder:
+            (ctx) => AlertDialog(
+              backgroundColor: tokens.surface,
+              title: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, color: tokens.warning),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Scheduling Conflict',
+                    style: TextStyle(
+                      color: tokens.ink,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'The following guard(s) are already deployed on ${widget.workOrder.dateLabel}:',
-                style: TextStyle(fontSize: 13, color: tokens.inkMuted),
-              ),
-              const SizedBox(height: 12),
-              ...conflicts.map(
-                (c) => Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Row(
-                    children: [
-                      Icon(Icons.person_outline, size: 14, color: tokens.warning),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          '${c['guard']} (at ${c['site']})',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            color: tokens.ink,
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'The following guard(s) are already deployed on ${widget.workOrder.dateLabel}:',
+                    style: TextStyle(fontSize: 13, color: tokens.inkMuted),
+                  ),
+                  const SizedBox(height: 12),
+                  ...conflicts.map(
+                    (c) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.person_outline,
+                            size: 14,
+                            color: tokens.warning,
                           ),
-                        ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '${c['guard']} (at ${c['site']})',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                                color: tokens.ink,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Proceeding will double-book these guards for this date.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: tokens.danger,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: Text(
+                    'CANCEL',
+                    style: TextStyle(color: tokens.inkMuted),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Proceeding will double-book these guards for this date.',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: tokens.danger,
+                FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: tokens.warning,
+                  ),
+                  child: const Text('PROCEED ANYWAY'),
                 ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text('CANCEL', style: TextStyle(color: tokens.inkMuted)),
+              ],
             ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              style: FilledButton.styleFrom(backgroundColor: tokens.warning),
-              child: const Text('PROCEED ANYWAY'),
-            ),
-          ],
-        ),
       );
 
       if (proceed != true) return;
     }
+
+    if (!_workspaceAdmitted || !moduleEnabled(ref, 'workOrders')) return;
 
     setState(() => _saving = true);
     try {
@@ -667,6 +819,13 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
 
   bool _isSelected(GuardProfileModel g) => _selected.any((s) => s.id == g.id);
 
+  bool get _workspaceAdmitted {
+    final session = ref.read(authSessionProvider).valueOrNull;
+    return session?.role == AppRole.fieldOfficer &&
+        ref.read(workspaceAccessSessionKeyProvider) ==
+            'fieldOfficer:${session?.uid}';
+  }
+
   void _toggle(GuardProfileModel g) {
     setState(() {
       if (_isSelected(g)) {
@@ -682,196 +841,206 @@ class _AssignGuardsSheetState extends ConsumerState<_AssignGuardsSheet>
     final tokens = CissThemeTokens.of(context);
     final theme = Theme.of(context);
     final wo = widget.workOrder;
-    final bool canSave = !_saving;
+    final bool canSave =
+        !_saving &&
+        !_loading &&
+        _available != null &&
+        moduleEnabled(ref, 'workOrders');
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.9,
-      maxChildSize: 0.95,
-      minChildSize: 0.5,
-      builder:
-          (_, scrollController) => Container(
-            decoration: BoxDecoration(
-              color: tokens.surface.withValues(alpha: 0.95),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(32),
+    return ProtectedWorkspaceModal(
+      role: AppRole.fieldOfficer,
+      onAccessRevoked: widget.onAccessRevoked,
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        maxChildSize: 0.95,
+        minChildSize: 0.5,
+        builder:
+            (_, scrollController) => Container(
+              decoration: BoxDecoration(
+                color: tokens.surface.withValues(alpha: 0.95),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(32),
+                ),
               ),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-              child: Column(
-                children: [
-                  // Header
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: tokens.border,
-                            borderRadius: BorderRadius.circular(2),
+              clipBehavior: Clip.antiAlias,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Column(
+                  children: [
+                    // Header
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: tokens.border,
+                              borderRadius: BorderRadius.circular(2),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'ASSIGN GUARDS',
-                                    style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 1,
-                                    ),
-                                  ),
-                                  Text(
-                                    wo.siteName,
-                                    style: theme.textTheme.bodySmall,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: () => Navigator.pop(context),
-                              icon: const Icon(Icons.close_rounded),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        TabBar(
-                          controller: _tabCtrl,
-                          labelStyle: TextStyle(fontWeight: FontWeight.w700),
-                          tabs: [
-                            Tab(text: 'AVAILABLE (${_available?.length ?? 0})'),
-                            Tab(text: 'SELECTED (${_selected.length})'),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  Expanded(
-                    child: TabBarView(
-                      controller: _tabCtrl,
-                      children: [
-                        // Available
-                        Column(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: TextField(
-                                onChanged: (v) => setState(() => _query = v),
-                                decoration: const InputDecoration(
-                                  hintText: 'Search guards...',
-                                  prefixIcon: Icon(Icons.search_rounded),
-                                ),
-                              ),
-                            ),
-                            if (_loading)
-                              const Expanded(
-                                child: Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              )
-                            else
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
                               Expanded(
-                                child: ListView.builder(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
-                                  itemCount: _filtered.length,
-                                  itemBuilder:
-                                      (_, i) => _GuardTile(
-                                        guard: _filtered[i],
-                                        selected: _isSelected(_filtered[i]),
-                                        onTap: () => _toggle(_filtered[i]),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'ASSIGN GUARDS',
+                                      style: TextStyle(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 1,
                                       ),
+                                    ),
+                                    Text(
+                                      wo.siteName,
+                                      style: theme.textTheme.bodySmall,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
                               ),
-                          ],
-                        ),
-                        // Selected
-                        ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: _selected.length,
-                          itemBuilder:
-                              (_, i) => _GuardTile(
-                                guard: _selected[i],
-                                selected: true,
-                                onTap: () => _toggle(_selected[i]),
+                              IconButton(
+                                onPressed: () => Navigator.pop(context),
+                                icon: const Icon(Icons.close_rounded),
                               ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Action Bar
-                  Container(
-                    padding: EdgeInsets.fromLTRB(
-                      24,
-                      16,
-                      24,
-                      16 + MediaQuery.of(context).padding.bottom,
-                    ),
-                    decoration: BoxDecoration(
-                      color: tokens.surface,
-                      border: Border(top: BorderSide(color: tokens.border)),
-                    ),
-                    child: Row(
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              '${_selected.length} Selected',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: tokens.primary,
-                              ),
-                            ),
-                            Text(
-                              'Target: ${wo.totalManpower}',
-                              style: theme.textTheme.labelSmall,
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        SizedBox(
-                          height: 48,
-                          child: FilledButton(
-                            onPressed: canSave ? _save : null,
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size(140, 48),
-                            ),
-                            child:
-                                _saving
-                                    ? SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: tokens.surface,
-                                      ),
-                                    )
-                                    : const Text('COMMIT ASSIGNMENT'),
+                            ],
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 16),
+                          TabBar(
+                            controller: _tabCtrl,
+                            labelStyle: TextStyle(fontWeight: FontWeight.w700),
+                            tabs: [
+                              Tab(
+                                text: 'AVAILABLE (${_available?.length ?? 0})',
+                              ),
+                              Tab(text: 'SELECTED (${_selected.length})'),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+
+                    Expanded(
+                      child: TabBarView(
+                        controller: _tabCtrl,
+                        children: [
+                          // Available
+                          Column(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: TextField(
+                                  onChanged: (v) => setState(() => _query = v),
+                                  decoration: const InputDecoration(
+                                    hintText: 'Search guards...',
+                                    prefixIcon: Icon(Icons.search_rounded),
+                                  ),
+                                ),
+                              ),
+                              if (_loading)
+                                const Expanded(
+                                  child: Center(
+                                    child: CircularProgressIndicator(),
+                                  ),
+                                )
+                              else
+                                Expanded(
+                                  child: ListView.builder(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                    ),
+                                    itemCount: _filtered.length,
+                                    itemBuilder:
+                                        (_, i) => _GuardTile(
+                                          guard: _filtered[i],
+                                          selected: _isSelected(_filtered[i]),
+                                          onTap: () => _toggle(_filtered[i]),
+                                        ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          // Selected
+                          ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: _selected.length,
+                            itemBuilder:
+                                (_, i) => _GuardTile(
+                                  guard: _selected[i],
+                                  selected: true,
+                                  onTap: () => _toggle(_selected[i]),
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Action Bar
+                    Container(
+                      padding: EdgeInsets.fromLTRB(
+                        24,
+                        16,
+                        24,
+                        16 + MediaQuery.of(context).padding.bottom,
+                      ),
+                      decoration: BoxDecoration(
+                        color: tokens.surface,
+                        border: Border(top: BorderSide(color: tokens.border)),
+                      ),
+                      child: Row(
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '${_selected.length} Selected',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: tokens.primary,
+                                ),
+                              ),
+                              Text(
+                                'Target: ${wo.totalManpower}',
+                                style: theme.textTheme.labelSmall,
+                              ),
+                            ],
+                          ),
+                          const Spacer(),
+                          SizedBox(
+                            height: 48,
+                            child: FilledButton(
+                              onPressed: canSave ? _save : null,
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(140, 48),
+                              ),
+                              child:
+                                  _saving
+                                      ? SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: tokens.surface,
+                                        ),
+                                      )
+                                      : const Text('COMMIT ASSIGNMENT'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
+      ),
     );
   }
 }
@@ -915,67 +1084,67 @@ class _GuardTile extends StatelessWidget {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: tokens.primarySoft,
-                  backgroundImage:
-                      (guard.profilePhotoUrl != null &&
-                              guard.profilePhotoUrl!.isNotEmpty)
-                          ? NetworkImage(guard.profilePhotoUrl!)
-                          : null,
-                  child:
-                      (guard.profilePhotoUrl == null ||
-                              guard.profilePhotoUrl!.isEmpty)
-                          ? Text(
-                            initials,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: tokens.primaryStrong,
-                            ),
-                          )
-                          : null,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        guard.fullName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: tokens.ink,
-                        ),
-                      ),
-                      Text(
-                        'ID: ${guard.employeeId} · ${guard.gender ?? "N/A"}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: tokens.primarySoft,
+                    backgroundImage:
+                        (guard.profilePhotoUrl != null &&
+                                guard.profilePhotoUrl!.isNotEmpty)
+                            ? CachedNetworkImageProvider(guard.profilePhotoUrl!)
+                            : null,
+                    child:
+                        (guard.profilePhotoUrl == null ||
+                                guard.profilePhotoUrl!.isEmpty)
+                            ? Text(
+                              initials,
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: tokens.primaryStrong,
+                              ),
+                            )
+                            : null,
                   ),
-                ),
-                Icon(
-                  selected
-                      ? Icons.check_circle_rounded
-                      : Icons.add_circle_outline_rounded,
-                  color: selected ? tokens.primary : tokens.border,
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          guard.fullName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: tokens.ink,
+                          ),
+                        ),
+                        Text(
+                          'ID: ${guard.employeeId} · ${guard.gender ?? "N/A"}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    selected
+                        ? Icons.check_circle_rounded
+                        : Icons.add_circle_outline_rounded,
+                    color: selected ? tokens.primary : tokens.border,
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
   }
 
   String _initials(String name, String fallback) {

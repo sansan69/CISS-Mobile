@@ -268,6 +268,8 @@ class WorkOrderModel {
     this.maleGuardsRequired = 0,
     this.femaleGuardsRequired = 0,
     this.assignedGuards = const <Map<String, dynamic>>[],
+    this.willingCount = 0,
+    this.unavailableCount = 0,
     this.assignmentReviewRequired = false,
     this.assignmentStatus = '',
   });
@@ -287,6 +289,7 @@ class WorkOrderModel {
   final int maleGuardsRequired;
   final int femaleGuardsRequired;
   final List<Map<String, dynamic>> assignedGuards;
+  final int willingCount, unavailableCount;
   final bool assignmentReviewRequired;
   final String assignmentStatus;
 
@@ -324,6 +327,8 @@ class WorkOrderModel {
           .whereType<Map<String, dynamic>>()
           .map((guard) => Map<String, dynamic>.from(guard))
           .toList(growable: false),
+      willingCount: (json['willingCount'] as num?)?.toInt() ?? 0,
+      unavailableCount: (json['unavailableCount'] as num?)?.toInt() ?? 0,
       assignmentReviewRequired: json['assignmentReviewRequired'] == true,
       assignmentStatus: (json['assignmentStatus'] as String?) ?? '',
     );

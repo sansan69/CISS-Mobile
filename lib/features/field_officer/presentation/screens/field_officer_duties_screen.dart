@@ -6,8 +6,9 @@ import '../../../../core/haptics.dart';
 import 'field_officer_attendance_screen.dart';
 import 'field_officer_work_orders_screen.dart';
 
-final StateProvider<int> fieldOfficerDutiesSubTabProvider =
-    StateProvider<int>((ref) => 0);
+final StateProvider<int> fieldOfficerDutiesSubTabProvider = StateProvider<int>(
+  (ref) => 0,
+);
 
 class FieldOfficerDutiesScreen extends ConsumerStatefulWidget {
   const FieldOfficerDutiesScreen({super.key, this.initialSubTab = 0});
@@ -50,6 +51,7 @@ class _FieldOfficerDutiesScreenState
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(14) > 18;
     final currentSubTab = ref.watch(fieldOfficerDutiesSubTabProvider);
 
     if (_tabController.index != currentSubTab &&
@@ -61,13 +63,15 @@ class _FieldOfficerDutiesScreenState
     return Scaffold(
       backgroundColor: tokens.canvas,
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(48),
+        preferredSize: Size.fromHeight(largeText ? 64 : 48),
         child: Container(
           color: tokens.surface,
           child: SafeArea(
             bottom: false,
             child: TabBar(
               controller: _tabController,
+              isScrollable: largeText,
+              tabAlignment: largeText ? TabAlignment.start : TabAlignment.fill,
               indicatorColor: tokens.primary,
               indicatorWeight: 3,
               labelColor: tokens.primary,
@@ -77,16 +81,25 @@ class _FieldOfficerDutiesScreenState
                 fontSize: 14,
               ),
               onTap: (_) => Haptics.selection(),
-              tabs: const [
-                Tab(
-                  icon: Icon(Icons.assignment_turned_in_rounded, size: 18),
-                  text: 'Work Orders',
-                ),
-                Tab(
-                  icon: Icon(Icons.fact_check_rounded, size: 18),
-                  text: 'Attendance',
-                ),
-              ],
+              tabs:
+                  largeText
+                      ? const [
+                        Tab(text: 'Work Orders'),
+                        Tab(text: 'Attendance'),
+                      ]
+                      : const [
+                        Tab(
+                          icon: Icon(
+                            Icons.assignment_turned_in_rounded,
+                            size: 18,
+                          ),
+                          text: 'Work Orders',
+                        ),
+                        Tab(
+                          icon: Icon(Icons.fact_check_rounded, size: 18),
+                          text: 'Attendance',
+                        ),
+                      ],
             ),
           ),
         ),

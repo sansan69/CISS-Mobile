@@ -1,22 +1,36 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
+import '../../../../../core/attendance/attendance_pairing.dart';
+import '../../../../../core/attendance/shift_window.dart';
+import '../../../../../core/time/clock.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/network/ciss_error.dart';
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/portal_primitives.dart';
 import '../../../../../shared/widgets/state_block.dart';
+import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
 import '../../../../../core/location/live_location_service.dart';
+import '../../../auth/application/auth_controller.dart';
 import 'field_officer_guard_detail_screen.dart';
 import 'field_officer_dashboard_screen.dart';
+import '../pdf/muster_roll_pdf.dart';
+
+/// How the field officer wants the muster roll delivered.
+enum _MusterShareAction { summary, pdf }
 
 final StateProvider<String?> attendanceSelectedDateProvider =
     StateProvider<String?>((Ref ref) => null);
@@ -36,12 +50,17 @@ final StateProvider<DateTime> attendanceHistoryEndDateProvider =
 final FutureProvider<List<FieldOfficerAttendanceEntry>>
 fieldOfficerGuardAttendanceProvider =
     FutureProvider<List<FieldOfficerAttendanceEntry>>((Ref ref) {
-      final date =
-          ref.watch(attendanceSelectedDateProvider) ??
-          DateFormat('yyyy-MM-dd').format(DateTime.now());
+      final selected = ref.watch(attendanceSelectedDateProvider);
+      // The live feed is read as a *business date*: an overnight shift's
+      // check-out lands on the next calendar date, so the query reaches one
+      // day back and the pairs are grouped by the date the shift started.
+      final businessDate =
+          (selected == null ? null : DateTime.tryParse(selected)) ??
+          ref.read(clockProvider)();
       return ref
           .read(mobileRepositoryProvider)
-          .fetchFieldOfficerGuardAttendance(date: date);
+          .fetchGuardAttendanceForBusinessDate(businessDate: businessDate)
+          .then((entries) => entries.where((e) => e.hasRecordedPunch).toList());
     });
 
 final FutureProvider<List<FieldOfficerAttendanceEntry>>
@@ -51,7 +70,13 @@ fieldOfficerGuardAttendanceHistoryProvider =
       final end = ref.watch(attendanceHistoryEndDateProvider);
       return ref
           .read(mobileRepositoryProvider)
-          .fetchFieldOfficerGuardAttendanceRange(start: start, end: end);
+          // One day earlier than the visible window so a shift that began on
+          // the previous evening still pairs with its check-out.
+          .fetchFieldOfficerGuardAttendanceRange(
+            start: start.subtract(const Duration(days: 1)),
+            end: end,
+          )
+          .then((entries) => entries.where((e) => e.hasRecordedPunch).toList());
     });
 
 final FutureProvider<List<FieldOfficerSiteOption>>
@@ -74,6 +99,7 @@ class _FieldOfficerGuardAttendanceScreenState
   String? _selectedSiteId;
   static final DateFormat _displayFmt = DateFormat('dd/MM/yyyy');
   static final DateFormat _apiFmt = DateFormat('yyyy-MM-dd');
+  static final DateFormat _pdfTimestampFmt = DateFormat('dd MMM yyyy, HH:mm');
 
   // History tab state
   String? _historyQuickFilter;
@@ -106,6 +132,123 @@ class _FieldOfficerGuardAttendanceScreenState
       ..invalidate(fieldOfficerGuardAttendanceHistoryProvider);
   }
 
+  /// The shift day the live feed is looking at. A night duty belongs to the
+  /// date it started, which is not always the calendar date the officer is
+  /// standing on.
+  DateTime get _businessDate =>
+      startOfDay(_selectedDate ?? ref.read(clockProvider)());
+
+  DateTime get _now => ref.read(clockProvider)();
+
+  /// The districts this officer may read live positions for — the same list
+  /// the Firestore rule evaluates, so the query and the rule agree.
+  List<String> get _assignedDistricts =>
+      ref.watch(authSessionProvider).valueOrNull?.assignedDistricts ??
+      const <String>[];
+
+  /// Pairs every punch for the feed, so a check-out that landed after midnight
+  /// still closes the shift it belongs to.
+  List<PunchPair> _pairs(List<FieldOfficerAttendanceEntry> entries) =>
+      pairPunches(
+        entries,
+        now: _now,
+        fallbackDate: _businessDate,
+      );
+
+  /// The shifts this feed is responsible for: the viewed business date plus any
+  /// overnight shift that is still open, plus one that ended without a
+  /// check-out within the last day.
+  List<PunchPair> _livePairs(List<FieldOfficerAttendanceEntry> entries) {
+    final viewed = _businessDate;
+    return _pairs(entries)
+        .where(
+          (pair) =>
+              pair.isOnDuty ||
+              pair.needsReviewWithin(_now) ||
+              _isSameDay(pair.businessDate, viewed),
+        )
+        .toList();
+  }
+
+  /// Site shown on the muster roll; an empty site is never rendered as blank.
+  String _siteLabel(FieldOfficerAttendanceEntry entry) =>
+      entry.siteName.trim().isEmpty
+      ? 'General / Unassigned'
+      : entry.siteName.trim();
+
+  /// Guards whose shift never closed: they are neither on duty nor checked out.
+  void _showCheckOutReview(
+    List<PunchPair> pairs,
+    List<FieldOfficerSiteOption> sites,
+  ) {
+    final strings = AppStrings.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder:
+          (sheetContext) => SafeArea(
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              children: <Widget>[
+                Text(
+                  strings.fill(strings.attendanceReviewNotice, <String, Object>{
+                    'count': pairs.length,
+                  }),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                for (final pair in pairs)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      pair.entry.guardName.trim().isEmpty
+                          ? pair.entry.employeeId
+                          : pair.entry.guardName,
+                    ),
+                    subtitle: Text(
+                      <String>[
+                        pair.entry.siteName,
+                        pair.entry.dutyPointName,
+                        if (pair.checkIn != null) _clockLabel(pair.checkIn!),
+                      ].where((value) => value.trim().isNotEmpty).join(' · '),
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () {
+                      Navigator.of(sheetContext).pop();
+                      _openGuardDetail(pair.entry, sites);
+                    },
+                  ),
+              ],
+            ),
+          ),
+    );
+  }
+
+  void _openGuardDetail(
+    FieldOfficerAttendanceEntry entry,
+    List<FieldOfficerSiteOption> sites,
+  ) {
+    final site = _findSite(entry, sites);
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => FieldOfficerGuardDetailScreen(
+              employeeId: entry.employeeId,
+              employeeDocId: entry.guardId,
+              guardName: entry.guardName,
+              siteName: entry.siteName,
+              attendanceEntry: entry,
+              siteLatitude: site?.latitude,
+              siteLongitude: site?.longitude,
+            ),
+      ),
+    );
+  }
+
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -133,21 +276,21 @@ class _FieldOfficerGuardAttendanceScreenState
     final dateStr =
         _selectedDate != null
             ? _displayFmt.format(_selectedDate!)
-            : _displayFmt.format(DateTime.now());
+            : _displayFmt.format(ref.read(clockProvider)());
 
-    final Map<String, int> siteOnDuty = {};
-    int totalIn = 0;
-    int totalOut = 0;
+    final Map<String, int> siteOnDuty = <String, int>{};
+    var totalIn = 0;
+    var totalOut = 0;
 
-    for (final e in entries) {
-      if (e.status.toLowerCase() == 'in') {
+    // Counted from paired shifts so a night duty that crosses midnight is one
+    // guard on duty, and a shift that never closed is not counted as either.
+    for (final pair in _livePairs(entries)) {
+      if (pair.isOnDuty) {
         totalIn++;
-        final site =
-            e.siteName.trim().isEmpty ? 'General / Unassigned' : e.siteName.trim();
-        siteOnDuty[site] = (siteOnDuty[site] ?? 0) + 1;
-      } else {
-        totalOut++;
+        siteOnDuty[_siteLabel(pair.entry)] =
+            (siteOnDuty[_siteLabel(pair.entry)] ?? 0) + 1;
       }
+      if (pair.status == PunchPairStatus.closed) totalOut++;
     }
 
     final buffer = StringBuffer();
@@ -163,8 +306,9 @@ class _FieldOfficerGuardAttendanceScreenState
     if (siteOnDuty.isEmpty) {
       buffer.writeln('• No active check-ins recorded for this date.');
     } else {
-      final sortedSites = siteOnDuty.entries.toList()
-        ..sort((a, b) => b.value.compareTo(a.value));
+      final sortedSites =
+          siteOnDuty.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value));
       for (final item in sortedSites) {
         buffer.writeln('• ${item.key}: ${item.value} guard(s) on duty');
       }
@@ -176,6 +320,75 @@ class _FieldOfficerGuardAttendanceScreenState
       buffer.toString(),
       subject: 'CISS Muster Roll Summary - $dateStr',
     );
+  }
+
+  /// Same aggregation as the text summary, rendered as a printable PDF for the
+  /// client hand-over. Generated on-device so it works offline.
+  Future<void> _shareMusterRollPdf() async {
+    final entries =
+        ref.read(fieldOfficerGuardAttendanceProvider).valueOrNull ?? [];
+    final dashboard = ref.read(fieldOfficerDashboardProvider).valueOrNull;
+    final dateStr =
+        _selectedDate != null
+            ? _displayFmt.format(_selectedDate!)
+            : _displayFmt.format(ref.read(clockProvider)());
+
+    final Map<String, int> siteOnDuty = <String, int>{};
+    var totalIn = 0;
+    var totalOut = 0;
+    final rows = <MusterRollRow>[];
+    final carriedOver = <MusterRollRow>[];
+    final strings = AppStrings.of(context);
+    final viewed = _businessDate;
+
+    for (final pair in _livePairs(entries)) {
+      final e = pair.entry;
+      final site = _siteLabel(e);
+      if (pair.isOnDuty) {
+        totalIn++;
+        siteOnDuty[site] = (siteOnDuty[site] ?? 0) + 1;
+      }
+      if (pair.status == PunchPairStatus.closed) totalOut++;
+      final row = MusterRollRow(
+        name: e.guardName.trim().isEmpty ? e.employeeId : e.guardName.trim(),
+        employeeId: e.employeeId,
+        site: site,
+        checkIn: _punchText(pair.checkIn, e.checkIn, '—'),
+        checkOut: _punchText(pair.checkOut, e.checkOut, '—'),
+        status: _pairStatusLabel(pair, strings),
+      );
+      // Anything filed under an earlier business date — a tour still running
+      // past midnight, or one that never closed — belongs in the carry-over
+      // section instead of the day's own rows, so a guard is never listed
+      // twice and no row appears under a date it does not belong to.
+      if (!_isSameDay(pair.businessDate, viewed)) {
+        carriedOver.add(row);
+      } else {
+        rows.add(row);
+      }
+    }
+
+    final bytes = await buildMusterRollPdf(
+      MusterRollData(
+        dateLabel: dateStr,
+        totalForce: dashboard?.totalGuards ?? entries.length,
+        onDuty: totalIn,
+        checkedOut: totalOut,
+        siteOnDuty: siteOnDuty,
+        rows: rows,
+        carriedOver: carriedOver,
+        generatedAt: _pdfTimestampFmt.format(ref.read(clockProvider)()),
+      ),
+    );
+
+    final directory = await getTemporaryDirectory();
+    final safeDate = dateStr.replaceAll(RegExp(r'[^0-9A-Za-z]+'), '-');
+    final file = File('${directory.path}/ciss-muster-roll-$safeDate.pdf');
+    await file.writeAsBytes(bytes, flush: true);
+
+    await Share.shareXFiles(<XFile>[
+      XFile(file.path, mimeType: 'application/pdf'),
+    ], subject: 'CISS Muster Roll - $dateStr');
   }
 
   @override
@@ -190,14 +403,32 @@ class _FieldOfficerGuardAttendanceScreenState
           showBackButton: false,
           actions: <Widget>[
             const SyncStatusBadge(),
-            IconButton(
+            PopupMenuButton<_MusterShareAction>(
               tooltip: 'Share Muster Roll',
-              onPressed: _shareMusterRoll,
               icon: Icon(
                 Icons.share_rounded,
                 color: tokens.inkMuted,
                 size: 20,
               ),
+              onSelected: (_MusterShareAction action) {
+                if (action == _MusterShareAction.pdf) {
+                  _shareMusterRollPdf();
+                } else {
+                  _shareMusterRoll();
+                }
+              },
+              itemBuilder:
+                  (BuildContext context) =>
+                      const <PopupMenuEntry<_MusterShareAction>>[
+                        PopupMenuItem<_MusterShareAction>(
+                          value: _MusterShareAction.summary,
+                          child: Text('Share summary'),
+                        ),
+                        PopupMenuItem<_MusterShareAction>(
+                          value: _MusterShareAction.pdf,
+                          child: Text('Share as PDF'),
+                        ),
+                      ],
             ),
             IconButton(
               onPressed: _refresh,
@@ -235,11 +466,13 @@ class _FieldOfficerGuardAttendanceScreenState
     final sitesAsync = ref.watch(fieldOfficerAttendanceSitesProvider);
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         AppSpacing.md,
         0,
         AppSpacing.md,
-        100,
+        // Clears the floating navigation bar plus the system gesture inset so
+        // the last muster row is never hidden behind it.
+        100 + MediaQuery.paddingOf(context).bottom,
       ),
       children: [
         const SizedBox(height: 12),
@@ -343,20 +576,43 @@ class _FieldOfficerGuardAttendanceScreenState
                         ),
                       ),
                   data: (entries) {
-                    final filtered =
+                    final viewed = _businessDate;
+                    final now = _now;
+                    // A night shift that started yesterday and is still open
+                    // belongs on today's feed, and so does one that ended
+                    // without a check-out — that guard is the reason this
+                    // screen exists. A shift that closed stays with the day it
+                    // belongs to.
+                    final relevant =
+                        _pairs(entries)
+                            .where(
+                              (pair) =>
+                                  pair.isOnDuty ||
+                                  pair.needsReviewWithin(now) ||
+                                  _isSameDay(pair.businessDate, viewed),
+                            )
+                            .toList();
+                    final selectedSite =
                         _selectedSiteId == null
-                            ? entries
-                            : entries.where((e) {
-                              final selectedSite = sites
+                            ? null
+                            : sites
                                   .cast<FieldOfficerAttendanceSite?>()
                                   .firstWhere(
                                     (s) => s?.siteId == _selectedSiteId,
                                     orElse: () => null,
                                   );
-                              if (selectedSite == null) return false;
-                              return e.siteName.trim().toLowerCase() ==
-                                  selectedSite.siteName.trim().toLowerCase();
-                            }).toList();
+                    final filtered =
+                        selectedSite == null
+                            ? relevant
+                            : relevant
+                                  .where(
+                                    (pair) =>
+                                        pair.entry.siteName.trim().toLowerCase() ==
+                                        selectedSite.siteName
+                                            .trim()
+                                            .toLowerCase(),
+                                  )
+                                  .toList();
 
                     if (filtered.isEmpty) {
                       return const Padding(
@@ -374,24 +630,40 @@ class _FieldOfficerGuardAttendanceScreenState
                       data: (items) => items,
                       orElse: () => const <FieldOfficerSiteOption>[],
                     );
+                    final review =
+                        filtered
+                            .where((pair) => pair.needsReviewWithin(now))
+                            .toList();
 
                     return Column(
                       children: [
                         _AttendanceMapCard(
-                          entries: filtered,
+                          entries:
+                              filtered.map((pair) => pair.entry).toList(),
                           sites: siteOptions,
                         ),
+                        if (review.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                            child: _CheckOutReviewNotice(
+                              count: review.length,
+                              onTap: () => _showCheckOutReview(review, siteOptions),
+                            ),
+                          ),
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: StreamBuilder<List<GuardLocationData>>(
                             stream:
-                                _liveLocationService.streamActiveLocations(),
+                                _liveLocationService.streamActiveLocations(
+                                  districts: _assignedDistricts,
+                                ),
                             builder: (context, locSnap) {
                               final locations =
                                   locSnap.data ?? const <GuardLocationData>[];
                               return Column(
                                 children:
-                                    filtered.map((e) {
+                                    filtered.map((pair) {
+                                      final e = pair.entry;
                                       final loc = locations
                                           .cast<GuardLocationData?>()
                                           .firstWhere(
@@ -402,6 +674,8 @@ class _FieldOfficerGuardAttendanceScreenState
                                       final site = _findSite(e, siteOptions);
                                       return _LiveGuardRow(
                                         e,
+                                        pair: pair,
+                                        viewedDate: viewed,
                                         location: loc,
                                         onTap: () {
                                           Navigator.of(context).push(
@@ -452,11 +726,11 @@ class _FieldOfficerGuardAttendanceScreenState
     );
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         AppSpacing.md,
         16,
         AppSpacing.md,
-        100,
+        100 + MediaQuery.paddingOf(context).bottom,
       ),
       children: [
         // Quick filter chips
@@ -492,12 +766,18 @@ class _FieldOfficerGuardAttendanceScreenState
                 ),
               ),
           data: (entries) {
-            final filtered = _filterHistoryEntries(entries);
+            final grouped = _filterHistoryPairs(entries);
+            final ordered = grouped.keys.toList()
+              ..sort((a, b) => b.compareTo(a));
             return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHistorySummary(filtered, tokens),
+                _buildHistorySummary(
+                  grouped.values.expand((day) => day).toList(),
+                  tokens,
+                ),
                 const SizedBox(height: 16),
-                if (filtered.isEmpty)
+                if (grouped.isEmpty)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 60),
                     child: StateBlock(
@@ -507,9 +787,12 @@ class _FieldOfficerGuardAttendanceScreenState
                     ),
                   )
                 else
-                  ...filtered.map(
-                    (e) => _buildHistoryCard(e, tokens, siteOptions),
-                  ),
+                  for (final date in ordered) ...<Widget>[
+                    _buildHistoryDateHeader(date, tokens),
+                    ...grouped[date]!.map(
+                      (pair) => _buildHistoryCard(pair, tokens, siteOptions),
+                    ),
+                  ],
               ],
             );
           },
@@ -691,17 +974,44 @@ class _FieldOfficerGuardAttendanceScreenState
     );
   }
 
-  List<FieldOfficerAttendanceEntry> _filterHistoryEntries(
+  /// History is grouped by the day each shift belongs to, so a 05:40 check-out
+  /// appears under the previous day instead of as an orphan on its own date.
+  /// The fetch reaches one day earlier than the visible window, so pairs are
+  /// also filtered to the window the officer asked for.
+  Map<DateTime, List<PunchPair>> _filterHistoryPairs(
     List<FieldOfficerAttendanceEntry> entries,
   ) {
     final search = _historySearchCtrl.text.trim().toLowerCase();
-    return entries.where((e) {
-      if (search.isNotEmpty && !e.guardName.toLowerCase().contains(search)) {
-        return false;
-      }
-      return true;
-    }).toList();
+    final now = ref.read(clockProvider)();
+    final start = startOfDay(_historyStartDate ?? now);
+    final end = _historyEndDate ?? now;
+    final pairs = _pairs(entries).where((pair) {
+      final date = pair.businessDate;
+      if (date.isBefore(start) || date.isAfter(end)) return false;
+      if (search.isEmpty) return true;
+      return pair.entry.guardName.toLowerCase().contains(search);
+    });
+    return groupByBusinessDate(pairs.toList());
   }
+
+  Widget _buildHistoryDateHeader(DateTime date, CissThemeTokens tokens) => Padding(
+    padding: const EdgeInsets.only(bottom: 8, top: 4),
+    child: Row(
+      children: <Widget>[
+        Text(
+          DateFormat('dd/MM/yyyy').format(date),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.6,
+            color: tokens.inkMuted,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(child: Divider(color: tokens.border.withValues(alpha: 0.4))),
+      ],
+    ),
+  );
 
   FieldOfficerSiteOption? _findSite(
     FieldOfficerAttendanceEntry entry,
@@ -716,13 +1026,14 @@ class _FieldOfficerGuardAttendanceScreenState
   }
 
   Widget _buildHistorySummary(
-    List<FieldOfficerAttendanceEntry> entries,
+    List<PunchPair> pairs,
     CissThemeTokens tokens,
   ) {
-    final present =
-        entries.where((e) => e.status == 'Present' || e.status == 'In').length;
-    final absent = entries.where((e) => e.status == 'Absent').length;
-    final total = entries.length;
+    // Counted over shifts, not rows: a night duty that spans midnight is one
+    // shift with one check-in and one check-out.
+    final checkIns = pairs.where((pair) => pair.checkIn != null).length;
+    final checkOuts = pairs.where((pair) => pair.checkOut != null).length;
+    final total = pairs.length;
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -733,7 +1044,8 @@ class _FieldOfficerGuardAttendanceScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Icon(Icons.bar_chart_rounded, size: 18, color: tokens.accent),
               const SizedBox(width: 8),
@@ -749,22 +1061,63 @@ class _FieldOfficerGuardAttendanceScreenState
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              _buildHistoryStat('Total', '$total', tokens.accent, tokens),
-              Container(
-                width: 1,
-                height: 36,
-                color: tokens.border.withValues(alpha: 0.3),
-              ),
-              _buildHistoryStat('Present', '$present', tokens.success, tokens),
-              Container(
-                width: 1,
-                height: 36,
-                color: tokens.border.withValues(alpha: 0.3),
-              ),
-              _buildHistoryStat('Absent', '$absent', tokens.danger, tokens),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compact =
+                  constraints.maxWidth < 300 ||
+                  MediaQuery.textScalerOf(context).scale(1) >= 1.5;
+              if (compact) {
+                return Column(
+                  children: [
+                    _buildHistoryCompactStat(
+                      'Total',
+                      '$total',
+                      tokens.accent,
+                      tokens,
+                    ),
+                    _buildHistoryCompactStat(
+                      'Check-ins',
+                      '$checkIns',
+                      tokens.success,
+                      tokens,
+                    ),
+                    _buildHistoryCompactStat(
+                      'Check-outs',
+                      '$checkOuts',
+                      tokens.accent,
+                      tokens,
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  _buildHistoryStat('Total', '$total', tokens.accent, tokens),
+                  Container(
+                    width: 1,
+                    height: 36,
+                    color: tokens.border.withValues(alpha: 0.3),
+                  ),
+                  _buildHistoryStat(
+                    'Check-ins',
+                    '$checkIns',
+                    tokens.success,
+                    tokens,
+                  ),
+                  Container(
+                    width: 1,
+                    height: 36,
+                    color: tokens.border.withValues(alpha: 0.3),
+                  ),
+                  _buildHistoryStat(
+                    'Check-outs',
+                    '$checkOuts',
+                    tokens.accent,
+                    tokens,
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -804,13 +1157,60 @@ class _FieldOfficerGuardAttendanceScreenState
     );
   }
 
+  Widget _buildHistoryCompactStat(
+    String label,
+    String value,
+    Color color,
+    CissThemeTokens tokens,
+  ) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: tokens.inkMuted,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+            color: color,
+          ),
+        ),
+      ],
+    ),
+  );
+
   Widget _buildHistoryCard(
-    FieldOfficerAttendanceEntry entry,
+    PunchPair pair,
     CissThemeTokens tokens,
     List<FieldOfficerSiteOption> sites,
   ) {
-    final isPresent = entry.status == 'Present' || entry.status == 'In';
-    final glow = isPresent ? tokens.success : tokens.warning;
+    final entry = pair.entry;
+    final strings = AppStrings.of(context);
+    final glow = _pairGlow(pair, tokens);
+    final statusLabel = _pairStatusLabel(pair, strings);
+    final checkInLabel = _punchText(
+      pair.checkIn,
+      entry.checkIn,
+      strings.attendanceNotRecorded,
+    );
+    final checkOutLabel = _punchText(
+      pair.checkOut,
+      entry.checkOut,
+      strings.attendanceNotRecorded,
+    );
+    final multiDay =
+        pair.checkIn != null &&
+        pair.checkOut != null &&
+        !_isSameDay(pair.checkIn!, pair.checkOut!);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -837,35 +1237,37 @@ class _FieldOfficerGuardAttendanceScreenState
           borderRadius: BorderRadius.circular(AppRadius.lg),
           child: ModernCard(
             padding: const EdgeInsets.all(12),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: glow.withValues(alpha: 0.1),
-                  backgroundImage:
-                      (entry.photoUrl != null && entry.photoUrl!.isNotEmpty)
-                          ? NetworkImage(entry.photoUrl!)
-                          : null,
-                  child:
-                      (entry.photoUrl == null || entry.photoUrl!.isEmpty)
-                          ? Text(
-                            entry.guardName.isNotEmpty
-                                ? entry.guardName.substring(0, 1).toUpperCase()
-                                : 'G',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              color: glow,
-                            ),
-                          )
-                          : null,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: glow.withValues(alpha: 0.1),
+                      backgroundImage:
+                          (entry.photoUrl != null && entry.photoUrl!.isNotEmpty)
+                              ? CachedNetworkImageProvider(entry.photoUrl!)
+                              : null,
+                      child:
+                          (entry.photoUrl == null || entry.photoUrl!.isEmpty)
+                              ? Text(
+                                entry.guardName.isNotEmpty
+                                    ? entry.guardName
+                                        .substring(0, 1)
+                                        .toUpperCase()
+                                    : 'G',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                  color: glow,
+                                ),
+                              )
+                              : null,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
                         entry.guardName,
                         style: TextStyle(
                           fontSize: 16,
@@ -873,37 +1275,51 @@ class _FieldOfficerGuardAttendanceScreenState
                           color: tokens.ink,
                         ),
                       ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        statusLabel,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.2,
+                          color: glow,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                if (multiDay) ...<Widget>[
+                  const SizedBox(height: 6),
+                  StatusChip(
+                    label: strings.attendanceCarriedOver,
+                    tone: StatusChipTone.info,
+                    icon: Icons.nightlight_round,
+                  ),
+                ],
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.only(left: 60),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
                         '${entry.siteName} · ${entry.dutyPointName}',
                         style: Theme.of(context).textTheme.bodySmall,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      Text(
+                        '${strings.attendanceCheckInLabel}: $checkInLabel',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      Text(
+                        '${strings.attendanceCheckOutLabel}: $checkOutLabel',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      entry.checkIn ?? '--:--',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: tokens.primary,
-                      ),
-                    ),
-                    Text(
-                      entry.status,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.2,
-                        color: glow,
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
@@ -1253,7 +1669,15 @@ class _MapLegendItem extends StatelessWidget {
       children: <Widget>[
         Icon(icon, size: 16, color: color),
         const SizedBox(width: 5),
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
+        // Flexible so a long label wraps inside the legend item instead of
+        // overflowing the row at 1.8 text scale on a narrow phone.
+        Flexible(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall,
+            softWrap: true,
+          ),
+        ),
       ],
     );
   }
@@ -1379,9 +1803,7 @@ class _SiteFilterChip extends StatelessWidget {
               width: isSelected ? 1.5 : 1,
             ),
             boxShadow:
-                isSelected
-                    ? AppShadows.glow(tokens.primary)
-                    : AppShadows.card,
+                isSelected ? AppShadows.glow(tokens.primary) : AppShadows.card,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1425,16 +1847,50 @@ class _SiteFilterChip extends StatelessWidget {
 }
 
 class _LiveGuardRow extends StatelessWidget {
-  const _LiveGuardRow(this.entry, {this.location, this.onTap});
+  const _LiveGuardRow(
+    this.entry, {
+    this.pair,
+    this.viewedDate,
+    this.location,
+    this.onTap,
+  });
+
   final FieldOfficerAttendanceEntry entry;
+
+  /// The paired shift, so an overnight check-out still reads as on duty until
+  /// it happens instead of the row flipping at midnight.
+  final PunchPair? pair;
+
+  /// The shift day on screen, used to tell "since 20:05" from "since 20:05
+  /// (yesterday)".
+  final DateTime? viewedDate;
   final GuardLocationData? location;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    final bool isPresent = entry.status == 'Present' || entry.status == 'In';
-    final glow = isPresent ? tokens.success : tokens.warning;
+    final strings = AppStrings.of(context);
+    final onDuty = pair?.isOnDuty ?? entry.status == 'In';
+    final glow =
+        pair == null
+            ? (entry.status == 'Present' || entry.status == 'In'
+                ? tokens.success
+                : tokens.warning)
+            : _pairGlow(pair!, tokens);
+    final statusLabel =
+        pair == null ? entry.status : _pairStatusLabel(pair!, strings);
+    final checkIn = pair?.checkIn;
+    final since = checkIn == null
+        ? null
+        : strings.fill(
+            onDuty &&
+                    viewedDate != null &&
+                    !_isSameDay(checkIn, viewedDate!)
+                ? strings.attendanceSinceYesterday
+                : strings.attendanceSince,
+            <String, Object>{'time': _clockLabel(checkIn)},
+          );
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1454,7 +1910,7 @@ class _LiveGuardRow extends StatelessWidget {
                       backgroundColor: glow.withValues(alpha: 0.1),
                       backgroundImage:
                           (entry.photoUrl != null && entry.photoUrl!.isNotEmpty)
-                              ? NetworkImage(entry.photoUrl!)
+                              ? CachedNetworkImageProvider(entry.photoUrl!)
                               : null,
                       child:
                           (entry.photoUrl == null || entry.photoUrl!.isEmpty)
@@ -1498,34 +1954,111 @@ class _LiveGuardRow extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (since != null)
+                        Text(
+                          since,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: glow,
+                          ),
+                        ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      entry.checkIn ?? '--:--',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: tokens.primary,
+                // Bounded: the status label can be a sentence ("Check-out
+                // missing"), and an unbounded column would overflow the row at
+                // 1.8 text scale on a narrow phone.
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 104),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        _punchText(checkIn, entry.checkIn, '--:--'),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: tokens.primary,
+                        ),
                       ),
-                    ),
-                    Text(
-                      entry.status,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.2,
-                        color: glow,
+                      Text(
+                        statusLabel,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.2,
+                          color: glow,
+                          height: 1.2,
+                        ),
+                        textAlign: TextAlign.end,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One-line prompt for guards whose check-out never arrived (T2.5). It opens
+/// the affected rows instead of asking the officer to hunt through the feed.
+class _CheckOutReviewNotice extends StatelessWidget {
+  const _CheckOutReviewNotice({required this.count, required this.onTap});
+
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    final strings = AppStrings.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: tokens.dangerSoft,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: tokens.danger.withValues(alpha: 0.35)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Icon(Icons.error_outline_rounded, size: 20, color: tokens.danger),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      strings.fill(strings.attendanceReviewNotice, <
+                        String,
+                        Object
+                      >{'count': count}),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: tokens.ink,
+                      ),
+                    ),
+                    Text(
+                      strings.attendanceReviewNoticeHint,
+                      style: TextStyle(fontSize: 11, color: tokens.inkMuted),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right_rounded, color: tokens.danger),
+            ],
           ),
         ),
       ),
@@ -1576,4 +2109,50 @@ class _LiveDot extends StatelessWidget {
       ),
     );
   }
+}
+
+/// True when both moments fall on the same calendar date.
+bool _isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+/// `HH:mm` for a parsed punch. Pairs carry real timestamps while the raw rows
+/// carry whatever the server sent, so both paths render the same way.
+String _clockLabel(DateTime moment) =>
+    '${moment.hour.toString().padLeft(2, '0')}:'
+    '${moment.minute.toString().padLeft(2, '0')}';
+
+/// True when only the check-in is missing: the punch out exists, so this is a
+/// completed shift seen without its start (usually because the check-in fell
+/// outside the fetched window).
+bool _orphanCheckOut(PunchPair pair) =>
+    pair.status == PunchPairStatus.missedCheckOut && pair.checkIn == null;
+
+String _pairStatusLabel(PunchPair pair, AppStrings strings) {
+  if (_orphanCheckOut(pair)) return strings.attendanceCheckedOut;
+  return switch (pair.status) {
+    PunchPairStatus.open => strings.attendanceOnDuty,
+    PunchPairStatus.missedCheckOut => strings.attendanceCheckOutMissing,
+    PunchPairStatus.duplicateCheckIn => strings.attendanceDuplicateCheckIn,
+    PunchPairStatus.closed => strings.attendanceCheckedOut,
+  };
+}
+
+Color _pairGlow(PunchPair pair, CissThemeTokens tokens) {
+  if (_orphanCheckOut(pair)) return tokens.inkMuted;
+  return switch (pair.status) {
+    PunchPairStatus.open => tokens.success,
+    PunchPairStatus.missedCheckOut || PunchPairStatus.duplicateCheckIn =>
+      tokens.danger,
+    PunchPairStatus.closed => tokens.inkMuted,
+  };
+}
+
+/// The time shown for one punch. The server's own string wins so the guard
+/// keeps seeing the format the backend uses; the parsed clock is only needed
+/// when the punch came from the paired row.
+String _punchText(DateTime? parsed, String? raw, String fallback) {
+  final text = raw?.trim() ?? '';
+  if (text.isNotEmpty) return text;
+  if (parsed != null) return _clockLabel(parsed);
+  return fallback;
 }

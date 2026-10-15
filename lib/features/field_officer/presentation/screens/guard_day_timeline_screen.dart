@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
+import '../../../../../core/i18n/app_strings.dart';
 import '../../../../../core/region/region_service.dart';
 import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/status_chip.dart';
@@ -171,12 +172,14 @@ class _GuardDayTimelineScreenState extends State<GuardDayTimelineScreen> {
     return isToday ? 'Today · $label' : label;
   }
 
-  Future<(List<_HistoryPoint>, Map<String, dynamic>?)> _loadDayData(
-    DateTime day,
-  ) async {
+  Future<_TimelineDayData> _loadDayData(DateTime day) async {
     final history = await _loadHistory(day);
     final siteDoc = await _loadGuardLocationDoc();
-    return (history, siteDoc);
+    return _TimelineDayData(
+      points: history.points,
+      siteDoc: siteDoc,
+      historyFailed: history.failed,
+    );
   }
 
   Future<Map<String, dynamic>?> _loadGuardLocationDoc() async {
@@ -192,7 +195,14 @@ class _GuardDayTimelineScreenState extends State<GuardDayTimelineScreen> {
     }
   }
 
-  Future<List<_HistoryPoint>> _loadHistory(DateTime day) async {
+  /// Movement history for one day, or the fact that it could not be read.
+  ///
+  /// A refused read and a quiet day both produce no points, and the officer has
+  /// to be able to tell them apart: "no movement recorded" about a guard who
+  /// was tracked all night is a wrong statement about the guard.
+  Future<({List<_HistoryPoint> points, bool failed})> _loadHistory(
+    DateTime day,
+  ) async {
     final (startUtc, endUtc) = _dayBounds(day);
     try {
       final snapshot =
@@ -204,7 +214,8 @@ class _GuardDayTimelineScreenState extends State<GuardDayTimelineScreen> {
               .where('recordedAt', isLessThan: endUtc)
               .orderBy('recordedAt', descending: false)
               .get();
-      return snapshot.docs
+      final points =
+          snapshot.docs
           .map((doc) {
             final data = doc.data();
             final recordedAt = (data['recordedAt'] as Timestamp?)?.toDate();
@@ -227,8 +238,10 @@ class _GuardDayTimelineScreenState extends State<GuardDayTimelineScreen> {
           })
           .whereType<_HistoryPoint>()
           .toList();
-    } catch (_) {
-      return const [];
+      return (points: points, failed: false);
+    } catch (error) {
+      debugPrint('Guard day timeline history unavailable: $error');
+      return (points: const <_HistoryPoint>[], failed: true);
     }
   }
 
@@ -256,15 +269,15 @@ class _GuardDayTimelineScreenState extends State<GuardDayTimelineScreen> {
     return Scaffold(
       backgroundColor: tokens.canvas,
       appBar: CissAppBar(title: widget.guardName, subtitle: 'Day timeline'),
-      body: FutureBuilder<(List<_HistoryPoint>, Map<String, dynamic>?)>(
+      body: FutureBuilder<_TimelineDayData>(
         future: _loadDayData(_selectedDay),
         builder: (context, historySnapshot) {
           if (historySnapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
           }
           final data = historySnapshot.data;
-          final points = data?.$1 ?? const <_HistoryPoint>[];
-          final siteDoc = data?.$2;
+          final points = data?.points ?? const <_HistoryPoint>[];
+          final siteDoc = data?.siteDoc;
           return Column(
             children: [
               _DaySelector(
@@ -278,7 +291,17 @@ class _GuardDayTimelineScreenState extends State<GuardDayTimelineScreen> {
                 onNext: () => _changeDay(1),
               ),
               if (points.isEmpty)
-                Expanded(child: _EmptyTimeline(tokens: tokens))
+                Expanded(
+                  child: _EmptyTimeline(
+                    tokens: tokens,
+                    message:
+                        data?.historyFailed == true
+                            ? AppStrings.of(
+                              context,
+                            ).timelineHistoryUnavailable
+                            : null,
+                  ),
+                )
               else
                 Expanded(
                   child: _TimelineContent(
@@ -724,9 +747,13 @@ class _StayMarker extends StatelessWidget {
 }
 
 class _EmptyTimeline extends StatelessWidget {
-  const _EmptyTimeline({required this.tokens});
+  const _EmptyTimeline({required this.tokens, this.message});
 
   final CissThemeTokens tokens;
+
+  /// Shown instead of the "no movement" copy when the read itself failed, so a
+  /// refused query is never reported as a quiet day.
+  final String? message;
 
   @override
   Widget build(BuildContext context) {
@@ -743,7 +770,7 @@ class _EmptyTimeline extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'No movement data for this day',
+              message ?? 'No movement data for this day',
               style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w800,
@@ -763,4 +790,17 @@ class _EmptyTimeline extends StatelessWidget {
       ),
     );
   }
+}
+
+/// One day of timeline data plus whether the breadcrumb read itself failed.
+class _TimelineDayData {
+  const _TimelineDayData({
+    required this.points,
+    required this.siteDoc,
+    required this.historyFailed,
+  });
+
+  final List<_HistoryPoint> points;
+  final Map<String, dynamic>? siteDoc;
+  final bool historyFailed;
 }

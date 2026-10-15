@@ -4,6 +4,13 @@ import 'package:dio/dio.dart';
 
 import 'api_config.dart';
 
+/// Optional per-request guard used when an operation belongs to one specific
+/// authenticated identity and deployment. It is checked around asynchronous
+/// token acquisition and again before a 401 refresh/retry.
+const String kApiRequestIdentityGuard = 'ciss_request_identity_guard';
+const String kApiRequestIdentityChanged =
+    'The account or deployment changed before the request was sent.';
+
 class ApiClient {
   ApiClient({
     required this.authTokenProvider,
@@ -24,8 +31,16 @@ class ApiClient {
           RequestOptions options,
           RequestInterceptorHandler handler,
         ) async {
+          if (!await _identityIsCurrent(options)) {
+            handler.reject(_identityChanged(options));
+            return;
+          }
           if (options.extra[kSkipApiAuth] != true) {
             final token = await authTokenProvider();
+            if (!await _identityIsCurrent(options)) {
+              handler.reject(_identityChanged(options));
+              return;
+            }
             if (token != null && token.isNotEmpty) {
               options.headers['Authorization'] = 'Bearer $token';
             }
@@ -39,8 +54,16 @@ class ApiClient {
           if (error.response?.statusCode == 401 &&
               error.requestOptions.extra[_authRetryMarker] != true) {
             try {
+              if (!await _identityIsCurrent(error.requestOptions)) {
+                handler.next(_identityChanged(error.requestOptions));
+                return;
+              }
               final token =
                   await (authTokenRefreshProvider ?? authTokenProvider)();
+              if (!await _identityIsCurrent(error.requestOptions)) {
+                handler.next(_identityChanged(error.requestOptions));
+                return;
+              }
               if (token == null || token.isEmpty) {
                 handler.next(error);
                 return;
@@ -82,6 +105,23 @@ class ApiClient {
 }
 
 const String _authRetryMarker = 'ciss_auth_retry';
+
+Future<bool> _identityIsCurrent(RequestOptions options) async {
+  final guard = options.extra[kApiRequestIdentityGuard];
+  if (guard == null) return true;
+  if (guard is! Future<bool> Function()) return false;
+  try {
+    return await guard();
+  } catch (_) {
+    return false;
+  }
+}
+
+DioException _identityChanged(RequestOptions options) => DioException(
+  requestOptions: options,
+  type: DioExceptionType.cancel,
+  message: kApiRequestIdentityChanged,
+);
 
 /// Request marker used by public attendance flows so a logged-in user from a
 /// different account cannot accidentally authenticate an anonymous submission.

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/guard_profile.dart';
@@ -6,7 +7,7 @@ import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 
-/// Profile view opened from the Field Officer Guards directory.
+/// Read-only employee profile opened from the Field Officer directory.
 ///
 /// Operational views such as live location and attendance intentionally do
 /// not belong here. They have their own menu entry and screen.
@@ -20,20 +21,22 @@ class FieldOfficerGuardProfileScreen extends StatelessWidget {
     final tokens = CissThemeTokens.of(context);
     final displayName =
         guard.fullName.trim().isEmpty ? 'Guard profile' : guard.fullName;
+    final enrollmentDate = DateTime.tryParse(guard.createdAt ?? '');
 
     return Scaffold(
       backgroundColor: tokens.canvas,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          AppSpacing.md,
-          0,
-          AppSpacing.md,
-          AppSpacing.xxl,
-        ),
-        children: <Widget>[
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            0,
+            AppSpacing.md,
+            AppSpacing.xxl,
+          ),
+          children: <Widget>[
           BrandBanner(
             title: displayName,
-            subtitle: 'Guard profile',
+            subtitle: 'Employee profile',
             showBackButton: true,
           ),
           const SizedBox(height: AppSpacing.md),
@@ -57,6 +60,14 @@ class FieldOfficerGuardProfileScreen extends StatelessWidget {
               ),
               _ProfileFieldData('Nationality', guard.nationality),
               _ProfileFieldData('District', guard.district),
+              _ProfileFieldData(
+                'Enrollment date',
+                enrollmentDate != null
+                    ? MaterialLocalizations.of(
+                      context,
+                    ).formatMediumDate(enrollmentDate.toLocal())
+                    : null,
+              ),
               _ProfileFieldData(
                 'Identification mark',
                 guard.identificationMark,
@@ -92,6 +103,8 @@ class FieldOfficerGuardProfileScreen extends StatelessWidget {
             fields: <_ProfileFieldData>[
               _ProfileFieldData('Employee ID', guard.employeeId),
               _ProfileFieldData('Client name', guard.clientName),
+              if (guard.categoryLabel != null)
+                _ProfileFieldData('TCS category', guard.categoryLabel!),
               _ProfileFieldData('Assigned site', guard.siteName),
               _ProfileFieldData('Job designation', guard.jobDesignation),
               _ProfileFieldData('Resource ID', guard.resourceIdNumber),
@@ -103,7 +116,8 @@ class FieldOfficerGuardProfileScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           _IdentificationSection(guard: guard),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -151,7 +165,7 @@ class _ProfileHero extends StatelessWidget {
             backgroundImage:
                 imageUrl == null || imageUrl.isEmpty
                     ? null
-                    : NetworkImage(imageUrl),
+                    : CachedNetworkImageProvider(imageUrl),
             child:
                 imageUrl == null || imageUrl.isEmpty
                     ? Text(
@@ -235,11 +249,14 @@ class _ProfileSection extends StatelessWidget {
             children: <Widget>[
               Icon(icon, size: 20, color: tokens.primary),
               const SizedBox(width: AppSpacing.sm),
-              Text(
-                title,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              Expanded(
+                child: Text(
+                  title,
+                  softWrap: true,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
             ],
           ),

@@ -16,6 +16,7 @@ import '../../../../../core/sync/providers.dart';
 import '../../../../../core/attendance/attendance_session.dart';
 import '../../../../../core/attendance/attendance_validation.dart';
 import '../../../../../core/attendance/early_checkout.dart';
+import '../../../../../core/device/device_identity.dart';
 import '../../../../../core/location/background_tracking_service.dart';
 import '../../../../../core/location/public_ip.dart';
 import '../../../../../core/settings/module_gate.dart';
@@ -520,7 +521,15 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         _site!.lng!,
       );
 
+      // Which handset produced this punch. A changed device is recorded as a
+      // flag so the office can see it, and never stops the punch.
+      final deviceIdentity = ref.read(deviceIdentityProvider);
+      final deviceId = await deviceIdentity.id();
+      final deviceChanged = await deviceIdentity.recordPunchDevice(deviceId);
+
       final payload = <String, dynamic>{
+        if (deviceId != null) 'deviceId': deviceId,
+        if (deviceChanged) 'punchDeviceChanged': true,
         'employeeId': profile.employeeId,
         'employeeName': profile.fullName,
         'employeeDocId': profile.id,

@@ -24,6 +24,7 @@ class SyncStatusBadge extends ConsumerWidget {
                 onTap: onTap,
                 child: Container(
                   key: const ValueKey('pending'),
+                  constraints: const BoxConstraints(minHeight: 44),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
                     vertical: 6,
@@ -42,12 +43,16 @@ class SyncStatusBadge extends ConsumerWidget {
                         color: tokens.warning,
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        '$size pending',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: tokens.warning,
+                      Flexible(
+                        child: Text(
+                          '$size pending',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: tokens.warning,
+                          ),
                         ),
                       ),
                     ],

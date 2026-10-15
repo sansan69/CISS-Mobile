@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -13,6 +12,10 @@ import '../../../core/location/background_tracking_service.dart';
 import '../../../core/models/app_role.dart';
 import '../../../core/models/auth_session.dart';
 import '../../../core/network/providers.dart';
+
+/// Session key whose workspace has passed AuthGate's biometric and permission
+/// onboarding checks. Notification detail routes remain behind this gate.
+final workspaceAccessSessionKeyProvider = StateProvider<String?>((ref) => null);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Session notifier — owns the logged-in session state.
@@ -147,9 +150,10 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
     // The live Firebase session is only a fallback for when the auth-state
     // source has not yet reported a uid. Reading it when no Firebase app exists
     // (unit tests, very early startup) would throw, so guard it.
-    final String? directUid = Firebase.apps.isNotEmpty
-        ? ref.read(firebaseAuthProvider).currentUser?.uid
-        : null;
+    final String? directUid =
+        Firebase.apps.isNotEmpty
+            ? ref.read(firebaseAuthProvider).currentUser?.uid
+            : null;
     final activeUid = authStateUid ?? directUid;
     if (_disposed || activeUid != session.uid) {
       _controllerSignInInProgress = false;

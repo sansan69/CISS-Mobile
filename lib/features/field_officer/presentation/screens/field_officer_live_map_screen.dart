@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
@@ -10,6 +11,8 @@ import '../../../../../core/location/live_location_service.dart';
 import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/status_chip.dart';
+import '../../../shared/navigate_button.dart';
+import '../../../auth/application/auth_controller.dart';
 import 'field_officer_guard_detail_screen.dart';
 import 'guard_day_timeline_screen.dart';
 
@@ -20,21 +23,26 @@ import 'guard_day_timeline_screen.dart';
 /// rules already scope reads to the field officer's assigned districts, so no
 /// district predicate is needed here — the chips below are a client-side
 /// filter over whatever the rules allow.
-class FieldOfficerLiveMapScreen extends StatefulWidget {
+class FieldOfficerLiveMapScreen extends ConsumerStatefulWidget {
   const FieldOfficerLiveMapScreen({super.key});
 
   @override
-  State<FieldOfficerLiveMapScreen> createState() =>
+  ConsumerState<FieldOfficerLiveMapScreen> createState() =>
       _FieldOfficerLiveMapScreenState();
 }
 
-class _FieldOfficerLiveMapScreenState extends State<FieldOfficerLiveMapScreen> {
+class _FieldOfficerLiveMapScreenState
+    extends ConsumerState<FieldOfficerLiveMapScreen> {
   final MapController _mapController = MapController();
   final LiveLocationService _liveLocationService = LiveLocationService();
 
   String? _selectedDistrict;
   bool _fitRequested = false;
   bool _tilesFailed = false;
+
+  List<String> get _assignedDistricts =>
+      ref.watch(authSessionProvider).valueOrNull?.assignedDistricts ??
+      const <String>[];
 
   List<GuardLocationData> _current(List<GuardLocationData> guards) {
     if (_selectedDistrict == null) return guards;
@@ -166,6 +174,15 @@ class _FieldOfficerLiveMapScreenState extends State<FieldOfficerLiveMapScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
+                // Navigating to a guard's live position is what turns a
+                // pinned map into a supervisor who actually arrives.
+                NavigateAction(
+                  latitude: guard.lat,
+                  longitude: guard.lng,
+                  label: guard.siteName,
+                  compact: false,
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(child: _deviceStatusSheet(tokens, guard)),
@@ -342,7 +359,11 @@ class _FieldOfficerLiveMapScreenState extends State<FieldOfficerLiveMapScreen> {
       backgroundColor: tokens.canvas,
       appBar: const CissAppBar(title: 'Live Map', subtitle: 'Active guards'),
       body: StreamBuilder<List<GuardLocationData>>(
-        stream: _liveLocationService.streamActiveLocations(),
+        // The officer's own districts, because the Firestore rule authorises a
+        // live-location read per district and cannot filter an unscoped query.
+        stream: _liveLocationService.streamActiveLocations(
+          districts: _assignedDistricts,
+        ),
         builder: (context, snapshot) {
           final guards = snapshot.data ?? const <GuardLocationData>[];
           final visible = _current(guards);

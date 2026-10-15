@@ -42,6 +42,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
   AuthSession? _lastSession;
   String? _biometricSessionKey;
   bool? _requiresBiometricAppLock;
+  int _admissionGeneration = 0;
   final AppLockLifecycle _appLockLifecycle = AppLockLifecycle();
 
   @override
@@ -52,6 +53,12 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
 
   @override
   void dispose() {
+    _admissionGeneration++;
+    try {
+      ref.read(workspaceAccessSessionKeyProvider.notifier).state = null;
+    } catch (_) {
+      // The container may already be disposing this route.
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -70,11 +77,13 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
     )) {
       return;
     }
+    _invalidateAdmission();
     setState(() {
       _authenticated = false;
       _bioTriggered = false;
       _bioMessage = null;
     });
+    ref.read(workspaceAccessSessionKeyProvider.notifier).state = null;
   }
 
   Future<void> _checkBiometrics() async {
@@ -84,6 +93,8 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
       return;
     }
     if (!mounted) return;
+    final generation = _admissionGeneration;
+    final sessionKey = _biometricSessionKey;
 
     setState(() {
       _isAuthenticating = true;
@@ -95,7 +106,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
         localizedReason: 'Verify to access your duty workspace',
       );
 
-      if (!mounted) return;
+      if (!_isAdmissionAttemptCurrent(generation, sessionKey)) return;
       switch (outcome) {
         case BiometricAuthOutcome.success:
           setState(() {
@@ -134,11 +145,38 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
           });
       }
     } catch (error) {
-      if (!mounted) return;
+      if (!_isAdmissionAttemptCurrent(generation, sessionKey)) return;
       setState(() {
         _isAuthenticating = false;
         _bioMessage = 'Could not verify with biometrics. Please try again.';
       });
+    }
+  }
+
+  bool _isAdmissionAttemptCurrent(int generation, String? sessionKey) {
+    if (!mounted ||
+        generation != _admissionGeneration ||
+        sessionKey == null ||
+        _biometricSessionKey != sessionKey) {
+      return false;
+    }
+    final session = ref.read(authSessionProvider).valueOrNull;
+    return session != null && _sessionKey(session) == sessionKey;
+  }
+
+  bool _hasCurrentAdmission(AuthSession session, int generation) {
+    if (!_isAdmissionAttemptCurrent(generation, _sessionKey(session))) {
+      return false;
+    }
+    return _requiresBiometricAppLock != true || _authenticated;
+  }
+
+  void _invalidateAdmission({bool clearAccess = true}) {
+    _admissionGeneration++;
+    _permissionsChecked = false;
+    _isAuthenticating = false;
+    if (clearAccess) {
+      ref.read(workspaceAccessSessionKeyProvider.notifier).state = null;
     }
   }
 
@@ -162,6 +200,17 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
   String _sessionKey(AuthSession session) =>
       '${session.role.name}:${session.uid}';
 
+  void _clearWorkspaceAccessAfterBuild() {
+    final generation = _admissionGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          generation == _admissionGeneration &&
+          ref.read(workspaceAccessSessionKeyProvider) != null) {
+        ref.read(workspaceAccessSessionKeyProvider.notifier).state = null;
+      }
+    });
+  }
+
   /// Trigger biometric check once, after the first frame with a valid session.
   void _maybeTriggerBiometrics() {
     if (_bioTriggered) return;
@@ -179,6 +228,19 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
     final appLockPreferences = ref.watch(appLockPreferencesProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    ref.listen<int>(regionGraphRevisionProvider, (previous, next) {
+      if (previous == null || previous == next) return;
+      _invalidateAdmission();
+      if (mounted) {
+        setState(() {
+          _authenticated = false;
+          _isAuthenticating = false;
+          _bioTriggered = false;
+          _bioMessage = null;
+        });
+      }
+    });
+
     ref.listen<Map<String, bool>>(appLockPreferencesProvider, (previous, next) {
       final sessionKey = _biometricSessionKey;
       if (sessionKey == null ||
@@ -188,6 +250,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
       }
       _requiresBiometricAppLock = true;
       _appLockLifecycle.reset();
+      _invalidateAdmission();
       if (mounted) {
         setState(() {
           _authenticated = false;
@@ -257,9 +320,11 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
           // Reset permission check when session changes (new login).
           if (_lastSession?.uid != session?.uid ||
               _lastSession?.role != session?.role) {
-            _permissionsChecked = false;
+            _invalidateAdmission(clearAccess: false);
+            _clearWorkspaceAccessAfterBuild();
             _bioTriggered = false;
             _authenticated = false;
+            _isAuthenticating = false;
             _trackingReconciledUid = null;
             _biometricSessionKey = null;
             _requiresBiometricAppLock = null;
@@ -268,6 +333,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
           _lastSession = session;
 
           if (session == null) {
+            _clearWorkspaceAccessAfterBuild();
             if (!_regionChecked) {
               _regionChecked = true;
               WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -301,12 +367,14 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
           // Do not reveal the session workspace before its account-scoped
           // strong-biometric preference has been read.
           if (_requiresBiometricAppLock == null) {
+            _clearWorkspaceAccessAfterBuild();
             return const _AppLoadingScreen();
           }
 
           // Biometric Gate — triggered once via post-frame callback,
           // NOT called directly in build to avoid infinite prompt loops.
           if (_requiresBiometricAppLock! && !_authenticated) {
+            _clearWorkspaceAccessAfterBuild();
             _maybeTriggerBiometrics();
             return _BiometricLockScreen(
               onRetry:
@@ -327,10 +395,19 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
           // check permissions in background.
           if (session.role == AppRole.guard && !_permissionsChecked) {
             _permissionsChecked = true;
-            unawaited(_prepareGuardRuntime(session.uid));
+            final generation = _admissionGeneration;
+            unawaited(_prepareGuardRuntime(session, generation));
           }
 
           if (session.role == AppRole.fieldOfficer) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final generation = _admissionGeneration;
+              if (_hasCurrentAdmission(session, generation)) {
+                ref
+                    .read(workspaceAccessSessionKeyProvider.notifier)
+                    .state = _sessionKey(session);
+              }
+            });
             return const FieldOfficerShell();
           }
 
@@ -343,23 +420,31 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
   /// Verifies the Android runtime prerequisites before recovering an active
   /// shift. This avoids starting the foreground service while permission
   /// onboarding is still in progress.
-  Future<void> _prepareGuardRuntime(String uid) async {
+  Future<void> _prepareGuardRuntime(AuthSession session, int generation) async {
     try {
       final statuses = await Future.wait([
         Permission.location.status,
         Permission.camera.status,
         Permission.notification.status,
       ]);
-      if (!mounted) return;
+      if (!_hasCurrentAdmission(session, generation)) return;
 
       final allGranted = statuses.every((status) => status.isGranted);
       if (!allGranted) {
-        context.go('/permissions');
+        ref.read(workspaceAccessSessionKeyProvider.notifier).state = null;
+        if (mounted && _hasCurrentAdmission(session, generation)) {
+          context.go('/permissions');
+        }
         return;
       }
 
-      if (_trackingReconciledUid == uid) return;
-      _trackingReconciledUid = uid;
+      if (!_hasCurrentAdmission(session, generation)) return;
+      ref.read(workspaceAccessSessionKeyProvider.notifier).state = _sessionKey(
+        session,
+      );
+
+      if (_trackingReconciledUid == session.uid) return;
+      _trackingReconciledUid = session.uid;
       await BackgroundTrackingService.initialize();
       await BackgroundTrackingService.reconcileWithServer(
         ref.read(mobileRepositoryProvider),

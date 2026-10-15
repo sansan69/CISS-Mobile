@@ -1,4 +1,5 @@
 import 'dart:ui';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,12 +12,16 @@ class FloatingNavItem {
     required this.label,
     this.selectedIcon,
     this.badgeCount,
+    this.compactLabel,
+    this.semanticLabel,
   });
 
   final IconData icon;
   final String label;
   final IconData? selectedIcon;
   final int? badgeCount;
+  final String? compactLabel;
+  final String? semanticLabel;
 }
 
 class FloatingNavBar extends StatelessWidget {
@@ -25,28 +30,36 @@ class FloatingNavBar extends StatelessWidget {
     required this.currentIndex,
     required this.onTap,
     required this.items,
+    this.allowSelectedTap = false,
+    this.cornerRadius = AppRadius.pill,
   });
 
   final int currentIndex;
   final ValueChanged<int> onTap;
   final List<FloatingNavItem> items;
+  final bool allowSelectedTap;
+  final double cornerRadius;
 
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
     final bottomInset = MediaQuery.of(context).padding.bottom;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final narrow = MediaQuery.sizeOf(context).width < 360 || textScale > 1.3;
+    final scaledLabelHeight = MediaQuery.textScalerOf(context).scale(11) * 1.4;
+    final barHeight = math.max(66.0, 2 + 8 + 22 + 3 + scaledLabelHeight + 12);
 
     return Align(
       alignment: Alignment.bottomCenter,
       child: Padding(
         padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
+          left: 8,
+          right: 8,
           bottom: bottomInset > 0 ? bottomInset : 12,
         ),
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.pill),
+            borderRadius: BorderRadius.circular(cornerRadius),
             boxShadow: [
               BoxShadow(
                 color: tokens.primaryStrong.withValues(alpha: 0.14),
@@ -61,19 +74,16 @@ class FloatingNavBar extends StatelessWidget {
             ],
           ),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.pill),
+            borderRadius: BorderRadius.circular(cornerRadius),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
               child: Container(
-                height: 66,
+                height: barHeight,
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 decoration: BoxDecoration(
                   color: tokens.surfaceGlass,
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                  border: Border.all(
-                    color: tokens.specularBorder,
-                    width: 1,
-                  ),
+                  borderRadius: BorderRadius.circular(cornerRadius),
+                  border: Border.all(color: tokens.specularBorder, width: 1),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -83,13 +93,15 @@ class FloatingNavBar extends StatelessWidget {
 
                     return Expanded(
                       child: Semantics(
+                        container: true,
+                        excludeSemantics: true,
                         selected: isSelected,
-                        label: item.label,
+                        label: item.semanticLabel ?? item.label,
                         button: true,
                         child: GestureDetector(
                           behavior: HitTestBehavior.opaque,
                           onTap: () {
-                            if (!isSelected) {
+                            if (!isSelected || allowSelectedTap) {
                               HapticFeedback.lightImpact();
                               onTap(index);
                             }
@@ -99,13 +111,16 @@ class FloatingNavBar extends StatelessWidget {
                             curve: Curves.easeOutCubic,
                             padding: const EdgeInsets.symmetric(
                               vertical: 4,
-                              horizontal: 6,
+                              horizontal: 0,
                             ),
                             decoration: BoxDecoration(
-                              color: isSelected
-                                  ? tokens.primarySoft
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(AppRadius.pill),
+                              color:
+                                  isSelected
+                                      ? tokens.primarySoft
+                                      : Colors.transparent,
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.pill,
+                              ),
                             ),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
@@ -119,9 +134,10 @@ class FloatingNavBar extends StatelessWidget {
                                           ? (item.selectedIcon ?? item.icon)
                                           : item.icon,
                                       size: 22,
-                                      color: isSelected
-                                          ? tokens.primary
-                                          : tokens.inkMuted,
+                                      color:
+                                          isSelected
+                                              ? tokens.primary
+                                              : tokens.inkMuted,
                                     ),
                                     if (item.badgeCount != null &&
                                         item.badgeCount! > 0)
@@ -135,7 +151,9 @@ class FloatingNavBar extends StatelessWidget {
                                           ),
                                           decoration: BoxDecoration(
                                             color: tokens.danger,
-                                            borderRadius: BorderRadius.circular(8),
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
                                           ),
                                           constraints: const BoxConstraints(
                                             minWidth: 14,
@@ -159,17 +177,21 @@ class FloatingNavBar extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 3),
                                 Text(
-                                  item.label,
+                                  narrow && item.compactLabel != null
+                                      ? item.compactLabel!
+                                      : item.label,
                                   maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
+                                  softWrap: false,
                                   style: TextStyle(
                                     fontSize: 11,
-                                    fontWeight: isSelected
-                                        ? FontWeight.w700
-                                        : FontWeight.w500,
-                                    color: isSelected
-                                        ? tokens.primary
-                                        : tokens.inkMuted,
+                                    fontWeight:
+                                        isSelected
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                    color:
+                                        isSelected
+                                            ? tokens.primary
+                                            : tokens.inkMuted,
                                   ),
                                 ),
                               ],

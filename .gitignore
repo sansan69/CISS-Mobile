@@ -43,5 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
 android/key.properties
 android/app/ciss-release.keystore
+
+# Local scratch output (baseline snapshots, verification screenshots)
+.tmp/

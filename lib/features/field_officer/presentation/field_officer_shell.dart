@@ -5,6 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/cache/preload_controller.dart';
 import '../../../core/haptics.dart';
+import '../../../core/i18n/app_strings.dart';
+import '../../../core/i18n/app_language.dart';
+import '../../shared/language_screen.dart';
+import '../../shared/device_readiness_screen.dart';
+import '../../shared/device_identity_row.dart';
+import '../../shared/readiness_banner.dart';
+import '../../shared/tracking_health_card.dart';
 import '../../auth/application/auth_controller.dart';
 import '../field_officer_tab_provider.dart';
 import '../../../shared/widgets/floating_nav_bar.dart';
@@ -23,6 +30,7 @@ import 'screens/field_officer_reports_screen.dart';
 import 'screens/field_officer_tools_screens.dart';
 import 'screens/field_officer_training_assignments_screen.dart';
 import 'screens/field_officer_patrol_activity_screen.dart';
+import 'screens/field_officer_attendance_screen.dart';
 
 class FieldOfficerShell extends ConsumerStatefulWidget {
   const FieldOfficerShell({super.key});
@@ -37,27 +45,42 @@ class _FieldOfficerShellState extends ConsumerState<FieldOfficerShell> {
       label: 'Home',
       icon: Icons.home_outlined,
       activeIcon: Icons.home_rounded,
-      screen: FieldOfficerDashboardScreen(),
+    ),
+    _FieldOfficerTab(
+      label: 'Attendance',
+      compactLabel: 'Logs',
+      icon: Icons.fact_check_outlined,
+      activeIcon: Icons.fact_check_rounded,
+    ),
+    _FieldOfficerTab(
+      label: 'Employees',
+      compactLabel: 'Staff',
+      icon: Icons.groups_2_outlined,
+      activeIcon: Icons.groups_2_rounded,
     ),
     _FieldOfficerTab(
       label: 'Duties',
+      compactLabel: 'Duty',
       icon: Icons.assignment_turned_in_outlined,
       activeIcon: Icons.assignment_turned_in_rounded,
-      screen: FieldOfficerDutiesScreen(),
-    ),
-    _FieldOfficerTab(
-      label: 'Reports',
-      icon: Icons.edit_note_outlined,
-      activeIcon: Icons.edit_note_rounded,
-      screen: FieldOfficerReportsScreen(),
     ),
     _FieldOfficerTab(
       label: 'More',
       icon: Icons.grid_view_outlined,
       activeIcon: Icons.grid_view_rounded,
-      screen: FieldOfficerMoreScreen(),
     ),
   ];
+  final Set<int> _visitedTabs = <int>{fieldOfficerHomeTabIndex};
+
+  static Widget _screenForTab(int index) => switch (index) {
+    fieldOfficerHomeTabIndex => const FieldOfficerDashboardScreen(),
+    fieldOfficerAttendanceTabIndex => const FieldOfficerGuardAttendanceScreen(),
+    fieldOfficerEmployeesTabIndex => const FieldOfficerGuardsScreen(),
+    fieldOfficerDutiesTabIndex => const FieldOfficerDutiesScreen(),
+    fieldOfficerMoreTabIndex => const FieldOfficerMoreScreen(),
+    fieldOfficerReportsTabIndex => const FieldOfficerReportsScreen(),
+    _ => const SizedBox.shrink(),
+  };
 
   @override
   void initState() {
@@ -71,6 +94,9 @@ class _FieldOfficerShellState extends ConsumerState<FieldOfficerShell> {
   @override
   Widget build(BuildContext context) {
     final index = ref.watch(fieldOfficerTabIndexProvider);
+    _visitedTabs.add(index);
+    final strings = AppStrings.of(context);
+    final unread = ref.watch(NotificationService.unreadCountProvider).valueOrNull ?? 0;
 
     // Keep all FO data providers alive so tab switching is instant.
     ref.watch(fieldOfficerDashboardProvider);
@@ -81,6 +107,11 @@ class _FieldOfficerShellState extends ConsumerState<FieldOfficerShell> {
       canPop: false,
       onPopInvokedWithResult: (bool didPop, Object? result) async {
         if (didPop) return;
+        if (index == fieldOfficerReportsTabIndex) {
+          ref.read(fieldOfficerTabIndexProvider.notifier).state =
+              fieldOfficerMoreTabIndex;
+          return;
+        }
         final bool? shouldExit = await showDialog<bool>(
           context: context,
           builder:
@@ -108,23 +139,49 @@ class _FieldOfficerShellState extends ConsumerState<FieldOfficerShell> {
           children: [
             IndexedStack(
               index: index,
-              children: _tabs.map((t) => t.screen).toList(),
+              children: List<Widget>.generate(
+                fieldOfficerTabCount,
+                (tab) =>
+                    _visitedTabs.contains(tab)
+                        ? _screenForTab(tab)
+                        : const SizedBox.shrink(),
+              ),
             ),
-            FloatingNavBar(
-              currentIndex: index,
-              onTap: (i) {
-                Haptics.selection();
-                ref.read(fieldOfficerTabIndexProvider.notifier).state = i;
-              },
-              items: _tabs
-                  .map(
-                    (t) => FloatingNavItem(
-                      icon: t.icon,
-                      selectedIcon: t.activeIcon,
-                      label: t.label,
-                    ),
-                  )
-                  .toList(),
+            RepaintBoundary(
+              key: const ValueKey<String>('field-officer-nav-screenshot'),
+              child: FloatingNavBar(
+                cornerRadius: 16,
+                currentIndex: fieldOfficerVisibleTabIndex(index),
+                allowSelectedTap: index == fieldOfficerReportsTabIndex,
+                onTap: (i) {
+                  Haptics.selection();
+                  ref.read(fieldOfficerTabIndexProvider.notifier).state = i;
+                },
+                items:
+                    _tabs
+                        .map(
+                          (t) => FloatingNavItem(
+                            icon: t.icon,
+                            selectedIcon: t.activeIcon,
+                            label: switch (t.label) {
+                              'Home' => strings.navHome,
+                              'Attendance' => strings.navAttendance,
+                              'Employees' => strings.navEmployees,
+                              'Duties' => strings.navDuties,
+                              'More' => strings.navMore,
+                              _ => t.label,
+                            },
+                            compactLabel: t.compactLabel,
+                            badgeCount: t.label == 'More' ? unread : null,
+                            semanticLabel: switch (t.label) {
+                              'Attendance' => 'Attendance Records',
+                              'Employees' => 'Employee Directory',
+                              _ => t.label,
+                            },
+                          ),
+                        )
+                        .toList(),
+              ),
             ),
           ],
         ),
@@ -138,13 +195,13 @@ class _FieldOfficerTab {
     required this.label,
     required this.icon,
     required this.activeIcon,
-    required this.screen,
+    this.compactLabel,
   });
 
   final String label;
+  final String? compactLabel;
   final IconData icon;
   final IconData activeIcon;
-  final Widget screen;
 }
 
 class FieldOfficerMoreScreen extends ConsumerWidget {
@@ -153,6 +210,7 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = CissThemeTokens.of(context);
+    final strings = AppStrings.of(context);
     final session = ref.watch(authSessionProvider).value;
 
     return Scaffold(
@@ -190,9 +248,59 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                   const SizedBox(height: 12),
                   const ThemeModeSelector(),
                   const SizedBox(height: 12),
+                  ModernCard(
+                    padding: EdgeInsets.zero,
+                    child: ListTile(
+                      leading: Icon(
+                        Icons.translate_rounded,
+                        color: tokens.primary,
+                      ),
+                      title: Text(
+                        strings.language,
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(
+                        ref.watch(appLanguageControllerProvider).label,
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const LanguageScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  const ReadinessBanner(),
+                  const SizedBox(height: 12),
+                  const TrackingHealthCard(),
+                  const SizedBox(height: 12),
+                  ModernCard(
+                    padding: EdgeInsets.zero,
+                    child: ListTile(
+                      leading: Icon(
+                        Icons.rule_folder_rounded,
+                        color: tokens.primary,
+                      ),
+                      title: Text(
+                        strings.readinessOpenScreen,
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(strings.readinessSubtitle),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const DeviceReadinessScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   _NotificationTile(),
                   const SizedBox(height: 12),
                   const SecuritySettingsCard(),
+                  const SizedBox(height: 12),
+                  const DeviceIdentityRow(),
 
                   const SizedBox(height: 32),
                   Text(
@@ -211,19 +319,30 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                     crossAxisCount: 2,
                     mainAxisSpacing: 12,
                     crossAxisSpacing: 12,
-                    childAspectRatio: 1.3,
+                    childAspectRatio:
+                        MediaQuery.textScalerOf(context).scale(1) > 1.3
+                            ? 0.9
+                            : 1.3,
                     children: [
                       _ToolTile(
+                        icon: Icons.edit_note_rounded,
+                        label: 'Reports',
+                        color: tokens.accent,
+                        onTap:
+                            () =>
+                                ref
+                                    .read(fieldOfficerTabIndexProvider.notifier)
+                                    .state = fieldOfficerReportsTabIndex,
+                      ),
+                      _ToolTile(
                         icon: Icons.groups_2_rounded,
-                        label: 'Guards',
+                        label: 'Employee Directory',
                         color: tokens.success,
                         onTap:
-                            () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder:
-                                    (_) => const FieldOfficerGuardsScreen(),
-                              ),
-                            ),
+                            () =>
+                                ref
+                                    .read(fieldOfficerTabIndexProvider.notifier)
+                                    .state = fieldOfficerEmployeesTabIndex,
                       ),
                       _ToolTile(
                         icon: Icons.map_rounded,
@@ -468,6 +587,8 @@ class _ToolTile extends StatelessWidget {
               const SizedBox(height: 10),
               Text(
                 label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,

@@ -1,4 +1,7 @@
 import '../core/models/attendance_models.dart';
+import '../core/models/duty_models.dart';
+import '../core/network/mobile_repository.dart';
+import '../core/offline/willingness_queue.dart';
 import '../core/models/guard_profile.dart';
 import '../core/models/incident_models.dart';
 import '../core/models/leave_models.dart';
@@ -29,6 +32,46 @@ final GuardDashboardSnapshot mockGuardDashboard = GuardDashboardSnapshot(
   nextShiftLabel: 'On Duty',
   nextShiftSiteName: 'Main Branch – MG Road',
   nextShiftDate: '31 Jul, 08:00',
+  recentAttendance: mockAttendanceHistory,
+);
+
+/// Dashboard variants for safe, read-only visual inspection.
+GuardDashboardSnapshot mockGuardDashboardVariant({
+  bool noAssignment = false,
+  bool unavailable = false,
+  bool longContent = false,
+}) => GuardDashboardSnapshot(
+  employeeName:
+      longContent
+          ? 'Alexandria Rajalakshmi Krishnamurthy Long Family Name'
+          : mockGuardDashboard.employeeName,
+  employeeId: mockGuardDashboard.employeeId,
+  clientName: mockClientName,
+  district:
+      longContent
+          ? 'Thiruvananthapuram District With Extended Coverage'
+          : mockDistrict,
+  profilePhotoUrl: null,
+  presentDays: mockGuardDashboard.presentDays,
+  absentDays: mockGuardDashboard.absentDays,
+  workingDays: mockGuardDashboard.workingDays,
+  leaveBalance: mockGuardDashboard.leaveBalance,
+  latestEvalScore: mockGuardDashboard.latestEvalScore,
+  latestEvalPeriod: mockGuardDashboard.latestEvalPeriod,
+  nextShiftLabel:
+      noAssignment || unavailable
+          ? null
+          : longContent
+          ? 'Examination coverage 08:00–20:00, extended shift briefing'
+          : '08:00–16:00',
+  nextShiftSiteName:
+      noAssignment || unavailable
+          ? null
+          : longContent
+          ? 'Government Examination Campus With Extended Site Address And Name'
+          : mockGuardDashboard.nextShiftSiteName,
+  nextShiftDate: noAssignment || unavailable ? null : '2026-10-14',
+  nextShiftUnavailable: unavailable,
   recentAttendance: mockAttendanceHistory,
 );
 
@@ -182,9 +225,21 @@ final List<AttendanceRecordModel> mockAttendanceHistory =
     ];
 
 final List<PayslipSummaryModel> mockPayslips = const <PayslipSummaryModel>[
-  PayslipSummaryModel(id: 'p_001', periodLabel: 'June 2026', netPayLabel: '₹18,240'),
-  PayslipSummaryModel(id: 'p_002', periodLabel: 'May 2026', netPayLabel: '₹18,240'),
-  PayslipSummaryModel(id: 'p_003', periodLabel: 'April 2026', netPayLabel: '₹17,890'),
+  PayslipSummaryModel(
+    id: 'p_001',
+    periodLabel: 'June 2026',
+    netPayLabel: '₹18,240',
+  ),
+  PayslipSummaryModel(
+    id: 'p_002',
+    periodLabel: 'May 2026',
+    netPayLabel: '₹18,240',
+  ),
+  PayslipSummaryModel(
+    id: 'p_003',
+    periodLabel: 'April 2026',
+    netPayLabel: '₹17,890',
+  ),
 ];
 
 final List<IncidentModel> mockIncidents = <IncidentModel>[
@@ -400,92 +455,90 @@ final Map<String, dynamic> mockPatrolActivitiesPayload = <String, dynamic>{
 
 final FieldOfficerDashboardSnapshot mockFieldOfficerDashboard =
     FieldOfficerDashboardSnapshot(
-  name: 'Anitha Nair',
-  stateCode: 'KL',
-  assignedDistricts: <String>[mockDistrict, 'Kollam'],
-  totalGuards: 340,
-  activeGuards: 312,
-  totalSitesInScope: 24,
-  attendanceSummary: FieldOfficerAttendanceSummary.fromJson(
-    <String, dynamic>{
-      'date': '2026-07-31',
-      'checkedInToday': 289,
-      'onDutyNow': 241,
-      'districts': <Map<String, dynamic>>[
+      name: 'Anitha Nair',
+      stateCode: 'KL',
+      assignedDistricts: <String>[mockDistrict, 'Kollam'],
+      totalGuards: 340,
+      activeGuards: 312,
+      totalSitesInScope: 24,
+      attendanceSummary: FieldOfficerAttendanceSummary.fromJson(
         <String, dynamic>{
-          'district': mockDistrict,
-          'checkedInToday': 152,
-          'onDutyNow': 128,
+          'date': '2026-07-31',
+          'checkedInToday': 289,
+          'onDutyNow': 241,
+          'districts': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'district': mockDistrict,
+              'checkedInToday': 152,
+              'onDutyNow': 128,
+            },
+            <String, dynamic>{
+              'district': 'Kollam',
+              'checkedInToday': 137,
+              'onDutyNow': 113,
+            },
+          ],
         },
-        <String, dynamic>{
-          'district': 'Kollam',
-          'checkedInToday': 137,
-          'onDutyNow': 113,
-        },
+      ),
+      todayOverview: FieldOfficerTodayOverview.fromJson(<String, dynamic>{
+        'sitesScheduled': 12,
+        'dutiesScheduled': 18,
+        'requiredGuards': 96,
+        'assignedGuards': 84,
+        'unassignedGuards': 12,
+        'sitesWithoutAttendance': 2,
+        'visitReportsToday': 4,
+        'trainingReportsToday': 1,
+        'pendingSiteReports': 2,
+        'underAssignedSites': 5,
+      }),
+      todaySites: const <FieldOfficerTodaySiteBrief>[
+        FieldOfficerTodaySiteBrief(
+          siteId: 'site_001',
+          siteName: 'Main Branch – MG Road',
+          district: mockDistrict,
+          clientName: mockClientName,
+          requiredGuards: 8,
+          assignedGuards: 8,
+          shiftLabel: 'Morning',
+          dateLabel: '31 Jul 2026',
+          hasAttendance: true,
+        ),
+        FieldOfficerTodaySiteBrief(
+          siteId: 'site_002',
+          siteName: 'Corporate Office – Technopark',
+          district: mockDistrict,
+          clientName: mockClientName,
+          requiredGuards: 6,
+          assignedGuards: 4,
+          shiftLabel: 'Evening',
+          dateLabel: '31 Jul 2026',
+          hasAttendance: false,
+        ),
       ],
-    },
-  ),
-  todayOverview: FieldOfficerTodayOverview.fromJson(
-    <String, dynamic>{
-      'sitesScheduled': 12,
-      'dutiesScheduled': 18,
-      'requiredGuards': 96,
-      'assignedGuards': 84,
-      'unassignedGuards': 12,
-      'sitesWithoutAttendance': 2,
-      'visitReportsToday': 4,
-      'trainingReportsToday': 1,
-      'pendingSiteReports': 2,
-      'underAssignedSites': 5,
-    },
-  ),
-  todaySites: const <FieldOfficerTodaySiteBrief>[
-    FieldOfficerTodaySiteBrief(
-      siteId: 'site_001',
-      siteName: 'Main Branch – MG Road',
-      district: mockDistrict,
-      clientName: mockClientName,
-      requiredGuards: 8,
-      assignedGuards: 8,
-      shiftLabel: 'Morning',
-      dateLabel: '31 Jul 2026',
-      hasAttendance: true,
-    ),
-    FieldOfficerTodaySiteBrief(
-      siteId: 'site_002',
-      siteName: 'Corporate Office – Technopark',
-      district: mockDistrict,
-      clientName: mockClientName,
-      requiredGuards: 6,
-      assignedGuards: 4,
-      shiftLabel: 'Evening',
-      dateLabel: '31 Jul 2026',
-      hasAttendance: false,
-    ),
-  ],
-  attendanceSites: const <FieldOfficerAttendanceSite>[
-    FieldOfficerAttendanceSite(
-      siteId: 'site_001',
-      siteName: 'Main Branch – MG Road',
-      district: mockDistrict,
-      checkedInToday: 7,
-      onDutyNow: 6,
-      clientName: mockClientName,
-    ),
-    FieldOfficerAttendanceSite(
-      siteId: 'site_002',
-      siteName: 'Corporate Office – Technopark',
-      district: mockDistrict,
-      checkedInToday: 3,
-      onDutyNow: 2,
-      clientName: mockClientName,
-    ),
-  ],
-  upcomingWorkOrders: mockWorkOrders,
-  recentVisitReports: mockVisitReports,
-  recentTrainingReports: mockTrainingReports,
-  recentWorkOrders: mockWorkOrders,
-);
+      attendanceSites: const <FieldOfficerAttendanceSite>[
+        FieldOfficerAttendanceSite(
+          siteId: 'site_001',
+          siteName: 'Main Branch – MG Road',
+          district: mockDistrict,
+          checkedInToday: 7,
+          onDutyNow: 6,
+          clientName: mockClientName,
+        ),
+        FieldOfficerAttendanceSite(
+          siteId: 'site_002',
+          siteName: 'Corporate Office – Technopark',
+          district: mockDistrict,
+          checkedInToday: 3,
+          onDutyNow: 2,
+          clientName: mockClientName,
+        ),
+      ],
+      upcomingWorkOrders: mockWorkOrders,
+      recentVisitReports: mockVisitReports,
+      recentTrainingReports: mockTrainingReports,
+      recentWorkOrders: mockWorkOrders,
+    );
 
 final List<WorkOrderModel> mockWorkOrders = <WorkOrderModel>[
   WorkOrderModel(
@@ -556,52 +609,52 @@ final List<GuardProfileModel> mockFieldOfficerGuards = <GuardProfileModel>[
 
 final List<FieldOfficerAttendanceEntry> mockFieldOfficerAttendance =
     const <FieldOfficerAttendanceEntry>[
-  FieldOfficerAttendanceEntry(
-    id: 'att_001',
-    guardName: 'Rahul Kumar',
-    guardId: 'emp_1042',
-    employeeId: 'CISS-1042',
-    siteName: 'Main Branch – MG Road',
-    clientName: mockClientName,
-    district: mockDistrict,
-    dateLabel: '31 Jul 2026',
-    checkIn: '07:58',
-    checkOut: '16:05',
-    dutyPointName: 'Main Gate',
-    shiftLabel: 'Morning',
-    status: 'Present',
-  ),
-  FieldOfficerAttendanceEntry(
-    id: 'att_002',
-    guardName: 'Suresh Pillai',
-    guardId: 'emp_1098',
-    employeeId: 'CISS-1098',
-    siteName: 'Main Branch – MG Road',
-    clientName: mockClientName,
-    district: mockDistrict,
-    dateLabel: '31 Jul 2026',
-    checkIn: '08:02',
-    checkOut: null,
-    dutyPointName: 'ATM Lobby',
-    shiftLabel: 'Morning',
-    status: 'On Duty',
-  ),
-  FieldOfficerAttendanceEntry(
-    id: 'att_003',
-    guardName: 'Deepa Menon',
-    guardId: 'emp_1177',
-    employeeId: 'CISS-1177',
-    siteName: 'Corporate Office – Technopark',
-    clientName: mockClientName,
-    district: 'Kollam',
-    dateLabel: '31 Jul 2026',
-    checkIn: null,
-    checkOut: null,
-    dutyPointName: 'Lobby',
-    shiftLabel: 'Evening',
-    status: 'Absent',
-  ),
-];
+      FieldOfficerAttendanceEntry(
+        id: 'att_001',
+        guardName: 'Rahul Kumar',
+        guardId: 'emp_1042',
+        employeeId: 'CISS-1042',
+        siteName: 'Main Branch – MG Road',
+        clientName: mockClientName,
+        district: mockDistrict,
+        dateLabel: '31 Jul 2026',
+        checkIn: '07:58',
+        checkOut: '16:05',
+        dutyPointName: 'Main Gate',
+        shiftLabel: 'Morning',
+        status: 'Present',
+      ),
+      FieldOfficerAttendanceEntry(
+        id: 'att_002',
+        guardName: 'Suresh Pillai',
+        guardId: 'emp_1098',
+        employeeId: 'CISS-1098',
+        siteName: 'Main Branch – MG Road',
+        clientName: mockClientName,
+        district: mockDistrict,
+        dateLabel: '31 Jul 2026',
+        checkIn: '08:02',
+        checkOut: null,
+        dutyPointName: 'ATM Lobby',
+        shiftLabel: 'Morning',
+        status: 'On Duty',
+      ),
+      FieldOfficerAttendanceEntry(
+        id: 'att_003',
+        guardName: 'Deepa Menon',
+        guardId: 'emp_1177',
+        employeeId: 'CISS-1177',
+        siteName: 'Corporate Office – Technopark',
+        clientName: mockClientName,
+        district: 'Kollam',
+        dateLabel: '31 Jul 2026',
+        checkIn: null,
+        checkOut: null,
+        dutyPointName: 'Lobby',
+        shiftLabel: 'Evening',
+        status: 'Absent',
+      ),
+    ];
 
 final List<VisitReportModel> mockVisitReports = <VisitReportModel>[
   VisitReportModel(
@@ -648,3 +701,185 @@ final List<TrainingReportModel> mockTrainingReports = <TrainingReportModel>[
     attendeeNames: const <String>['Rahul Kumar', 'Suresh Pillai'],
   ),
 ];
+
+GuardDuty mockTcsDuty({
+  String status = 'open',
+  bool assigned = false,
+  bool longContent = false,
+  bool categoryNotSet = false,
+}) => GuardDuty.fromJson({
+  'id': assigned ? 'assignment_preview' : 'exam_preview',
+  'kind': assigned ? 'assigned' : 'exam',
+  'status': status,
+  'workOrderId': assigned ? null : 'exam_preview',
+  'siteId': 'site_preview',
+  'siteName':
+      longContent
+          ? 'District examination centre with an extended campus address and accessible entry instructions'
+          : 'District examination centre',
+  'clientName': 'TCS',
+  'district': mockDistrict,
+  'date': '2026-10-20',
+  'shiftLabel': assigned ? 'Night · 22:00–06:00' : null,
+  'relieving': assigned,
+  'examName':
+      assigned
+          ? null
+          : longContent
+          ? 'Graduate recruitment examination with an extended descriptive name'
+          : 'Graduate examination',
+  'maleGuardsRequired': 2,
+  'femaleGuardsRequired': 1,
+  'canRespond': !assigned && status == 'open' && !categoryNotSet,
+  'respondBy': '2026-10-19T18:30:00Z',
+  'willingnessVersion': 1,
+  'ineligibilityReason':
+      categoryNotSet
+          ? 'Your category must be set by an administrator before you can respond to exam duties.'
+          : status == 'cancelled'
+          ? 'This duty was cancelled.'
+          : status == 'closed'
+          ? 'Responses closed when the duty day started.'
+          : null,
+});
+GuardProfileModel mockTcsProfile({String? category = 'adhoc'}) =>
+    GuardProfileModel.fromJson({
+      'fullName': 'Rahul Kumar',
+      'employeeId': 'CISS/PREVIEW',
+      'clientName': 'TCS',
+      'district': mockDistrict,
+      'status': 'Active',
+      'tcsCategory': category,
+    }, id: 'employee_preview');
+WillingnessOperation mockWillingnessState(
+  String state, {
+  String workOrderId = 'exam_preview',
+  String? reason,
+}) => WillingnessOperation(
+  id: 'preview-request',
+  ownerUid: 'preview_guard_uid',
+  apiBaseUrl: 'https://preview.invalid',
+  workOrderId: workOrderId,
+  response: WillingnessStatus.willing,
+  expectedVersion: 1,
+  state: state,
+  reason:
+      reason ??
+      (state == 'rejected'
+          ? 'Responses closed before this queued response reached the server.'
+          : null),
+);
+final mockAssignments = <GuardAssignment>[
+  GuardAssignment({
+    'id': 'assignment_preview',
+    'guardId': 'employee_preview',
+    'guardName': 'Rahul Kumar',
+    'siteId': 'site_preview',
+    'siteName': 'District examination centre',
+    'date': '2026-10-20',
+    'shiftLabel': 'Night',
+    'shiftCode': 'N',
+    'startsAt': '2026-10-20T16:30:00Z',
+    'endsAt': '2026-10-21T00:30:00Z',
+    'type': 'relieving',
+    'status': 'assigned',
+    'version': 2,
+  }),
+  GuardAssignment({
+    'id': 'assignment_cancelled',
+    'guardId': 'employee_preview',
+    'guardName': 'Rahul Kumar',
+    'siteId': 'site_preview',
+    'siteName': 'District examination centre',
+    'date': '2026-10-21',
+    'shiftLabel': 'Day',
+    'type': 'regular',
+    'status': 'cancelled',
+    'version': 3,
+  }),
+];
+WorkOrderWillingness mockWorkOrderWillingness(String id) =>
+    WorkOrderWillingness(
+      workOrderId: id,
+      willingCount: 1,
+      unavailableCount: 1,
+      responses: [
+        {
+          'employeeDocId': 'employee_preview',
+          'employeeId': 'CISS/PREVIEW',
+          'name': 'Rahul Kumar',
+          'gender': 'Male',
+          'tcsCategory': 'adhoc',
+          'response': 'willing',
+          'version': 1,
+        },
+        {
+          'employeeDocId': 'employee_preview_other',
+          'employeeId': 'CISS/PREVIEW2',
+          'name': 'Priya Nair',
+          'gender': 'Female',
+          'tcsCategory': 'adhoc',
+          'response': 'unavailable',
+          'version': 1,
+        },
+      ],
+    );
+
+/// Only fixture reads are permitted; every unimplemented getter/write blocks
+/// before construction of an HTTP/Firebase client or a storage fallback.
+class ReadOnlyDutyPreviewRepository implements MobileRepository {
+  @override
+  Future<List<GuardAssignment>> fetchGuardAssignments({
+    String? from,
+    String? to,
+  }) async => mockAssignments;
+  @override
+  Future<List<FieldOfficerSiteOption>> fetchFieldOfficerSites({
+    String? district,
+  }) async => [
+    const FieldOfficerSiteOption(
+      id: 'site_preview',
+      siteName: 'District examination centre',
+      district: mockDistrict,
+      clientName: 'TCS',
+      clientId: 'client_preview',
+      shiftTemplates: [
+        ShiftTemplateModel(
+          code: 'N',
+          label: 'Night',
+          startTime: '22:00',
+          endTime: '06:00',
+        ),
+      ],
+    ),
+    const FieldOfficerSiteOption(
+      id: 'site_custom_preview',
+      siteName: 'Community centre',
+      district: mockDistrict,
+      clientName: 'Other client',
+      clientId: 'client_other',
+    ),
+  ];
+  @override
+  Future<List<GuardProfileModel>> fetchFieldOfficerGuards({
+    String? district,
+    bool includeInactive = false,
+  }) async => [
+    mockTcsProfile(),
+    GuardProfileModel.fromJson({
+      'fullName': 'Priya Nair',
+      'employeeId': 'CISS/PREVIEW2',
+      'clientName': 'Other client',
+      'district': mockDistrict,
+      'status': 'Active',
+    }, id: 'employee_preview_other'),
+  ];
+  @override
+  Future<WorkOrderWillingness> fetchWorkOrderWillingness(String id) async =>
+      mockWorkOrderWillingness(id);
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError(
+        'Preview blocks service calls (${invocation.memberName}). No data was sent or saved.',
+      );
+}

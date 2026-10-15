@@ -8,6 +8,7 @@ class GuardProfileModel {
     required this.phoneNumber,
     required this.status,
     this.gender,
+    this.tcsCategory,
     this.dateOfBirth,
     this.fatherName,
     this.motherName,
@@ -55,6 +56,16 @@ class GuardProfileModel {
   final String phoneNumber;
   final String status;
   final String? gender;
+  final String? tcsCategory;
+  bool get isTcs => clientName.trim().toUpperCase() == 'TCS';
+  String? get categoryLabel =>
+      !isTcs
+          ? null
+          : switch (tcsCategory) {
+            'adhoc' => 'Adhoc',
+            'permanent' => 'Permanent',
+            _ => 'Category not set',
+          };
   final String? dateOfBirth;
   final String? fatherName;
   final String? motherName;
@@ -130,6 +141,11 @@ class GuardProfileModel {
       phoneNumber: (json['phoneNumber'] as String?) ?? '',
       status: (json['status'] as String?) ?? '',
       gender: json['gender'] as String?,
+      tcsCategory:
+          (json['clientName']?.toString().trim().toUpperCase() == 'TCS' &&
+                  ['adhoc', 'permanent'].contains(json['tcsCategory']))
+              ? json['tcsCategory'] as String
+              : null,
       dateOfBirth: json['dateOfBirth'] as String?,
       fatherName: json['fatherName'] as String?,
       motherName: json['motherName'] as String?,

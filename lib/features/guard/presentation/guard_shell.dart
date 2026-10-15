@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/cache/preload_controller.dart';
 import '../../../core/haptics.dart';
+import '../../../core/i18n/app_language.dart';
+import '../../../core/i18n/app_strings.dart';
 import '../../auth/application/auth_controller.dart';
 import '../guard_tab_provider.dart';
 import '../../../core/fcm/notification_service.dart';
@@ -13,6 +15,10 @@ import '../../../shared/widgets/modern_hero.dart';
 import '../../../shared/widgets/theme_mode_selector.dart';
 import '../../../shared/widgets/status_chip.dart';
 import '../../shared/notification_inbox_screen.dart';
+import '../../shared/language_screen.dart';
+import '../../shared/device_readiness_screen.dart';
+import '../../shared/readiness_banner.dart';
+import '../../shared/tracking_health_card.dart';
 import 'screens/guard_attendance_screen.dart';
 import 'screens/guard_dashboard_screen.dart';
 import 'screens/guard_evaluations_screen.dart';
@@ -71,6 +77,9 @@ class _GuardShellState extends ConsumerState<GuardShell> {
   @override
   Widget build(BuildContext context) {
     final index = ref.watch(guardTabIndexProvider);
+    final strings = AppStrings.of(context);
+    final unread =
+        ref.watch(NotificationService.unreadCountProvider).valueOrNull ?? 0;
 
     // Keep all guard data providers alive so tab switching is instant.
     ref.watch(guardDashboardProvider);
@@ -120,7 +129,14 @@ class _GuardShellState extends ConsumerState<GuardShell> {
                     (t) => FloatingNavItem(
                       icon: t.icon,
                       selectedIcon: t.activeIcon,
-                      label: t.label,
+                      label: switch (t.label) {
+                        'Home' => strings.navHome,
+                        'Duty' => strings.navDuty,
+                        'Activity' => strings.navActivity,
+                        'Profile' => strings.navProfile,
+                        _ => t.label,
+                      },
+                      badgeCount: t.label == 'Profile' ? unread : null,
                     ),
                   )
                   .toList(),
@@ -222,6 +238,7 @@ class GuardProfileHubScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = CissThemeTokens.of(context);
+    final strings = AppStrings.of(context);
     return Scaffold(
       backgroundColor: tokens.canvas,
       body: SafeArea(
@@ -240,6 +257,35 @@ class GuardProfileHubScreen extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               child: Column(
                 children: <Widget>[
+                  const ReadinessBanner(),
+                  const TrackingHealthCard(),
+                  const SizedBox(height: AppSpacing.md),
+                  GuardRecordCard(
+                    title: strings.readinessOpenScreen,
+                    subtitle: strings.readinessSubtitle,
+                    icon: Icons.rule_folder_rounded,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const DeviceReadinessScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  GuardRecordCard(
+                    title: strings.language,
+                    subtitle: ref.watch(appLanguageControllerProvider).label,
+                    icon: Icons.translate_rounded,
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const LanguageScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.md),
                   GuardRecordCard(
                     title: 'Personal Profile',
                     subtitle: 'Personal details and document verification status',

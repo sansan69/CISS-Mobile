@@ -7,6 +7,12 @@
     <!-- Location: fine + coarse for indoor/outdoor hybrid positioning -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Duty tracking runs on a user-visible location foreground service, which
+         already covers the on-screen case. Background location is declared for
+         the restart gap: after a swipe-away or reboot the service is restarted
+         by the watchdog/boot receivers and must be able to read position
+         immediately, before the app is visible again. -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <!-- Camera for attendance photo proof and incident reporting -->
     <uses-permission android:name="android.permission.CAMERA" />

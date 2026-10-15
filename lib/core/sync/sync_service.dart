@@ -12,7 +12,14 @@ import '../offline/offline_queue.dart';
 import '../offline/offline_request.dart';
 
 class SyncService {
-  SyncService(this._repository, this._queue, this._trackingBuffer);
+  SyncService(
+    this._repository,
+    this._queue,
+    this._trackingBuffer, {
+    Future<void> Function()? syncWillingness,
+  }) : _syncWillingness = syncWillingness;
+
+  final Future<void> Function()? _syncWillingness;
 
   final MobileRepository _repository;
   final OfflineQueue _queue;
@@ -65,6 +72,11 @@ class SyncService {
     _isSyncing = true;
 
     try {
+      try {
+        await _syncWillingness?.call();
+      } catch (error) {
+        foundation.debugPrint('Duty sync deferred: $error');
+      }
       // Flush buffered location samples first — independent of the generic
       // request queue and fully best-effort (errors are swallowed).
       await _flushTrackingSamples();

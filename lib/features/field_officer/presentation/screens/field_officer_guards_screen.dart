@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
+import '../../../../../core/brand.dart';
 import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../shared/widgets/metric_card.dart';
@@ -13,9 +15,30 @@ import '../../../../../shared/widgets/status_chip.dart';
 import 'field_officer_guard_profile_screen.dart';
 import 'field_officer_live_map_screen.dart';
 
+String _statusLabel(String status) => switch (status
+    .trim()
+    .toLowerCase()
+    .replaceAll('_', ' ')) {
+  'pendingreview' || 'pending review' => 'Pending Review',
+  'onleave' || 'on leave' => 'On Leave',
+  'inactive' => 'Inactive',
+  'exited' => 'Exited',
+  'active' || '' => 'Active',
+  _ => status,
+};
+
+StatusChipTone _statusTone(String status) => switch (_statusLabel(status)) {
+  'Active' => StatusChipTone.success,
+  'Pending Review' || 'On Leave' => StatusChipTone.warning,
+  'Inactive' || 'Exited' => StatusChipTone.neutral,
+  _ => StatusChipTone.info,
+};
+
 final FutureProvider<List<GuardProfileModel>> fieldOfficerGuardsProvider =
     FutureProvider<List<GuardProfileModel>>((Ref ref) {
-      return ref.read(mobileRepositoryProvider).fetchFieldOfficerGuards();
+      return ref
+          .read(mobileRepositoryProvider)
+          .fetchFieldOfficerGuards(includeInactive: true);
     });
 
 class FieldOfficerGuardsScreen extends ConsumerStatefulWidget {
@@ -30,6 +53,8 @@ class _FieldOfficerGuardsScreenState
     extends ConsumerState<FieldOfficerGuardsScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
+  String _client = 'All';
+  String _status = 'All';
 
   @override
   void dispose() {
@@ -43,149 +68,242 @@ class _FieldOfficerGuardsScreenState
     return guardsAsync.when(
       loading:
           () => const Scaffold(
-            body: Column(
-              children: <Widget>[
-                BrandBanner(
-                  title: 'Guards',
-                  subtitle: 'Guard directory and live duty locations',
-                ),
-                Expanded(child: Center(child: CircularProgressIndicator())),
-              ],
+            body: SafeArea(
+              child: Column(
+                children: <Widget>[
+                  _DirectoryHeader(),
+                  Expanded(child: Center(child: CircularProgressIndicator())),
+                ],
+              ),
             ),
           ),
       error:
           (Object error, StackTrace stackTrace) => Scaffold(
-            body: Column(
-              children: <Widget>[
-                const BrandBanner(
-                  title: 'Guards',
-                  subtitle: 'Guard directory and live duty locations',
-                ),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Center(
-                      child: StateBlock(
-                        icon: Icons.groups_2_rounded,
-                        title: 'Could not load guards',
-                        message: '$error',
-                        action: FilledButton.tonal(
-                          onPressed:
-                              () => ref.invalidate(fieldOfficerGuardsProvider),
-                          child: const Text('Try again'),
+            body: SafeArea(
+              child: Column(
+                children: <Widget>[
+                  const _DirectoryHeader(),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Center(
+                        child: StateBlock(
+                          icon: Icons.groups_2_rounded,
+                          title: 'Could not load employees',
+                          message: '$error',
+                          action: FilledButton.tonal(
+                            onPressed:
+                                () =>
+                                    ref.invalidate(fieldOfficerGuardsProvider),
+                            child: const Text('Try again'),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
       data: (guards) {
-        final filtered = _filter(guards);
+        final clients =
+            guards
+                .map((guard) => guard.clientName.trim())
+                .where((client) => client.isNotEmpty)
+                .toSet()
+                .toList()
+              ..sort();
+        if (_client != 'All' && !clients.contains(_client)) {
+          clients.add(_client);
+          clients.sort();
+        }
+        final selectedClient =
+            _client == 'All' || clients.contains(_client) ? _client : 'All';
+        final filtered = _filter(guards, selectedClient);
         final tokens = CissThemeTokens.of(context);
 
         return Scaffold(
           backgroundColor: tokens.canvas,
-          body: RefreshIndicator(
-            onRefresh: () async => ref.invalidate(fieldOfficerGuardsProvider),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                AppSpacing.md,
-                AppSpacing.md,
-                100,
-              ),
-              children: <Widget>[
-                BrandBanner(
-                  title: 'Guards',
-                  subtitle: 'Guard directory and live duty locations',
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      IconButton(
-                        onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const FieldOfficerLiveMapScreen(),
-                            ),
-                          );
-                        },
-                        icon: Icon(
-                          Icons.map_rounded,
-                          color: tokens.primary,
-                          size: 22,
-                        ),
-                        tooltip: 'Live map',
-                      ),
-                      IconButton(
-                        onPressed:
-                            () => ref.invalidate(fieldOfficerGuardsProvider),
-                        icon: Icon(
-                          Icons.refresh_rounded,
-                          color: tokens.inkMuted,
-                          size: 20,
-                        ),
-                      ),
-                    ],
-                  ),
+          body: SafeArea(
+            child: RefreshIndicator(
+              onRefresh: () async => ref.invalidate(fieldOfficerGuardsProvider),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.md,
+                  AppSpacing.md,
+                  100,
                 ),
-                const SizedBox(height: AppSpacing.sm),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
+                children: <Widget>[
+                  _DirectoryHeader(
+                    onLiveMap:
+                        () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const FieldOfficerLiveMapScreen(),
+                          ),
+                        ),
+                    onRefresh: () => ref.invalidate(fieldOfficerGuardsProvider),
+                    // The list already supplies the screen margin, so the
+                    // header must not add a second indent that would push it
+                    // out of line with the search field and employee cards.
+                    horizontalPadding: 0,
                   ),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: <Widget>[
+                  const SizedBox(height: AppSpacing.sm),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final narrow =
+                          constraints.maxWidth < 360 ||
+                          MediaQuery.textScalerOf(context).scale(1) > 1.3;
+                      final cards = <Widget>[
                         MetricCard(
-                          label: 'Visible',
+                          label: 'Employees',
                           value: guards.length.toString(),
                           color: tokens.primary,
-                          width: 140,
                         ),
-                        const SizedBox(width: AppSpacing.sm),
                         MetricCard(
                           label: 'Districts',
                           value:
                               '${guards.map((g) => g.district).where((d) => d.trim().isNotEmpty).toSet().length}',
                           color: tokens.accent,
-                          width: 140,
                         ),
-                      ],
+                      ];
+                      if (narrow) {
+                        return Column(
+                          children: [
+                            SizedBox(width: double.infinity, child: cards[0]),
+                            const SizedBox(height: AppSpacing.sm),
+                            SizedBox(width: double.infinity, child: cards[1]),
+                          ],
+                        );
+                      }
+                      return IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(child: cards[0]),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(child: cards[1]),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  TextField(
+                    controller: _searchController,
+                    onChanged: (value) => setState(() => _query = value),
+                    decoration: InputDecoration(
+                      labelText: 'Search employees',
+                      hintText: 'Name, employee ID, client, district, phone',
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      filled: true,
+                      fillColor: tokens.surface,
                     ),
                   ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                TextField(
-                  controller: _searchController,
-                  onChanged: (value) => setState(() => _query = value),
-                  decoration: InputDecoration(
-                    labelText: 'Search guards',
-                    hintText: 'Name, employee ID, client, district, phone',
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    filled: true,
-                    fillColor: tokens.surface,
+                  const SizedBox(height: AppSpacing.sm),
+                  Column(
+                    children: <Widget>[
+                      SizedBox(
+                        width: double.infinity,
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: selectedClient,
+                          decoration: const InputDecoration(
+                            labelText: 'Client',
+                          ),
+                          items:
+                              <String>['All', ...clients]
+                                  .map(
+                                    (v) => DropdownMenuItem(
+                                      value: v,
+                                      child: Text(
+                                        v,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged:
+                              (value) =>
+                                  setState(() => _client = value ?? 'All'),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      SizedBox(
+                        width: double.infinity,
+                        child: DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          value: _status,
+                          decoration: const InputDecoration(
+                            labelText: 'Status',
+                          ),
+                          items:
+                              <String>[
+                                    'All',
+                                    'Pending Review',
+                                    'Active',
+                                    'Inactive',
+                                    'On Leave',
+                                    'Exited',
+                                  ]
+                                  .map(
+                                    (v) => DropdownMenuItem(
+                                      value: v,
+                                      child: Text(
+                                        v,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                          onChanged:
+                              (value) =>
+                                  setState(() => _status = value ?? 'All'),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                if (guards.isEmpty)
-                  const StateBlock(
-                    icon: Icons.person_off_rounded,
-                    title: 'No guards found',
-                    message:
-                        'Guards assigned to your districts will appear here once available.',
-                  )
-                else if (filtered.isEmpty)
-                  const StateBlock(
-                    icon: Icons.search_off_rounded,
-                    title: 'No matching guards',
-                    message: 'Try a different name, ID, client, or district.',
-                  )
-                else
-                  ...filtered.map(_GuardDirectoryRow.new),
-              ],
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: AppSpacing.sm,
+                    children: <Widget>[
+                      Text('${filtered.length} of ${guards.length} employees'),
+                      TextButton.icon(
+                        onPressed:
+                            _query.isEmpty &&
+                                    selectedClient == 'All' &&
+                                    _status == 'All'
+                                ? null
+                                : () => setState(() {
+                                  _query = '';
+                                  _client = 'All';
+                                  _status = 'All';
+                                  _searchController.clear();
+                                }),
+                        icon: const Icon(Icons.restart_alt_rounded),
+                        label: const Text('Reset'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  if (guards.isEmpty)
+                    const StateBlock(
+                      icon: Icons.person_off_rounded,
+                      title: 'No employees found',
+                      message:
+                          'Employees assigned to your districts will appear here once available.',
+                    )
+                  else if (filtered.isEmpty)
+                    const StateBlock(
+                      icon: Icons.search_off_rounded,
+                      title: 'No matching employees',
+                      message: 'Try changing your search or filters.',
+                    )
+                  else
+                    ...filtered.map(_GuardDirectoryRow.new),
+                ],
+              ),
             ),
           ),
         );
@@ -193,9 +311,11 @@ class _FieldOfficerGuardsScreenState
     );
   }
 
-  List<GuardProfileModel> _filter(List<GuardProfileModel> guards) {
+  List<GuardProfileModel> _filter(
+    List<GuardProfileModel> guards,
+    String selectedClient,
+  ) {
     final query = _query.trim().toLowerCase();
-    if (query.isEmpty) return guards;
     return guards.where((guard) {
       final haystack =
           [
@@ -206,7 +326,10 @@ class _FieldOfficerGuardsScreenState
             guard.phoneNumber,
             guard.status,
           ].join(' ').toLowerCase();
-      return haystack.contains(query);
+      return haystack.contains(query) &&
+          (selectedClient == 'All' ||
+              guard.clientName.trim() == selectedClient) &&
+          (_status == 'All' || _statusLabel(guard.status) == _status);
     }).toList();
   }
 }
@@ -245,7 +368,7 @@ class _GuardDirectoryRow extends StatelessWidget {
                   backgroundImage:
                       imageUrl == null || imageUrl.isEmpty
                           ? null
-                          : NetworkImage(imageUrl),
+                          : CachedNetworkImageProvider(imageUrl),
                   child:
                       imageUrl == null || imageUrl.isEmpty
                           ? Text(
@@ -262,61 +385,20 @@ class _GuardDirectoryRow extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: <Widget>[
-                      Row(
+                      Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: <Widget>[
-                          Expanded(
-                            child: Text(
-                              guard.fullName.isEmpty ? 'Guard' : guard.fullName,
-                              style: theme.textTheme.titleSmall,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                          Text(
+                            guard.fullName.isEmpty
+                                ? 'Employee'
+                                : guard.fullName,
+                            style: theme.textTheme.titleSmall,
+                            softWrap: true,
                           ),
-                          const SizedBox(width: AppSpacing.xs),
+                          const SizedBox(height: AppSpacing.xs),
                           StatusChip(
-                            label:
-                                guard.status.isEmpty ? 'Active' : guard.status,
-                            tone: StatusChipTone.success,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.xxs),
-                      Text(
-                        [
-                          if (guard.employeeId.isNotEmpty) guard.employeeId,
-                          if (guard.clientName.isNotEmpty) guard.clientName,
-                        ].join(' • '),
-                        style: theme.textTheme.bodySmall,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Wrap(
-                        spacing: AppSpacing.xs,
-                        runSpacing: AppSpacing.xs,
-                        children: <Widget>[
-                          if (guard.district.isNotEmpty)
-                            StatusChip(
-                              label: guard.district,
-                              icon: Icons.place_rounded,
-                              tone: StatusChipTone.info,
-                            ),
-                          if (guard.phoneNumber.isNotEmpty)
-                            StatusChip(
-                              label: guard.phoneNumber,
-                              icon: Icons.call_rounded,
-                            ),
-                          ComplianceTag(
-                            label:
-                                guard.anyMissingDocuments
-                                    ? 'Docs pending (${guard.missingDocuments.length})'
-                                    : 'Docs verified',
-                            status:
-                                guard.anyMissingDocuments
-                                    ? ComplianceStatus.pending
-                                    : ComplianceStatus.verified,
-                            compact: true,
+                            label: _statusLabel(guard.status),
+                            tone: _statusTone(guard.status),
                           ),
                         ],
                       ),
@@ -327,6 +409,60 @@ class _GuardDirectoryRow extends StatelessWidget {
                   Icons.chevron_right_rounded,
                   size: 20,
                   color: tokens.inkMuted,
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              0,
+              AppSpacing.md,
+              AppSpacing.md,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                if (guard.employeeId.isNotEmpty)
+                  Text(guard.employeeId, style: theme.textTheme.bodySmall),
+                if (guard.clientName.isNotEmpty)
+                  Text(guard.clientName, style: theme.textTheme.bodySmall),
+                if (DateTime.tryParse(guard.createdAt ?? '')
+                    case final enrolled?)
+                  Text(
+                    'Enrolled ${MaterialLocalizations.of(context).formatMediumDate(enrolled.toLocal())}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                const SizedBox(height: AppSpacing.xs),
+                Wrap(
+                  spacing: AppSpacing.xs,
+                  runSpacing: AppSpacing.xs,
+                  children: <Widget>[
+                    if (guard.categoryLabel != null)
+                      StatusChip(label: guard.categoryLabel!),
+                    if (guard.district.isNotEmpty)
+                      StatusChip(
+                        label: guard.district,
+                        icon: Icons.place_rounded,
+                        tone: StatusChipTone.info,
+                      ),
+                    if (guard.phoneNumber.isNotEmpty)
+                      StatusChip(
+                        label: guard.phoneNumber,
+                        icon: Icons.call_rounded,
+                      ),
+                    ComplianceTag(
+                      label:
+                          guard.anyMissingDocuments
+                              ? 'Docs pending (${guard.missingDocuments.length})'
+                              : 'Docs verified',
+                      status:
+                          guard.anyMissingDocuments
+                              ? ComplianceStatus.pending
+                              : ComplianceStatus.verified,
+                      compact: true,
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -344,5 +480,119 @@ class _GuardDirectoryRow extends StatelessWidget {
     if (compactFallback.isEmpty) return 'GU';
     final end = compactFallback.length < 2 ? compactFallback.length : 2;
     return compactFallback.substring(0, end).toUpperCase();
+  }
+}
+
+class _DirectoryHeader extends StatelessWidget {
+  const _DirectoryHeader({
+    this.onLiveMap,
+    this.onRefresh,
+    this.horizontalPadding = AppSpacing.md,
+  });
+
+  final VoidCallback? onLiveMap;
+  final VoidCallback? onRefresh;
+  /// Screen margin for the header content. Loading and error states render the
+  /// header directly, while the loaded list already supplies the margin.
+  final double horizontalPadding;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(
+        horizontalPadding,
+        AppSpacing.sm,
+        horizontalPadding,
+        AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        border: Border(bottom: BorderSide(color: tokens.border)),
+        boxShadow: AppShadows.subtle,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              if (Navigator.of(context).canPop()) ...[
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  style: IconButton.styleFrom(foregroundColor: tokens.ink),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 36,
+                    minHeight: 40,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.xs),
+              ],
+              const CissLogoBadge(size: 40),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      kCompanyName.toUpperCase(),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: tokens.primaryStrong,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.1,
+                        height: 1.15,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Employee Directory',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        height: 1.15,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Employees assigned to your districts',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: tokens.inkMuted,
+                        height: 1.2,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (onLiveMap != null || onRefresh != null)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: <Widget>[
+                IconButton(
+                  onPressed: onLiveMap,
+                  icon: Icon(
+                    Icons.map_rounded,
+                    color: tokens.primary,
+                    size: 22,
+                  ),
+                  tooltip: 'Live map',
+                ),
+                IconButton(
+                  onPressed: onRefresh,
+                  icon: Icon(
+                    Icons.refresh_rounded,
+                    color: tokens.inkMuted,
+                    size: 20,
+                  ),
+                  tooltip: 'Refresh',
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
   }
 }

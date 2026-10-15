@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,7 +11,9 @@ import '../../app/router/app_router.dart';
 import '../../features/field_officer/field_officer_tab_provider.dart';
 import '../../features/guard/guard_tab_provider.dart';
 import '../network/providers.dart';
+import 'duty_notification_destination.dart';
 import '../models/app_role.dart';
+import '../models/auth_session.dart';
 import '../../features/auth/application/auth_controller.dart';
 
 class NotificationService {
@@ -28,6 +29,12 @@ class NotificationService {
   StreamSubscription<RemoteMessage>? _foregroundMessageSub;
   StreamSubscription<RemoteMessage>? _messageOpenedAppSub;
   bool _notificationsAuthorized = false;
+  Map<String, dynamic>? _pendingDutyNavigation;
+  String? _pendingDutyDestinationKey;
+  String? _pendingDutyOwnerUid;
+  AppRole? _pendingDutyOwnerRole;
+  String? _pendingDutyOrigin;
+  final Set<String> _foregroundDutyEvents = <String>{};
 
   void dispose() {
     _sessionRetryTimer?.cancel();
@@ -41,16 +48,27 @@ class NotificationService {
   }
 
   void _ensureSessionRetryLoop() {
+    var registered = false;
     _sessionRetryTimer ??= Timer.periodic(const Duration(seconds: 1), (_) {
       final session = _ref.read(authSessionProvider).value;
       if (session != null) {
         // App bootstrap runs before login, so the first FCM token write can
         // happen without an authenticated user. Register it again as soon
         // as the role session becomes available.
-        unawaited(_registerCurrentToken());
-        unawaited(refreshTopicSubscription());
-        _sessionRetryTimer?.cancel();
-        _sessionRetryTimer = null;
+        if (!registered) {
+          registered = true;
+          unawaited(_registerCurrentToken());
+          unawaited(refreshTopicSubscription());
+        }
+        if (_pendingDutyNavigation != null &&
+            rootNavigatorKey.currentContext != null &&
+            _workspaceAccessReady(session)) {
+          _retryPendingDutyNavigation(session);
+        }
+        if (_pendingDutyNavigation == null) {
+          _sessionRetryTimer?.cancel();
+          _sessionRetryTimer = null;
+        }
       }
     });
   }
@@ -95,6 +113,12 @@ class NotificationService {
       const InitializationSettings(android: androidSettings, iOS: iosSettings),
       onDidReceiveNotificationResponse: _onLocalNotificationTap,
     );
+
+    final launch = await _localNotifications.getNotificationAppLaunchDetails();
+    if (launch?.didNotificationLaunchApp == true &&
+        launch?.notificationResponse != null) {
+      _onLocalNotificationTap(launch!.notificationResponse!);
+    }
 
     // ── FCM setup ──────────────────────────────────────────────────────
     final settings = await _fcm.requestPermission(
@@ -181,8 +205,10 @@ class NotificationService {
       _subscribedTopics
         ..clear()
         ..addAll(desiredTopics);
-      _sessionRetryTimer?.cancel();
-      _sessionRetryTimer = null;
+      if (_pendingDutyNavigation == null) {
+        _sessionRetryTimer?.cancel();
+        _sessionRetryTimer = null;
+      }
     } catch (e) {
       debugPrint('FCM topic subscription error: $e');
     }
@@ -192,8 +218,10 @@ class NotificationService {
   Future<void> refreshTopicSubscription() => _subscribeToRoleTopic();
 
   Future<void> clearTopicSubscriptions() async {
-    _sessionRetryTimer?.cancel();
-    _sessionRetryTimer = null;
+    if (_pendingDutyNavigation == null) {
+      _sessionRetryTimer?.cancel();
+      _sessionRetryTimer = null;
+    }
     for (final topic in _subscribedTopics) {
       await _fcm.unsubscribeFromTopic(topic);
     }
@@ -203,11 +231,38 @@ class NotificationService {
   // ── Foreground: show local notification ──────────────────────────────
 
   void _onForegroundMessage(RemoteMessage message) {
+    final data = message.data;
+    final duty =
+        data['routeKind'] == 'guard_duties' ||
+        data['routeKind'] == 'work_order_willingness' ||
+        data['type']?.toString().startsWith('duty_') == true;
+    final eventId = data['notifId']?.toString();
+    if (duty) {
+      if (DutyNotificationDestination.resolve(
+            data,
+            _ref.read(authSessionProvider).valueOrNull,
+          ) ==
+          null) {
+        return;
+      }
+      if (eventId != null && !_foregroundDutyEvents.add(eventId)) {
+        return;
+      }
+      if (_foregroundDutyEvents.length > 200) {
+        _foregroundDutyEvents.remove(_foregroundDutyEvents.first);
+      }
+    }
+
     final title = message.notification?.title ?? 'CISS Workforce';
     final body = message.notification?.body ?? '';
 
     _localNotifications.show(
-      message.hashCode,
+      eventId == null
+          ? message.hashCode
+          : eventId.codeUnits.fold<int>(
+            0,
+            (hash, unit) => (hash * 31 + unit) & 0x7fffffff,
+          ),
       title,
       body,
       const NotificationDetails(
@@ -243,7 +298,98 @@ class NotificationService {
     _navigateFromData(message.data);
   }
 
+  /// Inbox and push share ownership, role and record routing.
+  void navigateFromNotification(Map<String, dynamic> notification) {
+    final nested = notification['data'];
+    _navigateFromData({
+      ...notification,
+      if (nested is Map) ...Map<String, dynamic>.from(nested),
+    });
+  }
+
   void _navigateFromData(Map<String, dynamic> data) {
+    final isDuty =
+        data['routeKind'] == 'guard_duties' ||
+        data['routeKind'] == 'work_order_willingness' ||
+        data['type']?.toString().startsWith('duty_') == true;
+    if (isDuty) {
+      final session = _ref.read(authSessionProvider).valueOrNull;
+      String origin;
+      try {
+        origin = _ref.read(mobileRepositoryProvider).dutyApiBaseUrl;
+      } catch (_) {
+        // A preview or incomplete network graph cannot admit protected
+        // notification destinations.
+        return;
+      }
+      if (_pendingDutyNavigation != null &&
+          _sameDutyEvent(_pendingDutyNavigation!, data) &&
+          _pendingDutyOrigin != origin) {
+        // A repeated tap for the already-queued event cannot rebind it to the
+        // repository selected after the event was first received.
+        _clearPendingDutyNavigation();
+        return;
+      }
+      if (session == null || rootNavigatorKey.currentContext == null) {
+        _queuePendingDuty(data, origin, session);
+        _ensureSessionRetryLoop();
+        return;
+      }
+      final destination = DutyNotificationDestination.resolve(data, session);
+      if (destination == null) {
+        _clearPendingDutyNavigation();
+        return;
+      }
+      final notificationId =
+          data['notifId']?.toString() ??
+          data['id']?.toString() ??
+          destination.recordId;
+      final destinationKey = jsonEncode(<String>[
+        session.role.name,
+        session.uid,
+        origin,
+        destination.role.name,
+        destination.recordId,
+        notificationId,
+      ]);
+      if (!_workspaceAccessReady(session)) {
+        if (_pendingDutyDestinationKey == destinationKey) return;
+        _queuePendingDuty(
+          data,
+          origin,
+          session,
+          destinationKey: destinationKey,
+        );
+        _ensureSessionRetryLoop();
+        return;
+      }
+      final active = _ref.read(dutyNotificationActiveDestinationsProvider);
+      if (active.contains(destinationKey)) {
+        _clearPendingDutyNavigation();
+        return;
+      }
+      _clearPendingDutyNavigation();
+      final id = data['notifId'] as String? ?? data['id'] as String?;
+      if (id != null) unawaited(markAsRead(id).catchError((Object _) {}));
+      final context = rootNavigatorKey.currentContext!;
+      _ref
+          .read(dutyNotificationActiveDestinationsProvider.notifier)
+          .state = <String>{...active, destinationKey};
+      // These are named protected routes, so AuthGate can evict them when the
+      // app relocks and router redirects can re-check owner and role.
+      unawaited(
+        context
+            .push<void>(
+              destination.role == AppRole.guard
+                  ? '/guard/duties/${Uri.encodeComponent(destination.recordId)}'
+                  : '/field-officer/work-orders/${Uri.encodeComponent(destination.recordId)}',
+              extra: destinationKey,
+            )
+            .whenComplete(() => _releaseDestination(destinationKey))
+            .catchError((Object _) {}),
+      );
+      return;
+    }
     final type = data['type'] as String?;
     if (type == null) return;
 
@@ -254,7 +400,6 @@ class NotificationService {
 
     switch (type) {
       case 'attendance_reminder':
-      case 'duty_assigned':
       case 'attendance_marked':
         _navigateGuard(1);
         break;
@@ -266,10 +411,10 @@ class NotificationService {
         _navigateGuard(3);
         break;
       case 'work_order':
-        _navigateFieldOfficer(1);
+        _navigateFieldOfficer(fieldOfficerDutiesTabIndex);
         break;
       case 'report_review':
-        _navigateFieldOfficer(4);
+        _navigateFieldOfficer(fieldOfficerReportsTabIndex);
         break;
       case 'broadcast':
         _navigateHomeForCurrentRole();
@@ -277,6 +422,72 @@ class NotificationService {
       default:
         break;
     }
+  }
+
+  void _queuePendingDuty(
+    Map<String, dynamic> data,
+    String origin,
+    AuthSession? session, {
+    String? destinationKey,
+  }) {
+    _pendingDutyNavigation = Map.of(data);
+    _pendingDutyDestinationKey = destinationKey;
+    _pendingDutyOwnerUid = session?.uid ?? data['recipientUid']?.toString();
+    _pendingDutyOwnerRole =
+        session?.role ?? appRoleFromWire(data['recipientRole']);
+    _pendingDutyOrigin = origin;
+  }
+
+  void _clearPendingDutyNavigation() {
+    _pendingDutyNavigation = null;
+    _pendingDutyDestinationKey = null;
+    _pendingDutyOwnerUid = null;
+    _pendingDutyOwnerRole = null;
+    _pendingDutyOrigin = null;
+  }
+
+  bool _sameDutyEvent(Map<String, dynamic> a, Map<String, dynamic> b) {
+    final aId = a['notifId']?.toString() ?? a['id']?.toString();
+    final bId = b['notifId']?.toString() ?? b['id']?.toString();
+    if (aId != null && bId != null) return aId == bId;
+    return a['type'] == b['type'] &&
+        a['routeKind'] == b['routeKind'] &&
+        a['recipientUid'] == b['recipientUid'] &&
+        a['recipientRole'] == b['recipientRole'] &&
+        (a['assignmentId'] ?? a['workOrderId']) ==
+            (b['assignmentId'] ?? b['workOrderId']);
+  }
+
+  void _retryPendingDutyNavigation(AuthSession session) {
+    final data = _pendingDutyNavigation;
+    if (data == null) return;
+    String currentOrigin;
+    try {
+      currentOrigin = _ref.read(mobileRepositoryProvider).dutyApiBaseUrl;
+    } catch (_) {
+      _clearPendingDutyNavigation();
+      return;
+    }
+    if (session.uid != _pendingDutyOwnerUid ||
+        session.role != _pendingDutyOwnerRole ||
+        currentOrigin != _pendingDutyOrigin) {
+      _clearPendingDutyNavigation();
+      return;
+    }
+    _clearPendingDutyNavigation();
+    _navigateFromData(data);
+  }
+
+  bool _workspaceAccessReady(AuthSession session) =>
+      _ref.read(workspaceAccessSessionKeyProvider) ==
+      '${session.role.name}:${session.uid}';
+
+  void _releaseDestination(String destinationKey) {
+    final active = _ref.read(dutyNotificationActiveDestinationsProvider);
+    if (!active.contains(destinationKey)) return;
+    _ref
+        .read(dutyNotificationActiveDestinationsProvider.notifier)
+        .state = <String>{...active}..remove(destinationKey);
   }
 
   String _buildDistrictTopic(String role, String district) {
@@ -290,11 +501,18 @@ class NotificationService {
   }
 
   void _navigateGuard(int tabIndex) {
+    if (_ref.read(authSessionProvider).valueOrNull?.role != AppRole.guard) {
+      return;
+    }
     _ref.read(guardTabIndexProvider.notifier).state = tabIndex;
     rootNavigatorKey.currentContext?.go('/');
   }
 
   void _navigateFieldOfficer(int tabIndex) {
+    if (_ref.read(authSessionProvider).valueOrNull?.role !=
+        AppRole.fieldOfficer) {
+      return;
+    }
     _ref.read(fieldOfficerTabIndexProvider.notifier).state = tabIndex;
     rootNavigatorKey.currentContext?.go('/');
   }

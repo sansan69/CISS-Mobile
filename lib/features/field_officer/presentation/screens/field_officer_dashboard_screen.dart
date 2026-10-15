@@ -11,7 +11,6 @@ import '../../../../../shared/widgets/metric_card.dart';
 import '../../../../../shared/widgets/modern_card.dart';
 import 'field_officer_live_map_screen.dart';
 import 'field_officer_duties_screen.dart';
-import 'field_officer_guards_screen.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
 import '../../../../../shared/widgets/state_block.dart';
@@ -34,48 +33,53 @@ class FieldOfficerDashboardScreen extends ConsumerWidget {
     return snapshot.when(
       loading:
           () => const Scaffold(
-            body: Column(
-              children: <Widget>[
-                BrandBanner(
-                  title: 'Field Officer',
-                  subtitle: 'Preparing dashboard',
-                ),
-                Expanded(child: Center(child: CircularProgressIndicator())),
-              ],
+            body: SafeArea(
+              child: Column(
+                children: <Widget>[
+                  BrandBanner(
+                    title: 'Field Officer',
+                    subtitle: 'Preparing dashboard',
+                  ),
+                  Expanded(child: Center(child: CircularProgressIndicator())),
+                ],
+              ),
             ),
           ),
       error:
           (Object error, _) => Scaffold(
-            body: Column(
-              children: <Widget>[
-                const BrandBanner(
-                  title: 'Field Officer',
-                  subtitle: 'Dashboard',
-                ),
-                Expanded(
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: StateBlock(
-                        icon:
-                            Icons
-                                .signal_wifi_statusbar_connected_no_internet_4_rounded,
-                        title: 'Could not load field dashboard',
-                        message: error.toString().replaceFirst(
-                          'Exception: ',
-                          '',
-                        ),
-                        action: FilledButton.tonal(
-                          onPressed:
-                              () =>
-                                  ref.invalidate(fieldOfficerDashboardProvider),
-                          child: const Text('Try again'),
+            body: SafeArea(
+              child: Column(
+                children: <Widget>[
+                  const BrandBanner(
+                    title: 'Field Officer',
+                    subtitle: 'Dashboard',
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: StateBlock(
+                          icon:
+                              Icons
+                                  .signal_wifi_statusbar_connected_no_internet_4_rounded,
+                          title: 'Could not load field dashboard',
+                          message: error.toString().replaceFirst(
+                            'Exception: ',
+                            '',
+                          ),
+                          action: FilledButton.tonal(
+                            onPressed:
+                                () => ref.invalidate(
+                                  fieldOfficerDashboardProvider,
+                                ),
+                            child: const Text('Try again'),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
       data: (FieldOfficerDashboardSnapshot data) => _DashboardBody(data: data),
@@ -112,6 +116,27 @@ class _DashboardBody extends ConsumerWidget {
         checkedIn <= 0 ? 0.0 : (onDuty / checkedIn).clamp(0, 1).toDouble();
 
     final overview = data.todayOverview;
+    final largeText = MediaQuery.textScalerOf(context).scale(26) > 36;
+    final metricCards = <Widget>[
+      MetricCard(
+        label: 'My Guards',
+        value: '${data.totalGuards}',
+        color: tokens.primary,
+        backgroundColor: tokens.primarySoft,
+      ),
+      MetricCard(
+        label: 'On Duty',
+        value: '$onDuty',
+        color: tokens.success,
+        backgroundColor: tokens.successSoft,
+      ),
+      MetricCard(
+        label: 'Check-ins',
+        value: '$checkedIn',
+        color: tokens.accent,
+        backgroundColor: tokens.warningSoft,
+      ),
+    ];
 
     return Scaffold(
       backgroundColor: tokens.canvas,
@@ -157,35 +182,37 @@ class _DashboardBody extends ConsumerWidget {
               // Metric Cards
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: MetricCard(
-                        label: 'My Guards',
-                        value: '${data.totalGuards}',
-                        color: tokens.primary,
-                        backgroundColor: tokens.primarySoft,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (largeText) {
+                      final cardWidth =
+                          (constraints.maxWidth - AppSpacing.sm) / 2;
+                      return Wrap(
+                        spacing: AppSpacing.sm,
+                        runSpacing: AppSpacing.sm,
+                        children: <Widget>[
+                          for (final card in metricCards)
+                            SizedBox(width: cardWidth, child: card),
+                        ],
+                      );
+                    }
+                    return IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: <Widget>[
+                          for (
+                            var index = 0;
+                            index < metricCards.length;
+                            index++
+                          ) ...[
+                            Expanded(child: metricCards[index]),
+                            if (index != metricCards.length - 1)
+                              const SizedBox(width: AppSpacing.sm),
+                          ],
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: MetricCard(
-                        label: 'On Duty',
-                        value: '$onDuty',
-                        color: tokens.success,
-                        backgroundColor: tokens.successSoft,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: MetricCard(
-                        label: 'Check-ins',
-                        value: '$checkedIn',
-                        color: tokens.accent,
-                        backgroundColor: tokens.warningSoft,
-                      ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ),
 
@@ -210,6 +237,7 @@ class _DashboardBody extends ConsumerWidget {
                         child: Column(
                           children: <Widget>[
                             _overviewMetricRow(
+                              context,
                               tokens,
                               sitesScheduled: overview.sitesScheduled,
                               dutiesScheduled: overview.dutiesScheduled,
@@ -243,58 +271,67 @@ class _DashboardBody extends ConsumerWidget {
               // Quick Actions
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: Row(
+                child: Column(
                   children: <Widget>[
-                    Expanded(
-                      child: _QuickActionChip(
-                        icon: Icons.assignment_turned_in_rounded,
-                        label: 'Orders',
-                        color: tokens.primary,
-                        onTap: () {
-                          ref
-                              .read(fieldOfficerDutiesSubTabProvider.notifier)
-                              .state = 0;
-                          _navigateToDuty(ref, 1);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.xs),
-                    Expanded(
+                    SizedBox(
+                      width: double.infinity,
                       child: _QuickActionChip(
                         icon: Icons.groups_2_rounded,
-                        label: 'Guards',
+                        label: 'Employee Directory',
                         color: tokens.success,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const FieldOfficerGuardsScreen(),
-                            ),
-                          );
-                        },
+                        onTap:
+                            () =>
+                                ref
+                                    .read(fieldOfficerTabIndexProvider.notifier)
+                                    .state = fieldOfficerEmployeesTabIndex,
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.xs),
-                    Expanded(
-                      child: _QuickActionChip(
-                        icon: Icons.fact_check_rounded,
-                        label: 'Attendance',
-                        color: tokens.warning,
-                        onTap: () {
-                          ref
-                              .read(fieldOfficerDutiesSubTabProvider.notifier)
-                              .state = 1;
-                          _navigateToDuty(ref, 1);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.xs),
-                    Expanded(
-                      child: _QuickActionChip(
-                        icon: Icons.edit_note_rounded,
-                        label: 'Reports',
-                        color: tokens.accent,
-                        onTap: () => _navigateToDuty(ref, 2),
-                      ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: _QuickActionChip(
+                            icon: Icons.assignment_turned_in_rounded,
+                            label: 'Orders',
+                            color: tokens.primary,
+                            onTap: () {
+                              ref
+                                  .read(
+                                    fieldOfficerDutiesSubTabProvider.notifier,
+                                  )
+                                  .state = 0;
+                              _navigateToDuty(ref, fieldOfficerDutiesTabIndex);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Expanded(
+                          child: _QuickActionChip(
+                            icon: Icons.fact_check_rounded,
+                            label: 'Attendance',
+                            color: tokens.warning,
+                            onTap: () {
+                              _navigateToDuty(
+                                ref,
+                                fieldOfficerAttendanceTabIndex,
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.xs),
+                        Expanded(
+                          child: _QuickActionChip(
+                            icon: Icons.edit_note_rounded,
+                            label: 'Reports',
+                            color: tokens.accent,
+                            onTap:
+                                () => _navigateToDuty(
+                                  ref,
+                                  fieldOfficerReportsTabIndex,
+                                ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -342,7 +379,9 @@ class _DashboardBody extends ConsumerWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: <Widget>[
-                              Row(
+                              Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 8,
                                 children: [
                                   Text(
                                     'Live Map Radar',
@@ -352,15 +391,18 @@ class _DashboardBody extends ConsumerWidget {
                                       color: tokens.ink,
                                     ),
                                   ),
-                                  const SizedBox(width: 8),
                                   Container(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 7,
                                       vertical: 2,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: tokens.glowEmerald.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                                      color: tokens.glowEmerald.withValues(
+                                        alpha: 0.15,
+                                      ),
+                                      borderRadius: BorderRadius.circular(
+                                        AppRadius.pill,
+                                      ),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -555,7 +597,8 @@ class _DashboardBody extends ConsumerWidget {
               _AttendanceCoverage(
                 data: data,
                 coverage: coverage,
-                onViewAll: () => _navigateToDuty(ref, 3),
+                onViewAll:
+                    () => _navigateToDuty(ref, fieldOfficerDutiesTabIndex),
               ),
 
               // Pending Items
@@ -577,6 +620,7 @@ class _DashboardBody extends ConsumerWidget {
 
 /// Today's Overview — 5 metric tiles in a row showing scheduling health.
 Widget _overviewMetricRow(
+  BuildContext context,
   CissThemeTokens tokens, {
   required int sitesScheduled,
   required int dutiesScheduled,
@@ -584,49 +628,65 @@ Widget _overviewMetricRow(
   required int assignedGuards,
   required int unassignedGuards,
 }) {
-  return Row(
-    children: <Widget>[
-      Expanded(
-        child: _tile(
-          label: 'Sites',
-          value: '$sitesScheduled',
-          icon: Icons.location_city_rounded,
-          color: tokens.primary,
-        ),
-      ),
-      Expanded(
-        child: _tile(
-          label: 'Duties',
-          value: '$dutiesScheduled',
-          icon: Icons.work_rounded,
-          color: tokens.accent,
-        ),
-      ),
-      Expanded(
-        child: _tile(
-          label: 'Required',
-          value: '$requiredGuards',
-          icon: Icons.people_rounded,
-          color: tokens.ink,
-        ),
-      ),
-      Expanded(
-        child: _tile(
-          label: 'Assigned',
-          value: '$assignedGuards',
-          icon: Icons.person_pin_rounded,
-          color: tokens.success,
-        ),
-      ),
-      Expanded(
-        child: _tile(
-          label: 'Unassigned',
-          value: '$unassignedGuards',
-          icon: Icons.person_off_rounded,
-          color: unassignedGuards > 0 ? tokens.danger : tokens.inkMuted,
-        ),
-      ),
-    ],
+  final largeText = MediaQuery.textScalerOf(context).scale(12) > 16;
+  final tiles = <Widget>[
+    _tile(
+      label: 'Sites',
+      value: '$sitesScheduled',
+      icon: Icons.location_city_rounded,
+      color: tokens.primary,
+      allowWrap: largeText,
+    ),
+    _tile(
+      label: 'Duties',
+      value: '$dutiesScheduled',
+      icon: Icons.work_rounded,
+      color: tokens.accent,
+      allowWrap: largeText,
+    ),
+    _tile(
+      label: 'Required',
+      value: '$requiredGuards',
+      icon: Icons.people_rounded,
+      color: tokens.ink,
+      allowWrap: largeText,
+    ),
+    _tile(
+      label: 'Assigned',
+      value: '$assignedGuards',
+      icon: Icons.person_pin_rounded,
+      color: tokens.success,
+      allowWrap: largeText,
+    ),
+    _tile(
+      label: 'Unassigned',
+      value: '$unassignedGuards',
+      icon: Icons.person_off_rounded,
+      color: unassignedGuards > 0 ? tokens.danger : tokens.inkMuted,
+      allowWrap: largeText,
+    ),
+  ];
+  return LayoutBuilder(
+    builder: (context, constraints) {
+      if (largeText) {
+        final tileWidth = (constraints.maxWidth - AppSpacing.sm) / 2;
+        return Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: <Widget>[
+            for (final tile in tiles) SizedBox(width: tileWidth, child: tile),
+          ],
+        );
+      }
+      return Row(
+        children: <Widget>[
+          for (var index = 0; index < tiles.length; index++) ...[
+            Expanded(child: tiles[index]),
+            if (index != tiles.length - 1) const SizedBox(width: AppSpacing.xs),
+          ],
+        ],
+      );
+    },
   );
 }
 
@@ -635,31 +695,33 @@ Widget _tile({
   required String value,
   required IconData icon,
   required Color color,
+  required bool allowWrap,
 }) {
   return Column(
     mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        Icon(icon, color: color, size: 18),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            color: color,
-          ),
+    children: <Widget>[
+      Icon(icon, color: color, size: 18),
+      const SizedBox(height: 4),
+      Text(
+        value,
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w800,
+          color: color,
         ),
-        Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: color.withValues(alpha: 0.7),
-          ),
+      ),
+      Text(
+        label,
+        maxLines: allowWrap ? 2 : 1,
+        overflow: allowWrap ? TextOverflow.clip : TextOverflow.ellipsis,
+        softWrap: true,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: color.withValues(alpha: 0.7),
         ),
-      ],
+      ),
+    ],
   );
 }
 
@@ -812,8 +874,8 @@ class _QuickActionChip extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                softWrap: true,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -858,7 +920,14 @@ class _AttendanceCoverage extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: <Widget>[
-              Text('Attendance Coverage', style: AppTypography.title(context)),
+              Flexible(
+                child: Text(
+                  'Attendance Coverage',
+                  style: AppTypography.title(context),
+                  softWrap: true,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,

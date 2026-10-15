@@ -69,7 +69,8 @@ class NotificationInboxScreen extends ConsumerWidget {
           ref.read(guardTabIndexProvider.notifier).state = 1;
           Navigator.of(context).pop();
         } else {
-          ref.read(fieldOfficerTabIndexProvider.notifier).state = 1;
+          ref.read(fieldOfficerTabIndexProvider.notifier).state =
+              fieldOfficerDutiesTabIndex;
           ref.read(fieldOfficerDutiesSubTabProvider.notifier).state = 0;
           Navigator.of(context).pop();
         }
@@ -79,14 +80,15 @@ class NotificationInboxScreen extends ConsumerWidget {
           ref.read(guardTabIndexProvider.notifier).state = 1;
           Navigator.of(context).pop();
         } else {
-          ref.read(fieldOfficerTabIndexProvider.notifier).state = 1;
-          ref.read(fieldOfficerDutiesSubTabProvider.notifier).state = 1;
+          ref.read(fieldOfficerTabIndexProvider.notifier).state =
+              fieldOfficerAttendanceTabIndex;
           Navigator.of(context).pop();
         }
         break;
       case 'report_review':
         if (!isGuard) {
-          ref.read(fieldOfficerTabIndexProvider.notifier).state = 2;
+          ref.read(fieldOfficerTabIndexProvider.notifier).state =
+              fieldOfficerReportsTabIndex;
           Navigator.of(context).pop();
         }
         break;
@@ -211,6 +213,12 @@ class NotificationInboxScreen extends ConsumerWidget {
                         )
                         : null,
                 onTap: () {
+                  if (type.startsWith('duty_')) {
+                    ref
+                        .read(notificationServiceProvider)
+                        .navigateFromNotification(n);
+                    return;
+                  }
                   if (!isRead) {
                     ref
                         .read(notificationServiceProvider)

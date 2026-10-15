@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../../core/models/guard_profile.dart';
@@ -11,6 +12,7 @@ import '../../../../../shared/widgets/security_settings_card.dart';
 import '../../../../../shared/widgets/document_list_tile.dart';
 import '../../../../../shared/widgets/compliance_tag.dart';
 import '../../../../../shared/utils/initials.dart';
+import '../../../shared/device_identity_row.dart';
 import '../widgets/guard_portal_widgets.dart';
 import 'guard_aadhaar_correction_screen.dart';
 import 'guard_document_upload_screen.dart';
@@ -50,6 +52,14 @@ class GuardProfileScreen extends ConsumerWidget {
           children: <Widget>[
             // ── Hero panel ─────────────────────────────────────────────
             _ProfileHero(profile: profile),
+            if (profile.categoryLabel != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  profile.categoryLabel!,
+                  style: AppTypography.label(context),
+                ),
+              ),
             const SizedBox(height: AppSpacing.lg),
 
             // ── Personal information ───────────────────────────────────
@@ -127,27 +137,31 @@ class GuardProfileScreen extends ConsumerWidget {
                 children: [
                   ComplianceTag(
                     label: 'Aadhaar Card',
-                    status: profile.canUploadAadhaar
-                        ? ComplianceStatus.missing
-                        : ComplianceStatus.verified,
+                    status:
+                        profile.canUploadAadhaar
+                            ? ComplianceStatus.missing
+                            : ComplianceStatus.verified,
                   ),
                   ComplianceTag(
                     label: 'Identity Proof',
-                    status: profile.canUploadIdentity
-                        ? ComplianceStatus.missing
-                        : ComplianceStatus.verified,
+                    status:
+                        profile.canUploadIdentity
+                            ? ComplianceStatus.missing
+                            : ComplianceStatus.verified,
                   ),
                   ComplianceTag(
                     label: 'Address Proof',
-                    status: profile.canUploadAddress
-                        ? ComplianceStatus.missing
-                        : ComplianceStatus.verified,
+                    status:
+                        profile.canUploadAddress
+                            ? ComplianceStatus.missing
+                            : ComplianceStatus.verified,
                   ),
                   ComplianceTag(
                     label: 'Bank Details',
-                    status: (profile.bankAccountNumber ?? '').isNotEmpty
-                        ? ComplianceStatus.verified
-                        : ComplianceStatus.missing,
+                    status:
+                        (profile.bankAccountNumber ?? '').isNotEmpty
+                            ? ComplianceStatus.verified
+                            : ComplianceStatus.missing,
                   ),
                 ],
               ),
@@ -162,14 +176,15 @@ class GuardProfileScreen extends ConsumerWidget {
                 child: ListTile(
                   leading: const Icon(Icons.upload_file_rounded),
                   title: const Text('Upload missing documents'),
-                  subtitle: const Text('Add Aadhaar, identity or address proof'),
+                  subtitle: const Text(
+                    'Add Aadhaar, identity or address proof',
+                  ),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () async {
                     await Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (_) => GuardDocumentUploadScreen(
-                          profile: profile,
-                        ),
+                        builder:
+                            (_) => GuardDocumentUploadScreen(profile: profile),
                       ),
                     );
                     if (context.mounted) ref.invalidate(guardProfileProvider);
@@ -181,7 +196,9 @@ class GuardProfileScreen extends ConsumerWidget {
               child: ListTile(
                 leading: const Icon(Icons.published_with_changes_rounded),
                 title: const Text('Request Aadhaar correction'),
-                subtitle: const Text('Notify us about an Aadhaar detail to fix'),
+                subtitle: const Text(
+                  'Notify us about an Aadhaar detail to fix',
+                ),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () async {
                   await Navigator.of(context).push(
@@ -229,6 +246,8 @@ class GuardProfileScreen extends ConsumerWidget {
 
             // ── Security settings ──────────────────────────────────────
             const SecuritySettingsCard(),
+            const SizedBox(height: AppSpacing.sm),
+            const DeviceIdentityRow(),
             const SizedBox(height: AppSpacing.sm),
             ModernCard(
               child: ListTile(
@@ -385,7 +404,7 @@ class _ProfileHero extends StatelessWidget {
                 backgroundImage:
                     (profile.profilePhotoUrl != null &&
                             profile.profilePhotoUrl!.isNotEmpty)
-                        ? NetworkImage(profile.profilePhotoUrl!)
+                        ? CachedNetworkImageProvider(profile.profilePhotoUrl!)
                         : null,
                 child:
                     (profile.profilePhotoUrl == null ||

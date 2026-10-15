@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_mode_controller.dart';
+import '../core/i18n/app_language.dart';
+import '../core/i18n/app_strings.dart';
 import '../core/update/app_update_gate.dart';
 
 class CissMobileApp extends ConsumerWidget {
@@ -14,6 +16,7 @@ class CissMobileApp extends ConsumerWidget {
     final themeMode = ref.watch(
       appSettingsControllerProvider.select((s) => s.themeMode),
     );
+    final language = ref.watch(appLanguageControllerProvider);
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
       title: 'CISS Workforce',
@@ -23,8 +26,10 @@ class CissMobileApp extends ConsumerWidget {
       themeMode: themeMode,
       routerConfig: router,
       builder:
-          (context, child) =>
-              AppUpdateGate(child: child ?? const SizedBox.shrink()),
+          (context, child) => AppStringsScope(
+            strings: AppStrings.forLanguage(language),
+            child: AppUpdateGate(child: child ?? const SizedBox.shrink()),
+          ),
     );
   }
 }

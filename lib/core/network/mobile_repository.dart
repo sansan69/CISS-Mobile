@@ -8,7 +8,9 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../attendance/attendance_validation.dart';
+import '../attendance/attendance_pairing.dart';
 import '../models/app_role.dart';
+import '../models/duty_models.dart';
 import '../models/attendance_models.dart';
 import '../models/auth_session.dart';
 import '../models/guard_profile.dart';
@@ -22,7 +24,13 @@ import '../models/training_models.dart';
 import '../auth/guard_login_identifier.dart';
 import '../cache/hive_read_cache_store.dart';
 import '../cache/read_cache.dart';
-import 'api_client.dart';
+import '../offline/willingness_queue.dart' show willingnessOrigin;
+import 'api_client.dart'
+    show
+        ApiClient,
+        kApiRequestIdentityGuard,
+        kApiRequestIdentityChanged,
+        kSkipApiAuth;
 import 'authenticated_identity_mismatch_error.dart';
 import 'authoritative_session_error.dart';
 import 'auth_repository.dart';
@@ -37,17 +45,36 @@ class MobileRepository implements AuthRepository {
     this._regionService, {
     GuardPinVerificationAdapter? guardPinVerificationAdapter,
     ReadCache? readCache,
+    Future<String?> Function()? deviceIdProvider,
   }) : _guardPinVerificationAdapter =
            guardPinVerificationAdapter ?? GuardPinVerificationAdapter(),
-       _readCache =
-           readCache ??
-           ReadCache(store: HiveReadCacheStore());
+       _readCache = readCache ?? ReadCache(store: HiveReadCacheStore()),
+       _deviceIdProvider = deviceIdProvider;
 
   final ApiClient _apiClient;
   final FirebaseAuth _auth;
   final RegionService _regionService;
   final GuardPinVerificationAdapter _guardPinVerificationAdapter;
   final ReadCache _readCache;
+
+  /// Supplies the handset identifier for writes that must say which device
+  /// made them. Optional so an unconfigured repository (and every unit test)
+  /// keeps working.
+  final Future<String?> Function()? _deviceIdProvider;
+
+  /// `X-Device-Id` for an attendance or duty-response write. A device whose id
+  /// cannot be read simply omits the header.
+  Future<Map<String, String>> _deviceHeaders() async {
+    try {
+      final id = (await _deviceIdProvider?.call())?.trim() ?? '';
+      return id.isEmpty ? const <String, String>{} : <String, String>{
+        'X-Device-Id': id,
+      };
+    } catch (error) {
+      debugPrint('Device id unavailable for this request: $error');
+      return const <String, String>{};
+    }
+  }
 
   ApiClient get apiClient => _apiClient;
   User? get currentUser => _auth.currentUser;
@@ -169,8 +196,9 @@ class MobileRepository implements AuthRepository {
   }
 
   String _readCacheKey(String path, Map<String, dynamic>? queryParameters) {
-    final sorted = (queryParameters ?? <String, dynamic>{}).entries.toList()
-      ..sort((a, b) => a.key.compareTo(b.key));
+    final sorted =
+        (queryParameters ?? <String, dynamic>{}).entries.toList()
+          ..sort((a, b) => a.key.compareTo(b.key));
     final qs = sorted.map((e) => '${e.key}=${e.value}').join('&');
     final region = _regionService.activeRegion?.code ?? 'KL';
     return '$region|$path|$qs';
@@ -182,8 +210,7 @@ class MobileRepository implements AuthRepository {
     bool authenticated = true,
   }) async {
     final cacheable = _cacheableReadPaths.contains(path);
-    final cacheKey =
-        cacheable ? _readCacheKey(path, queryParameters) : null;
+    final cacheKey = cacheable ? _readCacheKey(path, queryParameters) : null;
     try {
       final response = await _apiClient.dio.get<dynamic>(
         path,
@@ -232,14 +259,24 @@ class MobileRepository implements AuthRepository {
     String path,
     Map<String, dynamic> body, {
     bool authenticated = true,
+    bool identifyDevice = false,
   }) async {
     try {
+      final deviceHeaders =
+          identifyDevice
+              ? await _deviceHeaders()
+              : const <String, String>{};
       final response = await _apiClient.dio.post<dynamic>(
         path,
         data: body,
         options:
             authenticated
-                ? Options(headers: await _authHeaders())
+                ? Options(
+                  headers: <String, String>{
+                    ...await _authHeaders(),
+                    ...deviceHeaders,
+                  },
+                )
                 : Options(extra: <String, dynamic>{kSkipApiAuth: true}),
       );
       final data = response.data;
@@ -354,10 +391,14 @@ class MobileRepository implements AuthRepository {
     }
 
     final data = await _getAuthoritativeSessionJson();
-    debugPrint('_resolveSessionFromBackend: received data=$data, user.uid=${user.uid}');
+    debugPrint(
+      '_resolveSessionFromBackend: received data=$data, user.uid=${user.uid}',
+    );
     final role = _roleFromWire(data['role']);
     if (role == null) {
-      debugPrint('_resolveSessionFromBackend: _roleFromWire returned null for role=${data['role']}');
+      debugPrint(
+        '_resolveSessionFromBackend: _roleFromWire returned null for role=${data['role']}',
+      );
       return null;
     }
 
@@ -967,6 +1008,7 @@ class MobileRepository implements AuthRepository {
       nextShiftLabel: nextShift?['shiftLabel'] as String?,
       nextShiftSiteName: nextShift?['siteName'] as String?,
       nextShiftDate: nextShift?['date'] as String?,
+      nextShiftUnavailable: data['nextShiftUnavailable'] == true,
       recentAttendance: recentAttendance,
     );
   }
@@ -1210,6 +1252,9 @@ class MobileRepository implements AuthRepository {
       payload,
       authenticated:
           !(verificationToken is String && verificationToken.trim().isNotEmpty),
+      // The server records which handset produced the punch so a shared login
+      // or a swapped phone can be spotted on the record.
+      identifyDevice: true,
     );
   }
 
@@ -1498,6 +1543,141 @@ class MobileRepository implements AuthRepository {
     );
   }
 
+  String get dutyApiBaseUrl => _apiClient.dio.options.baseUrl;
+
+  /// Duties retain structured HTTP errors for retry/CAS decisions and have no
+  /// Firestore or stale-cache fallback.
+  Future<Map<String, dynamic>> _dutyJson(
+    String path, {
+    String method = 'GET',
+    Map<String, dynamic>? body,
+    Map<String, dynamic>? query,
+    Future<bool> Function()? identityGuard,
+    bool identifyDevice = false,
+  }) async {
+    final result = await _apiClient.dio.request<dynamic>(
+      path,
+      data: body,
+      queryParameters: query,
+      options: Options(
+        method: method,
+        headers:
+            identityGuard == null || identifyDevice
+                ? <String, String>{
+                  if (identityGuard == null) ...await _authHeaders(),
+                  if (identifyDevice) ...await _deviceHeaders(),
+                }
+                : null,
+        extra:
+            identityGuard == null
+                ? null
+                : <String, dynamic>{kApiRequestIdentityGuard: identityGuard},
+      ),
+    );
+    if (result.data is! Map) {
+      throw const FormatException('Invalid duty response');
+    }
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  Future<List<GuardDuty>> fetchGuardDuties() async {
+    final data = await _dutyJson('/api/guard/duties');
+    return (data['duties'] as List? ?? [])
+        .whereType<Map>()
+        .map((e) => GuardDuty.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<WillingnessReceipt> setDutyWillingness({
+    required String workOrderId,
+    required WillingnessStatus response,
+    required String clientRequestId,
+    required int expectedVersion,
+    String? expectedOwnerUid,
+    String? expectedApiBaseUrl,
+    Future<bool> Function()? isCurrentOperation,
+  }) async {
+    Future<bool> Function()? identityGuard;
+    if (expectedOwnerUid != null && expectedApiBaseUrl != null) {
+      final expectedOrigin = willingnessOrigin(expectedApiBaseUrl);
+      identityGuard =
+          () async =>
+              currentUser?.uid == expectedOwnerUid &&
+              willingnessOrigin(dutyApiBaseUrl) == expectedOrigin &&
+              (isCurrentOperation == null || await isCurrentOperation());
+      if (!await identityGuard()) {
+        throw DioException(
+          requestOptions: RequestOptions(
+            path: '/api/guard/duties/$workOrderId/willingness',
+          ),
+          type: DioExceptionType.cancel,
+          message: kApiRequestIdentityChanged,
+        );
+      }
+    }
+    return WillingnessReceipt.fromJson(
+      await _dutyJson(
+        '/api/guard/duties/${Uri.encodeComponent(workOrderId)}/willingness',
+        method: 'POST',
+        body: {
+          'response': response.name,
+          'clientRequestId': clientRequestId,
+          'expectedVersion': expectedVersion,
+        },
+        identityGuard: identityGuard,
+        identifyDevice: true,
+      ),
+    );
+  }
+
+  Future<WorkOrderWillingness> fetchWorkOrderWillingness(
+    String id,
+  ) async => WorkOrderWillingness.fromJson(
+    await _dutyJson(
+      '/api/field-officer/work-orders/${Uri.encodeComponent(id)}/willingness',
+    ),
+  );
+  Future<List<GuardAssignment>> fetchGuardAssignments({
+    String? from,
+    String? to,
+  }) async {
+    final data = await _dutyJson(
+      '/api/field-officer/assignments',
+      query: {if (from != null) 'from': from, if (to != null) 'to': to},
+    );
+    return (data['assignments'] as List? ?? [])
+        .whereType<Map>()
+        .map((e) => GuardAssignment(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<GuardAssignment> createGuardAssignment(
+    Map<String, dynamic> body,
+  ) async {
+    final data = await _dutyJson(
+      '/api/field-officer/assignments',
+      method: 'POST',
+      body: body,
+    );
+    return GuardAssignment(
+      Map<String, dynamic>.from(data['assignment'] as Map),
+    );
+  }
+
+  Future<GuardAssignment> updateGuardAssignment(
+    String id,
+    Map<String, dynamic> body,
+  ) async {
+    final data = await _dutyJson(
+      '/api/field-officer/assignments/${Uri.encodeComponent(id)}',
+      method: 'PATCH',
+      body: body,
+    );
+    return GuardAssignment(
+      Map<String, dynamic>.from(data['assignment'] as Map),
+    );
+  }
+
   Future<List<WorkOrderModel>> fetchFieldOfficerWorkOrders() async {
     final data = await _getJson('/api/field-officer/work-orders');
     final rows = data['workOrders'] as List<dynamic>? ?? const <dynamic>[];
@@ -1526,13 +1706,16 @@ class MobileRepository implements AuthRepository {
 
   Future<List<GuardProfileModel>> fetchFieldOfficerGuards({
     String? district,
+    bool includeInactive = false,
   }) async {
+    final queryParameters = <String, dynamic>{
+      if (district != null && district.trim().isNotEmpty)
+        'district': district.trim(),
+      if (includeInactive) 'includeInactive': true,
+    };
     final data = await _getJson(
       '/api/field-officer/guards',
-      queryParameters:
-          (district != null && district.trim().isNotEmpty)
-              ? <String, dynamic>{'district': district.trim()}
-              : null,
+      queryParameters: queryParameters.isEmpty ? null : queryParameters,
     );
     final guards = data['guards'] as List<dynamic>? ?? const <dynamic>[];
     return guards
@@ -1619,6 +1802,7 @@ class MobileRepository implements AuthRepository {
     return entries
         .whereType<Map<String, dynamic>>()
         .map(FieldOfficerAttendanceEntry.fromJson)
+        .where((entry) => entry.hasRecordedPunch)
         .toList();
   }
 
@@ -1655,7 +1839,64 @@ class MobileRepository implements AuthRepository {
     return entries
         .whereType<Map<String, dynamic>>()
         .map(FieldOfficerAttendanceEntry.fromJson)
+        .where((entry) => entry.hasRecordedPunch)
         .toList();
+  }
+
+  /// Attendance rows for one *business date*, including the previous calendar
+  /// date.
+  ///
+  /// A 20:00 → 06:00 duty is filed under the day it started but its check-out
+  /// is written on the next date, so asking for one date alone yields an
+  /// unpaired punch and a guard who reads as off duty at midnight. The
+  /// aggregated range endpoint answers this in a single request; a deployment
+  /// without it falls back to one call per date, merged by row id so a punch
+  /// returned by both is counted once.
+  Future<List<FieldOfficerAttendanceEntry>> fetchGuardAttendanceForBusinessDate({
+    required DateTime businessDate,
+    String? district,
+    int lookbackDays = 1,
+  }) async {
+    final day = DateTime(
+      businessDate.year,
+      businessDate.month,
+      businessDate.day,
+    );
+    String key(DateTime value) =>
+        '${value.year.toString().padLeft(4, '0')}-'
+        '${value.month.toString().padLeft(2, '0')}-'
+        '${value.day.toString().padLeft(2, '0')}';
+
+    try {
+      return await fetchFieldOfficerGuardAttendanceRange(
+        start: day.subtract(Duration(days: lookbackDays)),
+        end: day,
+        district: district,
+      );
+    } catch (error) {
+      if (!_isRouteUnavailable(error)) rethrow;
+    }
+
+    final batches = <List<FieldOfficerAttendanceEntry>>[];
+    for (var offset = lookbackDays; offset >= 0; offset--) {
+      batches.add(
+        await fetchFieldOfficerGuardAttendance(
+          date: key(day.subtract(Duration(days: offset))),
+          district: district,
+        ),
+      );
+    }
+    return mergeAttendanceRows(batches);
+  }
+
+  /// True when a failure means "this route is not on this deployment" rather
+  /// than "this request failed", so the caller may fall back to an older route.
+  static bool _isRouteUnavailable(Object error) {
+    if (error is DioException) return error.response?.statusCode == 404;
+    // `_getJson` rewrites an unexpected status into the parsed API message,
+    // which renders a 404 as a "... not found" sentence. The guard is confined
+    // to the fallback above, so a data-level miss only costs the extra request.
+    return error.toString().toLowerCase().contains('not found');
   }
 
   Future<List<VisitReportModel>> fetchVisitReports() async {

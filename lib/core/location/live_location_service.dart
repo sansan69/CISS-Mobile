@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -137,25 +138,46 @@ class LiveLocationService {
 
   static const String collection = 'guardLocations';
 
+  /// Firestore accepts at most 30 values in one `in` filter.
+  static const int maxScopeValues = 30;
+
   // ── Read ───────────────────────────────────────────────────────────────────
 
   /// Stream all guards currently clocked IN. Used by FO attendance tab.
-  Stream<List<GuardLocationData>> streamActiveLocations({String? district}) {
+  ///
+  /// [districts] is the field officer's own district scope. It is not optional
+  /// in practice: the `guardLocations` rule authorises an officer with
+  /// `resource.data.district in token.assignedDistricts`, and a rules check is
+  /// not a filter — an unscoped list query is refused outright rather than
+  /// trimmed, so the query has to name the districts itself.
+  Stream<List<GuardLocationData>> streamActiveLocations({
+    String? district,
+    List<String> districts = const <String>[],
+  }) {
     Query<Map<String, dynamic>> query = _firestore
         .collection(collection)
         .where('status', isEqualTo: 'In');
 
-    if (district != null && district.trim().isNotEmpty) {
-      query = query.where('district', isEqualTo: district.trim());
+    final scope = liveLocationScope(districts: districts, district: district);
+    switch (scope.kind) {
+      case LiveLocationScopeKind.single:
+        query = query.where('district', isEqualTo: scope.values.single);
+      case LiveLocationScopeKind.many:
+        query = query.where('district', whereIn: scope.values);
+      case LiveLocationScopeKind.everyDistrict:
+        break;
     }
 
-    return query.snapshots().map(
-      (snap) =>
-          snap.docs
-              .map((d) => GuardLocationData.tryFromFirestore(d))
-              .whereType<GuardLocationData>()
-              .toList(),
-    );
+    return query
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs
+                  .map((d) => GuardLocationData.tryFromFirestore(d))
+                  .whereType<GuardLocationData>()
+                  .toList(),
+        )
+        .handleError(_reportDenied(scope));
   }
 
   /// Stream a single guard's location. Used by the guard detail screen.
@@ -172,13 +194,20 @@ class LiveLocationService {
   Future<List<GuardLocationData>> fetchActiveLocations({
     String? district,
     String? clientName,
+    List<String> districts = const <String>[],
   }) async {
     Query<Map<String, dynamic>> query = _firestore
         .collection(collection)
         .where('status', isEqualTo: 'In');
 
-    if (district != null && district.trim().isNotEmpty) {
-      query = query.where('district', isEqualTo: district.trim());
+    final scope = liveLocationScope(districts: districts, district: district);
+    switch (scope.kind) {
+      case LiveLocationScopeKind.single:
+        query = query.where('district', isEqualTo: scope.values.single);
+      case LiveLocationScopeKind.many:
+        query = query.where('district', whereIn: scope.values);
+      case LiveLocationScopeKind.everyDistrict:
+        break;
     }
     if (clientName != null && clientName.trim().isNotEmpty) {
       query = query.where('clientName', isEqualTo: clientName.trim());
@@ -187,6 +216,56 @@ class LiveLocationService {
     final snap = await query.get();
     return snap.docs.map((d) => GuardLocationData.fromFirestore(d)).toList();
   }
+
+  /// Logs a refused read with the scope that was attempted, because the
+  /// difference between "no guards are on duty" and "this read was denied" is
+  /// invisible in the UI otherwise.
+  void Function(Object error) _reportDenied(LiveLocationScope scope) =>
+      (Object error) => debugPrint(
+        'Live locations read failed (scope ${scope.kind.name}'
+        '${scope.values.isEmpty ? '' : ' ${scope.values.join(', ')}'}): $error',
+      );
+}
+
+enum LiveLocationScopeKind { everyDistrict, single, many }
+
+class LiveLocationScope {
+  const LiveLocationScope(this.kind, this.values);
+
+  final LiveLocationScopeKind kind;
+  final List<String> values;
+}
+
+/// The district constraint a live-location read has to carry.
+///
+/// An explicit [district] wins, then the officer's [districts]; anything else
+/// reads every district, which only staff roles are allowed to do.
+LiveLocationScope liveLocationScope({
+  List<String> districts = const <String>[],
+  String? district,
+}) {
+  final requested = district?.trim() ?? '';
+  // A caller that names one district wants that district, not that district
+  // plus everything else the officer is assigned to.
+  final values = <String>[
+    if (requested.isNotEmpty) requested,
+    if (requested.isEmpty)
+      for (final value in districts)
+        if (value.trim().isNotEmpty) value.trim(),
+  ];
+  if (values.isEmpty) {
+    return const LiveLocationScope(
+      LiveLocationScopeKind.everyDistrict,
+      <String>[],
+    );
+  }
+  if (values.length == 1) {
+    return LiveLocationScope(LiveLocationScopeKind.single, values);
+  }
+  return LiveLocationScope(
+    LiveLocationScopeKind.many,
+    values.take(LiveLocationService.maxScopeValues).toList(growable: false),
+  );
 }
 
 final liveLocationServiceProvider = Provider<LiveLocationService>(

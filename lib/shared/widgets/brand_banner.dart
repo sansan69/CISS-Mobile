@@ -153,15 +153,22 @@ class CissLogoBadge extends StatelessWidget {
 
 /// Compact logo + company-name lockup for hero surfaces.
 class CissBrandMark extends StatelessWidget {
-  const CissBrandMark({super.key, this.inverse = false, this.compact = false});
+  const CissBrandMark({
+    super.key,
+    this.inverse = false,
+    this.compact = false,
+    this.foregroundColor,
+  });
 
   final bool inverse;
   final bool compact;
+  final Color? foregroundColor;
 
   @override
   Widget build(BuildContext context) {
     final color =
-        inverse ? Colors.white : CissThemeTokens.of(context).primaryStrong;
+        foregroundColor ??
+        (inverse ? Colors.white : CissThemeTokens.of(context).primaryStrong);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[

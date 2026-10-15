@@ -41,7 +41,8 @@ android {
     defaultConfig {
         applicationId = "co.in.ciss.ciss_mobile"
         minSdk = 24
-        targetSdk = 34
+        // Android 15/16 era target, matching CISS-AMS and current Play policy.
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -62,6 +63,15 @@ android {
             if (keystoreFile.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }
+            // Ship shrunk, obfuscated Dart/Java with a separate symbol file so
+            // Crashlytics stack traces stay de-minifiable by us and not by a
+            // repackager. Matches the hardening CISS-AMS already ships.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }

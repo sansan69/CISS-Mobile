@@ -85,7 +85,7 @@ jobs:
       - name: Build signed release artifacts
         run: |
           flutter build appbundle --release
-          flutter build apk --release
+          flutter build apk --release --obfuscate --split-debug-info=build/symbols
 
       - name: Verify production certificate and checksums
         shell: bash

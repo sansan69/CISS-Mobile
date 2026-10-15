@@ -63,12 +63,15 @@ class ComplianceTag extends StatelessWidget {
         children: [
           Icon(icon, size: compact ? 12 : 14, color: fgColor),
           const SizedBox(width: 4),
-          Text(
-            compact ? label : '$label: $statusText',
-            style: TextStyle(
-              fontSize: compact ? 11 : 12,
-              fontWeight: FontWeight.w600,
-              color: fgColor,
+          Flexible(
+            child: Text(
+              compact ? label : '$label: $statusText',
+              softWrap: true,
+              style: TextStyle(
+                fontSize: compact ? 11 : 12,
+                fontWeight: FontWeight.w600,
+                color: fgColor,
+              ),
             ),
           ),
         ],

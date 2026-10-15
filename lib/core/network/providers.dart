@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'api_client.dart';
 import 'auth_repository.dart';
 import 'mobile_repository.dart';
+import '../device/device_identity.dart';
 import '../region/region_service.dart';
 import '../settings/remote_config_provider.dart';
 
@@ -45,6 +46,7 @@ final Provider<MobileRepository> mobileRepositoryProvider =
         ref.read(apiClientProvider),
         ref.read(firebaseAuthProvider),
         ref.read(regionServiceProvider),
+        deviceIdProvider: () => ref.read(deviceIdentityProvider).id(),
       );
     });
 

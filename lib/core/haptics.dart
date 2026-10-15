@@ -1,73 +1,83 @@
-import 'dart:io' show Platform;
+import 'haptics/haptic_event.dart';
+import 'haptics/haptic_platform.dart';
+import 'haptics/haptics_engine.dart';
 
-import 'package:flutter/services.dart';
-
-/// Provides standard haptic feedback patterns across the app.
+/// Semantic haptic feedback for the app.
 ///
-/// Usage:
+/// Prefer the intent-named methods ([selection], [confirm], [reject]) over
+/// the raw impact levels ([light], [medium], [heavy]). Works on Android and
+/// iOS and no-ops safely where no haptics motor is present.
+///
 /// ```dart
-/// Haptics.light();   // subtle feedback (button press, selection)
-/// Haptics.medium();  // moderate feedback (navigation, confirmation)
-/// Haptics.heavy();   // strong feedback (sign out, critical action)
+/// Haptics.selection(); // a value moved past a step
+/// Haptics.confirm();   // action succeeded
+/// Haptics.reject();    // action failed
 /// ```
 class Haptics {
   Haptics._();
 
-  /// Guards haptic calls to only execute on Android, since iOS uses a
-  /// different haptic API (via Cupertino) and calling `HapticFeedback` on
-  /// iOS is a no-op — but this check keeps intent explicit.
-  static bool get _isAndroid => Platform.isAndroid;
+  /// Swappable engine. Tests replace this with a recording platform.
+  static HapticsEngine engine = const HapticsEngine(FlutterHapticPlatform());
 
-  // ── Core impact levels ─────────────────────────────────────────────────
+  /// Whether haptics are enabled. Wire this to the OS/app preference so a
+  /// user preference is honoured without threading it through every call.
+  static bool enabled = true;
 
-  /// Subtle tap — use for button presses, chip selection, tab switches.
-  static void light() {
-    if (!_isAndroid) return;
-    HapticFeedback.lightImpact();
+  /// Fires a semantic haptic event. No-op when [enabled] is false.
+  static Future<void> emit(HapticEvent event) {
+    if (!enabled) return Future<void>.value();
+    return engine.emit(event);
   }
 
-  /// Moderate tap — use for navigation, pull-to-refresh, form submission.
-  static void medium() {
-    if (!_isAndroid) return;
-    HapticFeedback.mediumImpact();
-  }
+  // ── Core impact levels ────────────────────────────────────────────────
 
-  /// Strong tap — use for destructive actions, sign out, critical confirmations.
-  static void heavy() {
-    if (!_isAndroid) return;
-    HapticFeedback.heavyImpact();
-  }
+  /// Subtle tap — button presses, low-importance interactions.
+  static Future<void> light() => emit(HapticEvent.light);
 
-  /// Click selection — use for segmented control changes, toggle switches.
-  static void selection() {
-    if (!_isAndroid) return;
-    HapticFeedback.selectionClick();
-  }
+  /// Moderate tap — ordinary confirmations and navigation.
+  static Future<void> medium() => emit(HapticEvent.medium);
 
-  // ── Semantic aliases ───────────────────────────────────────────────────
+  /// Strong tap — destructive actions, sign out, critical confirmations.
+  static Future<void> heavy() => emit(HapticEvent.heavy);
 
-  /// Heavy impact for successful operations (e.g. login, QR scan, form submit).
-  static void success() {
-    heavy();
-  }
+  /// Selection click — segmented controls, toggles, step changes.
+  static Future<void> selection() => emit(HapticEvent.selection);
 
-  /// Heavy impact for error states (e.g. failed login, validation error).
-  static void error() {
-    heavy();
-  }
+  // ── Semantic aliases ──────────────────────────────────────────────────
 
-  /// Heavy impact for long-press / context-menu activation.
-  static void longPress() {
-    heavy();
-  }
+  /// Successful outcome (login, QR scan, form submit).
+  static Future<void> success() => emit(HapticEvent.confirm);
 
-  /// Selection click for swipe gestures (e.g. edge-swipe back).
-  static void swipe() {
-    selection();
-  }
+  /// Failed/rejected action (failed login, validation error).
+  static Future<void> error() => emit(HapticEvent.reject);
 
-  /// Light impact for virtual keyboard key-presses.
-  static void keyboardTap() {
-    light();
-  }
+  /// Long-press / context-menu activation.
+  static Future<void> longPress() => emit(HapticEvent.heavy);
+
+  /// Swipe gestures (e.g. edge-swipe back).
+  static Future<void> swipe() => emit(HapticEvent.selection);
+
+  /// Virtual keyboard key-press.
+  static Future<void> keyboardTap() => emit(HapticEvent.light);
+
+  // ── Extended vocabulary ───────────────────────────────────────────────
+
+  /// A discrete increment tick (pickers, steppers, count-ups).
+  static Future<void> tick() => emit(HapticEvent.tick);
+
+  /// A toggle or segmented-control state change.
+  static Future<void> toggle() => emit(HapticEvent.toggle);
+
+  /// A successful outcome.
+  static Future<void> confirm() => emit(HapticEvent.confirm);
+
+  /// A failed or rejected action.
+  static Future<void> reject() => emit(HapticEvent.reject);
+
+  /// A caution that is neither success nor failure.
+  static Future<void> warning() => emit(HapticEvent.warning);
+
+  /// Attention vibration. Reserved for events that must be noticed; never
+  /// for discrete UI feedback.
+  static Future<void> vibrate() => emit(HapticEvent.vibrate);
 }

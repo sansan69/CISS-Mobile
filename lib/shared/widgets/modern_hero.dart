@@ -24,6 +24,7 @@ class ModernHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
+    final foreground = Theme.of(context).colorScheme.onPrimary;
 
     return Container(
       width: double.infinity,
@@ -35,7 +36,34 @@ class ModernHero extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const CissBrandMark(inverse: true, compact: true),
+          LayoutBuilder(
+            builder:
+                (context, constraints) => Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: constraints.maxWidth,
+                      ),
+                      child: CissBrandMark(
+                        inverse: true,
+                        compact: true,
+                        foregroundColor: foreground,
+                      ),
+                    ),
+                    if (trailing != null)
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: constraints.maxWidth,
+                        ),
+                        child: trailing!,
+                      ),
+                  ],
+                ),
+          ),
           const SizedBox(height: 20),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -50,16 +78,18 @@ class ModernHero extends StatelessWidget {
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.3,
-                        color: Colors.white.withValues(alpha: 0.8),
+                        color: foreground,
                       ),
                     ),
                     const SizedBox(height: 6),
                     Text(
                       title,
-                      style: const TextStyle(
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                        color: foreground,
                         letterSpacing: -0.3,
                         height: 1.2,
                       ),
@@ -68,10 +98,11 @@ class ModernHero extends StatelessWidget {
                       const SizedBox(height: 6),
                       Text(
                         subtitle!,
+                        softWrap: true,
                         style: TextStyle(
                           fontSize: 13,
                           height: 1.4,
-                          color: Colors.white.withValues(alpha: 0.85),
+                          color: foreground,
                         ),
                       ),
                     ],
@@ -84,7 +115,7 @@ class ModernHero extends StatelessWidget {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.15),
+                    color: foreground.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(24),
                   ),
                   alignment: Alignment.center,
@@ -92,15 +123,14 @@ class ModernHero extends StatelessWidget {
                       avatarChild ??
                       Text(
                         avatarText ?? '',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
-                          color: Colors.white,
+                          color: foreground,
                         ),
                       ),
                 ),
               ],
-              if (trailing != null) trailing!,
             ],
           ),
         ],

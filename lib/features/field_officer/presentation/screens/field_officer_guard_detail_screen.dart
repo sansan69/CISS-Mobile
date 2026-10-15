@@ -10,6 +10,8 @@ import '../../../../../core/location/live_location_service.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/modern_card.dart';
+import '../../../shared/resolved_address.dart';
+import '../../../shared/navigate_button.dart';
 import 'guard_attendance_logs_screen.dart';
 import 'guard_day_timeline_screen.dart';
 
@@ -745,10 +747,14 @@ class _AttendanceDetailsCard extends StatelessWidget {
                   entry.attendanceLatitude,
                   entry.attendanceLongitude,
                 ),
+                latitude: entry.attendanceLatitude,
+                longitude: entry.attendanceLongitude,
               ),
               _AttendanceDetail(
                 'Working location',
                 _formatPoint(siteLatitude, siteLongitude),
+                latitude: siteLatitude,
+                longitude: siteLongitude,
               ),
               _AttendanceDetail(
                 'Distance from site',
@@ -770,6 +776,26 @@ class _AttendanceDetailsCard extends StatelessWidget {
               ),
               _AttendanceDetail('Review status', entry.reviewStatus),
             ]),
+            if (_validCoordinates(
+              entry.attendanceLatitude,
+              entry.attendanceLongitude,
+            )) ...<Widget>[
+              const SizedBox(height: 10),
+              NavigateAction(
+                latitude: entry.attendanceLatitude,
+                longitude: entry.attendanceLongitude,
+                label: entry.dutyPointName,
+                compact: false,
+              ),
+            ] else if (_validCoordinates(siteLatitude, siteLongitude)) ...<Widget>[
+              const SizedBox(height: 10),
+              NavigateAction(
+                latitude: siteLatitude,
+                longitude: siteLongitude,
+                label: entry.siteName,
+                compact: false,
+              ),
+            ],
             if (entry.isMockLocationSuspected ||
                 entry.requiresAdminReview) ...<Widget>[
               const SizedBox(height: 12),
@@ -851,28 +877,43 @@ class _AttendanceDetailsCard extends StatelessWidget {
               .map(
                 (item) => Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
-                      Expanded(
-                        child: Text(
-                          item.label,
-                          style: Theme.of(
-                            context,
-                          ).textTheme.bodySmall?.copyWith(
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Expanded(
+                            child: Text(
+                              item.label,
+                              style: Theme.of(
+                                context,
+                              ).textTheme.bodySmall?.copyWith(
+                                color: CissThemeTokens.of(context).inkMuted,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Flexible(
+                            child: Text(
+                              item.value!,
+                              textAlign: TextAlign.end,
+                              style: Theme.of(context).textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                      // The address sits under the coordinates it belongs to,
+                      // and only appears when the device resolved one.
+                      if (item.latitude != null && item.longitude != null)
+                        ResolvedAddressLine(
+                          latitude: item.latitude,
+                          longitude: item.longitude,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: CissThemeTokens.of(context).inkMuted,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Flexible(
-                        child: Text(
-                          item.value!,
-                          textAlign: TextAlign.end,
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -883,10 +924,14 @@ class _AttendanceDetailsCard extends StatelessWidget {
 }
 
 class _AttendanceDetail {
-  const _AttendanceDetail(this.label, this.value);
+  const _AttendanceDetail(this.label, this.value, {this.latitude, this.longitude});
 
   final String label;
   final String? value;
+
+  /// Coordinates behind [value], when the value is a position.
+  final double? latitude;
+  final double? longitude;
 }
 
 class _AttendanceStatusChip extends StatelessWidget {

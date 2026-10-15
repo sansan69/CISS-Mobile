@@ -19,6 +19,7 @@ class GuardDashboardSnapshot {
     required this.nextShiftSiteName,
     required this.nextShiftDate,
     required this.recentAttendance,
+    this.nextShiftUnavailable = false,
   });
 
   final String employeeName;
@@ -35,6 +36,7 @@ class GuardDashboardSnapshot {
   final String? nextShiftLabel;
   final String? nextShiftSiteName;
   final String? nextShiftDate;
+  final bool nextShiftUnavailable;
   final List<AttendanceRecordModel> recentAttendance;
 }
 
@@ -258,6 +260,7 @@ class FieldOfficerSiteOption {
     required this.district,
     required this.clientName,
     required this.clientId,
+    this.shiftTemplates = const <ShiftTemplateModel>[],
     this.latitude,
     this.longitude,
   });
@@ -267,6 +270,7 @@ class FieldOfficerSiteOption {
   final String district;
   final String clientName;
   final String clientId;
+  final List<ShiftTemplateModel> shiftTemplates;
   final double? latitude;
   final double? longitude;
 
@@ -277,6 +281,14 @@ class FieldOfficerSiteOption {
       district: (json['district'] as String?) ?? '',
       clientName: (json['clientName'] as String?) ?? '',
       clientId: (json['clientId'] as String?) ?? '',
+      shiftTemplates:
+          (json['shiftTemplates'] as List? ?? [])
+              .whereType<Map>()
+              .map(
+                (e) =>
+                    ShiftTemplateModel.fromJson(Map<String, dynamic>.from(e)),
+              )
+              .toList(),
       latitude: _coordinate(json['latitude'] ?? json['lat']),
       longitude: _coordinate(json['longitude'] ?? json['lng']),
     );
@@ -333,6 +345,12 @@ class FieldOfficerAttendanceEntry {
   final Map<String, dynamic>? photoCompliance;
   final String? reviewStatus;
   final bool requiresAdminReview;
+
+  /// A history row is valid only when the server recorded an IN or OUT punch.
+  /// Status alone is not evidence that attendance was recorded.
+  bool get hasRecordedPunch =>
+      (checkIn?.trim().isNotEmpty ?? false) ||
+      (checkOut?.trim().isNotEmpty ?? false);
 
   /// Coordinates captured at check-in. Attendance logs use `lon`, while
   /// older records may use `lng` or `longitude`.

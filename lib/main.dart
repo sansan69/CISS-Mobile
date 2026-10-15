@@ -9,8 +9,12 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'app/app.dart';
 import 'core/fcm/providers.dart';
+import 'core/i18n/app_language.dart';
 import 'core/auth/legacy_biometric_credential_cleanup.dart';
 import 'core/location/background_tracking_service.dart';
+import 'core/location/address_cache.dart';
+import 'core/device/device_identity.dart';
+import 'core/permissions/device_readiness.dart';
 import 'core/offline/offline_queue.dart';
 import 'core/offline/draft_service.dart';
 import 'core/sync/providers.dart';
@@ -57,6 +61,12 @@ Future<void> main() async {
     DraftService.boxName,
   ); // Non-encrypted for high-frequency drafts
   await container.read(appSettingsControllerProvider.notifier).init(cipher);
+  // Interface language store: a corrupt or missing box must not blank the app.
+  try {
+    await container.read(appLanguageControllerProvider.notifier).init();
+  } catch (e) {
+    debugPrint('AppLanguage init failed — falling back to English: $e');
+  }
   // These new stores must never fail-closed: a corrupt or cipher-mismatched
   // box would otherwise throw before runApp and blank the screen. Each init is
   // isolated so a failure falls back to defaults / a no-op buffer.
@@ -69,6 +79,25 @@ Future<void> main() async {
     await container.read(trackingBufferProvider).init();
   } catch (e) {
     debugPrint('TrackingBuffer init failed — offline buffering disabled: $e');
+  }
+  // Device-readiness cache: the readiness banner renders from this snapshot so
+  // showing it never issues a permission read.
+  try {
+    await container.read(readinessCacheProvider.notifier).init();
+  } catch (e) {
+    debugPrint('ReadinessCache init failed — banner stays hidden: $e');
+  }
+  // Reverse-geocode cache: a corrupt box only costs an extra lookup.
+  try {
+    await AddressResolver().init();
+  } catch (e) {
+    debugPrint('Address cache init failed — addresses stay unresolved: $e');
+  }
+  // Device identity: without it, writes simply omit the handset header.
+  try {
+    await container.read(deviceIdentityProvider).init();
+  } catch (e) {
+    debugPrint('Device identity init failed — punches omit the device id: $e');
   }
 
   try {

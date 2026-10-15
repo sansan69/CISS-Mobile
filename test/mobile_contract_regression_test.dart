@@ -1,3 +1,5 @@
+import 'package:ciss_mobile/core/i18n/app_language.dart';
+import 'package:ciss_mobile/core/i18n/app_strings.dart';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +8,7 @@ void main() {
   group('Android tracking contract', () {
     late String manifest;
     late String trackingService;
+    late String deviceCompat;
 
     setUpAll(() {
       manifest =
@@ -14,13 +17,25 @@ void main() {
           File(
             'lib/core/location/background_tracking_service.dart',
           ).readAsStringSync();
+      deviceCompat =
+          File(
+            'lib/core/location/device_compat_service.dart',
+          ).readAsStringSync();
     });
 
     test('uses a non-exported user-visible foreground service', () {
+      // Background location is declared deliberately: tracking runs on a
+      // user-visible foreground service, and the permission covers the restart
+      // gap after a swipe-away or reboot, when the watchdog/boot receivers
+      // bring the service back before the app is visible again.
       expect(
         manifest,
-        isNot(contains('android.permission.ACCESS_BACKGROUND_LOCATION')),
+        contains('android.permission.ACCESS_BACKGROUND_LOCATION'),
       );
+      // The direct battery-exemption dialog needs a Play-restricted permission
+      // and is deliberately not used. The app instead opens the battery
+      // settings page through the native device-compat channel, which is what
+      // this assertion protects.
       expect(
         manifest,
         isNot(
@@ -28,12 +43,34 @@ void main() {
         ),
       );
       expect(
+        deviceCompat,
+        contains('openBatteryOptimizationSettings'),
+        reason: 'battery guidance must stay available without the permission',
+      );
+      expect(deviceCompat, contains('openBrandAutostartSettings'));
+      expect(
         RegExp(
           r'<service[\s\S]*?flutter_background_service\.BackgroundService'
           r'[\s\S]*?android:exported="false"[\s\S]*?/>',
         ).hasMatch(manifest),
         isTrue,
       );
+    });
+
+    test('ships the background-tracking disclosure in every language', () {
+      for (final language in AppLanguage.values) {
+        final strings = AppStrings.forLanguage(language);
+        expect(
+          strings.readinessBackgroundLocationWhy.trim(),
+          isNotEmpty,
+          reason: '${language.code} must explain why background location is used',
+        );
+        expect(
+          strings.readinessBatteryWhy.trim(),
+          isNotEmpty,
+          reason: '${language.code} must explain the battery settings step',
+        );
+      }
     });
 
     test('sends location only through the supported heartbeat API', () {
@@ -143,19 +180,13 @@ void main() {
       },
     );
 
-    test(
-      'guard attendance range uses the single aggregated endpoint',
-      () {
-        final repository =
-            File('lib/core/network/mobile_repository.dart').readAsStringSync();
-        expect(
-          repository,
-          contains("/api/field-officer/guard-attendance/range"),
-        );
-        expect(repository, isNot(contains('days.length < 62')));
-        expect(repository, isNot(contains('offset += 6')));
-      },
-    );
+    test('guard attendance range uses the single aggregated endpoint', () {
+      final repository =
+          File('lib/core/network/mobile_repository.dart').readAsStringSync();
+      expect(repository, contains("/api/field-officer/guard-attendance/range"));
+      expect(repository, isNot(contains('days.length < 62')));
+      expect(repository, isNot(contains('offset += 6')));
+    });
   });
 
   group('Guard document upload contract', () {
@@ -191,11 +222,10 @@ void main() {
       expect(repository, contains("'/api/guard/leaderboard'"));
     });
 
-    test('guard surfaces link to the leaderboard screen', () {
+    test('training and evaluations retain leaderboard links', () {
       for (final path in <String>[
         'lib/features/guard/presentation/screens/guard_training_screen.dart',
         'lib/features/guard/presentation/screens/guard_evaluations_screen.dart',
-        'lib/features/guard/presentation/screens/guard_dashboard_screen.dart',
       ]) {
         expect(
           File(path).readAsStringSync(),

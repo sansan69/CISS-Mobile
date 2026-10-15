@@ -6,22 +6,29 @@ import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/mobile_dashboard_models.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
+import '../../../../../core/utils/date_format.dart';
+import '../../../../../shared/utils/initials.dart';
 import '../../../../../shared/widgets/modern_hero.dart';
-import '../../../../../shared/widgets/brand_banner.dart';
-import '../../../../../shared/widgets/metric_card.dart';
 import '../../../../../shared/widgets/modern_card.dart';
-import '../../../../../shared/widgets/surface_card.dart';
-import '../../../../../shared/widgets/time_counter_chip.dart';
+import '../../../../../shared/widgets/section_header.dart';
+import '../../../../../shared/widgets/primary_action.dart';
+import '../../../../../shared/widgets/action_row.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
 import '../../../../../core/fcm/notification_service.dart';
 import '../../../shared/notification_inbox_screen.dart';
+import '../../../shared/readiness_banner.dart';
+import '../widgets/open_duty_session_card.dart';
 import '../../guard_tab_provider.dart';
 import 'guard_incidents_screen.dart';
 import 'guard_patrol_screen.dart';
+import 'guard_duties_screen.dart';
+import 'guard_profile_screen.dart';
+import '../../application/duty_willingness_controller.dart';
+import '../../../../../core/models/duty_models.dart';
 import 'guard_payslips_screen.dart';
 import 'guard_leave_screen.dart';
-import 'guard_training_leaderboard_screen.dart';
+import 'guard_training_screen.dart';
 
 final FutureProvider<GuardDashboardSnapshot> guardDashboardProvider =
     FutureProvider<GuardDashboardSnapshot>((Ref ref) {
@@ -34,60 +41,26 @@ class GuardDashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final snapshot = ref.watch(guardDashboardProvider);
-
-    return snapshot.when(
-      loading:
-          () => const Scaffold(
-            body: Column(
-              children: <Widget>[
-                BrandBanner(title: 'Guard', subtitle: 'Preparing dashboard'),
-                Expanded(child: Center(child: CircularProgressIndicator())),
-              ],
-            ),
-          ),
-      error:
-          (Object error, _) => Scaffold(
-            body: Column(
-              children: <Widget>[
-                const BrandBanner(title: 'Guard', subtitle: 'Dashboard'),
-                Expanded(
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: StateBlock(
-                        icon: Icons.cloud_off_rounded,
-                        title: 'Could not load dashboard',
-                        message: error.toString().replaceFirst(
-                          'Exception: ',
-                          '',
-                        ),
-                        action: FilledButton.tonal(
-                          onPressed:
-                              () => ref.invalidate(guardDashboardProvider),
-                          child: const Text('Try again'),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-      data: (GuardDashboardSnapshot data) => _DashboardBody(data: data),
-    );
-  }
-}
-
-class _DashboardBody extends ConsumerWidget {
-  const _DashboardBody({required this.data});
-
-  final GuardDashboardSnapshot data;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = CissThemeTokens.of(context);
+    final duties = ref.watch(guardDutiesProvider).valueOrNull;
+    final profile = ref.watch(guardProfileProvider).valueOrNull;
+    final nextDuty =
+        duties
+            ?.where(
+              (d) =>
+                  d.kind == DutyKind.assigned ||
+                  moduleEnabled(ref, 'workOrders'),
+            )
+            .firstOrNull;
+    final data = snapshot.valueOrNull;
+    final name = data?.employeeName.trim() ?? '';
+    final employeeId = data?.employeeId.trim() ?? '';
     final displayName =
-        data.employeeName.isNotEmpty ? data.employeeName : data.employeeId;
+        name.isNotEmpty
+            ? name
+            : employeeId.isNotEmpty
+            ? employeeId
+            : 'Guard';
     final hour = DateTime.now().hour;
     final greeting =
         hour < 12
@@ -96,46 +69,81 @@ class _DashboardBody extends ConsumerWidget {
             ? 'Good afternoon'
             : 'Good evening';
 
-    final hasShift = data.nextShiftSiteName != null;
-    final isOnDuty =
-        data.nextShiftLabel != null &&
-        data.nextShiftLabel!.toLowerCase().contains('duty');
+    void openAttendance() => ref.read(guardTabIndexProvider.notifier).state = 1;
+    void openDuty() => _push(context, const GuardDutiesScreen());
 
-    final initials =
-        displayName.isNotEmpty
-            ? displayName
-                .split(' ')
-                .where((p) => p.isNotEmpty)
-                .map((p) => p[0])
-                .take(2)
-                .join()
-                .toUpperCase()
-            : data.employeeId.isNotEmpty
-            ? data.employeeId.substring(0, 2).toUpperCase()
-            : 'GU';
+    final moreActions = <Widget>[
+      ActionRow(
+        icon: Icons.event_note_outlined,
+        label: 'Upcoming duty',
+        onTap: openDuty,
+      ),
+      if (moduleEnabled(ref, 'payslips'))
+        ActionRow(
+          icon: Icons.payments_outlined,
+          label: 'Payslips',
+          onTap: () => _push(context, const GuardPayslipsScreen()),
+        ),
+      if (moduleEnabled(ref, 'leave'))
+        ActionRow(
+          icon: Icons.calendar_today_rounded,
+          label: 'Leave',
+          onTap: () => _push(context, const GuardLeaveScreen()),
+        ),
+      if (moduleEnabled(ref, 'patrol'))
+        ActionRow(
+          icon: Icons.route_rounded,
+          label: 'Patrol',
+          onTap: () => _push(context, const GuardPatrolScreen()),
+        ),
+      if (moduleEnabled(ref, 'incidents'))
+        ActionRow(
+          icon: Icons.shield_outlined,
+          label: 'Incidents',
+          onTap: () => _push(context, const GuardIncidentsScreen()),
+        ),
+      if (moduleEnabled(ref, 'training'))
+        ActionRow(
+          icon: Icons.menu_book_rounded,
+          label: 'Training',
+          onTap: () => _push(context, const GuardTrainingScreen()),
+        ),
+    ];
 
     return Scaffold(
       backgroundColor: tokens.canvas,
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () async => ref.invalidate(guardDashboardProvider),
+          onRefresh: () async {
+            ref.invalidate(guardDashboardProvider);
+            try {
+              await ref.read(guardDashboardProvider.future);
+            } catch (_) {
+              // The provider renders the failure and retry action. Keep the
+              // pull-to-refresh callback settled without an uncaught future.
+            }
+          },
           child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.only(
-              bottom:
-                  AppSpacing.xxl + MediaQuery.of(context).padding.bottom + 140,
+              bottom: 120 + MediaQuery.paddingOf(context).bottom,
             ),
             children: <Widget>[
               ModernHero(
                 eyebrow: greeting,
                 title: displayName,
                 subtitle:
-                    hasShift
-                        ? '${data.nextShiftSiteName} • ${data.nextShiftLabel ?? 'Shift'}'
-                        : '${data.clientName.isEmpty ? 'CISS Workforce' : data.clientName} • ${data.district.isEmpty ? 'No district' : data.district}',
-                avatarText: initials,
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+                    data == null
+                        ? 'Your workforce home'
+                        : <String>[
+                          data.clientName.trim(),
+                          data.district.trim(),
+                        ].where((value) => value.isNotEmpty).join(' • '),
+                avatarText: initials(displayName, fallback: 'GU'),
+                trailing: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  alignment: WrapAlignment.end,
+                  children: <Widget>[
                     SyncStatusBadge(
                       onTap: () => ref.read(syncServiceProvider).processQueue(),
                     ),
@@ -143,698 +151,324 @@ class _DashboardBody extends ConsumerWidget {
                   ],
                 ),
               ),
-
-              const SizedBox(height: AppSpacing.xl),
-
-              // Attendance this month — 3-column grid, no horizontal scroll
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: MetricCard(
-                        label: 'Present',
-                        value: '${data.presentDays}',
-                        color: tokens.success,
-                        backgroundColor: tokens.successSoft,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: MetricCard(
-                        label: 'Absent',
-                        value: '${data.absentDays}',
-                        color: tokens.danger,
-                        backgroundColor: tokens.dangerSoft,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: MetricCard(
-                        label: 'Working',
-                        value: '${data.workingDays}',
-                        color: tokens.primary,
-                        backgroundColor: tokens.primarySoft,
-                      ),
-                    ),
-                  ],
+              const SizedBox(height: AppSpacing.lg),
+              _hPad(
+                PrimaryAction(
+                  icon: Icons.how_to_reg_rounded,
+                  label: 'Mark attendance',
+                  sublabel: 'Scan the duty QR at your post',
+                  onTap: openAttendance,
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.md,
-                  AppSpacing.xs,
-                  AppSpacing.md,
-                  0,
-                ),
-                child: Text(
-                  'This month',
-                  style: AppTypography.micro(
-                    context,
-                  ).copyWith(color: tokens.inkMuted),
-                ),
-              ),
-
-              const SizedBox(height: AppSpacing.xl),
-
-              // 2026 Bento Grid: Current Post & Tactile QR Clock In/Out Tile
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    // Current Post Bento Card
-                    Expanded(
-                      flex: 5,
-                      child: SurfaceCard(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        onTap: hasShift
-                            ? () => ref.read(guardTabIndexProvider.notifier).state = 1
-                            : null,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: isOnDuty ? tokens.glowEmerald : tokens.glowAmber,
-                                    boxShadow: AppShadows.glow(
-                                      isOnDuty ? tokens.glowEmerald : tokens.glowAmber,
-                                      blur: 8,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    isOnDuty ? 'CURRENT POST' : 'NEXT ASSIGNMENT',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.8,
-                                      color: tokens.inkMuted,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              hasShift ? data.nextShiftSiteName! : 'Attendance Post',
-                              style: AppTypography.cardTitle(context).copyWith(
-                                fontWeight: FontWeight.w700,
-                                height: 1.2,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              hasShift && data.nextShiftDate != null
-                                  ? '${data.nextShiftDate} • ${data.nextShiftLabel ?? 'Shift'}'
-                                  : 'No shift assigned',
-                              style: AppTypography.micro(context).copyWith(
-                                color: tokens.inkMuted,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    // Tactile QR Clock In/Out Tile
-                    Expanded(
-                      flex: 5,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(AppRadius.card),
-                          boxShadow: AppShadows.glow(
-                            isOnDuty ? tokens.glowCyan : tokens.glowEmerald,
-                            opacity: 0.22,
-                            blur: 16,
-                          ),
-                        ),
-                        child: Material(
-                          color: tokens.surface,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.card),
-                            side: BorderSide(
-                              color: isOnDuty ? tokens.glowCyan : tokens.glowEmerald,
-                              width: 1.5,
-                            ),
-                          ),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(AppRadius.card),
-                            onTap: () {
-                              ref.read(guardTabIndexProvider.notifier).state = 1;
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 16,
-                              ),
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.qr_code_scanner_rounded,
-                                    color: isOnDuty ? tokens.glowCyan : tokens.glowEmerald,
-                                    size: 34,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    isOnDuty ? 'SCAN QR / CLOCK OUT' : 'SCAN QR / CLOCK IN',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.4,
-                                      color: isOnDuty ? tokens.glowCyan : tokens.glowEmerald,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
               const SizedBox(height: AppSpacing.md),
-
-              // Night Patrol Checkpoints Bento Card
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: SurfaceCard(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const GuardPatrolScreen(),
-                    ),
-                  ),
-                  child: Row(
-                    children: <Widget>[
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: tokens.accent.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(
-                          Icons.route_rounded,
-                          color: tokens.accent,
-                          size: 24,
+              // The open tour comes before the setup prompt: a guard who is
+              // still on duty across midnight needs to see it, not a checklist.
+              _hPad(const OpenDutySessionCard()),
+              const SizedBox(height: AppSpacing.md),
+              // Setup gaps go directly under the main action: a guard who
+              // cannot be tracked needs to know before starting a shift.
+              _hPad(const ReadinessBanner()),
+              const SizedBox(height: AppSpacing.md),
+              _hPad(
+                snapshot.when(
+                  skipLoadingOnRefresh: true,
+                  loading: () => const _DashboardPlaceholder(),
+                  error:
+                      (error, _) => StateBlock(
+                        icon: Icons.cloud_off_rounded,
+                        title: 'Could not load dashboard',
+                        message:
+                            'Attendance is still available. Pull to refresh or try again.',
+                        action: FilledButton.tonal(
+                          onPressed:
+                              () => ref.invalidate(guardDashboardProvider),
+                          child: const Text('Try again'),
                         ),
                       ),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text(
-                              'Night Patrol Checkpoints',
-                              style: AppTypography.cardTitle(context),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              'Next perimeter check due soon',
-                              style: AppTypography.micro(context).copyWith(
-                                color: tokens.inkMuted,
+                  data:
+                      (value) =>
+                          nextDuty == null
+                              ? _DutyCard(data: value, onOpen: openDuty)
+                              : ModernCard(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      nextDuty.isExam && nextDuty.canRespond
+                                          ? 'Exam duty available'
+                                          : nextDuty.status == 'cancelled'
+                                          ? 'Duty cancelled'
+                                          : 'Next scheduled duty',
+                                      style: AppTypography.cardTitle(context),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(nextDuty.siteName),
+                                    Text(formatDutyDate(nextDuty.date)),
+                                    if (nextDuty.isExam)
+                                      const Text(
+                                        'Expressing willingness does not confirm assignment.',
+                                      ),
+                                    ActionRow(
+                                      icon: Icons.event_note_outlined,
+                                      label: 'View duty details',
+                                      onTap: openDuty,
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      TimeCounterChip(
-                        targetTime: DateTime.now().add(const Duration(minutes: 14)),
-                      ),
-                    ],
-                  ),
                 ),
               ),
-
-              const SizedBox(height: AppSpacing.xl),
-
-              // Eval Score + Payslip Card
-              if (data.latestEvalScore != null) ...[
+              if (profile?.categoryLabel != null)
                 Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
+                    horizontal: 24,
+                    vertical: 8,
                   ),
-                  child: ModernCard(
-                    child: Row(
-                      children: <Widget>[
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: tokens.warningSoft,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.stars_rounded,
-                            color: tokens.accent,
-                            size: 26,
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                'Latest Evaluation',
-                                style: AppTypography.cardTitle(context),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                data.latestEvalPeriod ?? 'Current period',
-                                style: AppTypography.micro(
-                                  context,
-                                ).copyWith(color: tokens.inkMuted),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: tokens.warningSoft,
-                            borderRadius: BorderRadius.circular(AppRadius.pill),
-                          ),
-                          child: Text(
-                            '${data.latestEvalScore!.toStringAsFixed(0)}%',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: tokens.accent,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  child: Text(
+                    profile!.categoryLabel!,
+                    style: AppTypography.label(context),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.md),
-              ],
-
-              if (data.leaveBalance != null) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                  ),
-                  child: ModernCard(
-                    child: Row(
+              const SizedBox(height: AppSpacing.xl),
+              _hPad(const SectionHeader(label: 'MORE')),
+              const SizedBox(height: AppSpacing.xs),
+              _hPad(
+                ModernCard(
+                  padding: EdgeInsets.zero,
+                  child: _ActionRows(children: moreActions),
+                ),
+              ),
+              if (data != null) ...<Widget>[
+                const SizedBox(height: AppSpacing.xl),
+                _hPad(const SectionHeader(label: 'THIS MONTH')),
+                const SizedBox(height: AppSpacing.sm),
+                _hPad(
+                  ModernCard(
+                    child: Column(
                       children: <Widget>[
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: tokens.primarySoft,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.event_available_rounded,
-                            color: tokens.primary,
-                            size: 26,
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                'Leave Balance',
-                                style: AppTypography.cardTitle(context),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${data.leaveBalance!.balance} remaining · ${data.leaveBalance!.entitled} entitled · ${data.leaveBalance!.taken} taken',
-                                style: AppTypography.micro(
-                                  context,
-                                ).copyWith(color: tokens.inkMuted),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          color: tokens.inkMuted,
-                          size: 20,
-                        ),
+                        _MonthCount(label: 'Present', value: data.presentDays),
+                        const Divider(),
+                        _MonthCount(label: 'Absent', value: data.absentDays),
+                        const Divider(),
+                        _MonthCount(label: 'Working', value: data.workingDays),
                       ],
                     ),
-                    onTap:
-                        () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const GuardLeaveScreen(),
-                          ),
-                        ),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xl),
-              ],
-
-              // Quick Actions
-              // Quick Actions — 2026 Bento Action Pills
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text('Quick Actions', style: AppTypography.title(context)),
-                    const SizedBox(height: AppSpacing.sm),
-                    Row(
-                      children: <Widget>[
-                        if (moduleEnabled(ref, 'leave'))
-                        Expanded(
-                          child: SurfaceCard(
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                            radius: AppRadius.pill,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const GuardLeaveScreen(),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.calendar_today_rounded,
-                                  color: tokens.accent,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'LEAVE',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.6,
-                                    color: tokens.ink,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        if (moduleEnabled(ref, 'incidents'))
-                        Expanded(
-                          child: SurfaceCard(
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                            radius: AppRadius.pill,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const GuardIncidentsScreen(),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.shield_outlined,
-                                  color: tokens.accent,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'INCIDENTS',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.6,
-                                    color: tokens.ink,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Row(
-                      children: <Widget>[
-                        if (moduleEnabled(ref, 'training'))
-                        Expanded(
-                          child: SurfaceCard(
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                            radius: AppRadius.pill,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const GuardTrainingLeaderboardScreen(),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.menu_book_rounded,
-                                  color: tokens.accent,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'TRAINING',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.6,
-                                    color: tokens.ink,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        if (moduleEnabled(ref, 'payslips'))
-                        Expanded(
-                          child: SurfaceCard(
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                            radius: AppRadius.pill,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const GuardPayslipsScreen(),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.payments_outlined,
-                                  color: tokens.accent,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'PAYSLIPS',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.6,
-                                    color: tokens.ink,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // ── Training Leaderboard ──────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: ModernCard(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const GuardTrainingLeaderboardScreen(),
-                      ),
-                    );
-                  },
-                  child: Row(
+                _hPad(
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: <Widget>[
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: tokens.accent.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          Icons.emoji_events_rounded,
-                          color: tokens.accent,
-                          size: 26,
-                        ),
+                      Text(
+                        'RECENT ACTIVITY',
+                        style: AppTypography.micro(
+                          context,
+                        ).copyWith(color: tokens.inkMuted),
                       ),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text(
-                              'Training Leaderboard',
-                              style: AppTypography.cardTitle(context),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'See how you rank against guards in your district',
-                              style: AppTypography.micro(
-                                context,
-                              ).copyWith(color: tokens.inkMuted),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        color: tokens.inkMuted,
-                        size: 20,
+                      TextButton(
+                        onPressed: openAttendance,
+                        child: const Text('View all'),
                       ),
                     ],
                   ),
                 ),
-              ),
-
-              const SizedBox(height: AppSpacing.xl),
-
-              // Recent Activity
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: <Widget>[
-                        Text(
-                          'Recent Activity',
-                          style: AppTypography.title(context),
-                        ),
-                        TextButton(
-                          onPressed:
-                              () =>
-                                  ref
-                                      .read(guardTabIndexProvider.notifier)
-                                      .state = 1,
-                          child: const Text('View all'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    if (data.recentAttendance.isEmpty)
-                      ModernCard(
-                        child: Row(
-                          children: <Widget>[
-                            Icon(
-                              Icons.history_toggle_off_rounded,
-                              color: tokens.inkMuted,
-                              size: 24,
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            Expanded(
-                              child: Text(
-                                'Your check-in and check-out activity will appear here.',
-                                style: AppTypography.body(
-                                  context,
-                                ).copyWith(color: tokens.inkMuted),
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      ...data.recentAttendance.take(5).map((item) {
-                        final isIn = item.status == 'In';
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                          child: ModernCard(
-                            padding: const EdgeInsets.all(AppSpacing.md),
-                            onTap:
-                                () =>
-                                    ref
-                                        .read(guardTabIndexProvider.notifier)
-                                        .state = 1,
-                            child: Row(
-                              children: <Widget>[
-                                Icon(
-                                  isIn
-                                      ? Icons.login_rounded
-                                      : Icons.logout_rounded,
-                                  color: isIn ? tokens.success : tokens.warning,
-                                  size: 22,
-                                ),
-                                const SizedBox(width: AppSpacing.sm),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: <Widget>[
-                                      Text(
-                                        item.siteName,
-                                        style: AppTypography.bodyStrong(
-                                          context,
-                                        ),
-                                      ),
-                                      Text(
-                                        '${item.dateLabel} • ${item.time}',
-                                        style: AppTypography.micro(
-                                          context,
-                                        ).copyWith(color: tokens.inkMuted),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Icon(
-                                  isIn
-                                      ? Icons.login_rounded
-                                      : Icons.logout_rounded,
-                                  color: tokens.inkMuted,
-                                  size: 16,
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: AppSpacing.xxl),
+                const SizedBox(height: AppSpacing.sm),
+                _hPad(_RecentActivity(data: data, onOpen: openAttendance)),
+              ],
             ],
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => ref.read(guardTabIndexProvider.notifier).state = 1,
-        backgroundColor: isOnDuty ? tokens.primary : tokens.success,
-        foregroundColor: tokens.surface,
-        icon: Icon(isOnDuty ? Icons.logout_rounded : Icons.login_rounded),
-        label: Text(isOnDuty ? 'Check Out' : 'Check In'),
+    );
+  }
+}
+
+Widget _hPad(Widget child) => Padding(
+  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+  child: child,
+);
+void _push(BuildContext context, Widget screen) =>
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
+
+class _DashboardPlaceholder extends StatelessWidget {
+  const _DashboardPlaceholder();
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    return Semantics(
+      label: 'Loading dashboard',
+      child: ModernCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Container(height: 16, width: 140, color: tokens.primarySoft),
+            const SizedBox(height: AppSpacing.sm),
+            Container(height: 14, color: tokens.primarySoft),
+            const SizedBox(height: AppSpacing.sm),
+            Container(height: 14, width: 180, color: tokens.primarySoft),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _MonthCount extends StatelessWidget {
+  const _MonthCount({required this.label, required this.value});
+  final String label;
+  final int value;
+  @override
+  Widget build(BuildContext context) => Row(
+    children: <Widget>[
+      Expanded(child: Text(label, style: AppTypography.body(context))),
+      Text('$value', style: AppTypography.bodyStrong(context)),
+    ],
+  );
+}
+
+class _ActionRows extends StatelessWidget {
+  const _ActionRows({required this.children});
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    return Column(
+      children: <Widget>[
+        for (var index = 0; index < children.length; index++) ...<Widget>[
+          children[index],
+          if (index < children.length - 1)
+            Divider(height: 1, thickness: 1, color: tokens.border),
+        ],
+      ],
+    );
+  }
+}
+
+class _DutyCard extends StatelessWidget {
+  const _DutyCard({required this.data, required this.onOpen});
+  final GuardDashboardSnapshot data;
+  final VoidCallback onOpen;
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    final site = data.nextShiftSiteName?.trim() ?? '';
+    final detail = <String>[
+      formatDutyDate(data.nextShiftDate),
+      data.nextShiftLabel?.trim() ?? '',
+    ].where((value) => value.isNotEmpty).join(' • ');
+    final message =
+        data.nextShiftUnavailable
+            ? 'Duty details are unavailable'
+            : site.isEmpty
+            ? 'No upcoming assignment. You can mark attendance without an assigned duty.'
+            : '$site${detail.isEmpty ? '' : ' • $detail'}';
+    return ModernCard(
+      onTap: onOpen,
+      child: Row(
+        children: <Widget>[
+          Icon(Icons.event_note_outlined, color: tokens.primary, size: 28),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('Your duty', style: AppTypography.cardTitle(context)),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  message,
+                  maxLines: site.isEmpty ? 4 : 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.body(
+                    context,
+                  ).copyWith(color: tokens.inkMuted),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          Icon(Icons.chevron_right_rounded, color: tokens.inkMuted, size: 20),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecentActivity extends StatelessWidget {
+  const _RecentActivity({required this.data, required this.onOpen});
+
+  final GuardDashboardSnapshot data;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+
+    if (data.recentAttendance.isEmpty) {
+      return ModernCard(
+        child: Row(
+          children: <Widget>[
+            Icon(
+              Icons.history_toggle_off_rounded,
+              color: tokens.inkMuted,
+              size: 24,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                'Your check-in and check-out activity will appear here.',
+                style: AppTypography.body(
+                  context,
+                ).copyWith(color: tokens.inkMuted),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children:
+          data.recentAttendance.take(3).map((item) {
+            final isIn = item.status == 'In';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: ModernCard(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                onTap: onOpen,
+                child: Row(
+                  children: <Widget>[
+                    Icon(
+                      isIn ? Icons.login_rounded : Icons.logout_rounded,
+                      color: isIn ? tokens.success : tokens.warning,
+                      size: 22,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            item.siteName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.bodyStrong(context),
+                          ),
+                          Text(
+                            '${item.dateLabel} • ${item.time}',
+                            style: AppTypography.micro(
+                              context,
+                            ).copyWith(color: tokens.inkMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
     );
   }
 }
