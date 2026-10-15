@@ -153,11 +153,17 @@ List<PunchPair> pairPunches(
     // business date being viewed keeps the punch visible instead of dropping
     // it silently from every surface.
     final rowDate = parseRowDate(row.dateLabel) ?? fallbackDate;
-    final checkIn = parsePunchTime(row.checkIn, onDate: rowDate);
-    var checkOut = parsePunchTime(row.checkOut, onDate: rowDate);
+    final checkIn =
+        row.checkInAt ?? parsePunchTime(row.checkIn, onDate: rowDate);
+    var checkOut =
+        row.checkOutAt ?? parsePunchTime(row.checkOut, onDate: rowDate);
     // A row that carries both clock times walked past midnight: the server
     // sent 20:05 and 06:10 under one date.
-    if (checkIn != null && checkOut != null && !checkOut.isAfter(checkIn)) {
+    if (row.checkInAt == null &&
+        row.checkOutAt == null &&
+        checkIn != null &&
+        checkOut != null &&
+        checkOut.isBefore(checkIn)) {
       checkOut = checkOut.add(const Duration(days: 1));
     }
     final punches = byGuard.putIfAbsent(key, () => <_Punch>[]);
@@ -168,6 +174,8 @@ List<PunchPair> pairPunches(
           kind: PunchKind.checkIn,
           row: row,
           rowDate: rowDate ?? startOfDay(checkIn),
+          shiftStartsAt: row.shiftStartsAt,
+          shiftEndsAt: row.shiftEndsAt,
         ),
       );
     }
@@ -178,6 +186,8 @@ List<PunchPair> pairPunches(
           kind: PunchKind.checkOut,
           row: row,
           rowDate: rowDate ?? startOfDay(checkOut),
+          shiftStartsAt: row.shiftStartsAt,
+          shiftEndsAt: row.shiftEndsAt,
         ),
       );
     }
@@ -199,8 +209,7 @@ Map<DateTime, List<PunchPair>> groupByBusinessDate(List<PunchPair> pairs) {
   }
   final dates = grouped.keys.toList()..sort();
   return <DateTime, List<PunchPair>>{
-    for (final date in dates)
-      date: grouped[date]!..sort(_byPunchTime),
+    for (final date in dates) date: grouped[date]!..sort(_byPunchTime),
   };
 }
 
@@ -343,6 +352,8 @@ ShiftWindow _windowFor(_Punch punch) => shiftWindowFor(
   businessDate: punch.rowDate,
   shiftLabel: punch.row.shiftLabel,
   checkIn: punch.at,
+  shiftStartsAt: punch.shiftStartsAt,
+  shiftEndsAt: punch.shiftEndsAt,
 );
 
 PunchPair _pair(
@@ -374,19 +385,25 @@ class _Punch {
     required this.kind,
     required this.row,
     required this.rowDate,
+    this.shiftStartsAt,
+    this.shiftEndsAt,
   });
 
   final DateTime at;
   final PunchKind kind;
   final FieldOfficerAttendanceEntry row;
   final DateTime rowDate;
+  final DateTime? shiftStartsAt;
+  final DateTime? shiftEndsAt;
 }
 
 final RegExp _dayMonthYear = RegExp(
   r'(\d{1,2})[\s,/-]+([A-Za-z]{3,})[\s,/-]+(\d{4})',
 );
 
-final RegExp _dayMonthYearNumeric = RegExp(r'^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$');
+final RegExp _dayMonthYearNumeric = RegExp(
+  r'^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$',
+);
 
 final RegExp _punchClock = RegExp(
   r'^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(am|pm)?$',
@@ -409,9 +426,10 @@ const List<String> _monthNames = <String>[
 ];
 
 int? _monthIndex(String name) {
-  final key = name.length >= 3
-      ? name.substring(0, 3).toLowerCase()
-      : name.toLowerCase();
+  final key =
+      name.length >= 3
+          ? name.substring(0, 3).toLowerCase()
+          : name.toLowerCase();
   final index = _monthNames.indexOf(key);
   return index == -1 ? null : index + 1;
 }

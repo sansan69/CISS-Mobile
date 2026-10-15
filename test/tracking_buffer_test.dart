@@ -25,19 +25,25 @@ void main() {
     return b;
   }
 
-  test('appends are drained oldest-first and commit clears the spool',
-      () async {
-    final b = await newBuffer();
-    await b.add({'latitude': 1.0});
-    await b.add({'latitude': 2.0});
-    await b.add({'latitude': 3.0});
+  test(
+    'appends are drained oldest-first and commit clears the spool',
+    () async {
+      final b = await newBuffer();
+      await b.add({'latitude': 1.0});
+      await b.add({'latitude': 2.0});
+      await b.add({'latitude': 3.0});
 
-    final drained = await b.readPending();
-    expect(drained.map((s) => s['latitude']).toList(), [1.0, 2.0, 3.0]);
+      final drained = await b.readPending();
+      expect(drained.map((s) => s.sample['latitude']).toList(), [
+        1.0,
+        2.0,
+        3.0,
+      ]);
 
-    await b.commit(const []);
-    expect(await b.readPending(), isEmpty);
-  });
+      await b.commit(const []);
+      expect(await b.readPending(), isEmpty);
+    },
+  );
 
   test('caps at maxSamples and evicts the oldest', () async {
     final b = await newBuffer();
@@ -46,8 +52,11 @@ void main() {
     }
     final drained = await b.readPending();
     expect(drained.length, TrackingBuffer.maxSamples);
-    expect(drained.first['latitude'], 5.0);
-    expect(drained.last['latitude'], (TrackingBuffer.maxSamples + 4).toDouble());
+    expect(drained.first.sample['latitude'], 5.0);
+    expect(
+      drained.last.sample['latitude'],
+      (TrackingBuffer.maxSamples + 4).toDouble(),
+    );
   });
 
   test('commit keeps only the unsent remainder for the next flush', () async {
@@ -64,7 +73,7 @@ void main() {
     final reader = await newBuffer();
     await b.add({'latitude': 4.0});
     final remaining = await reader.readPending();
-    expect(remaining.map((s) => s['latitude']).toList(), [3.0, 4.0]);
+    expect(remaining.map((s) => s.sample['latitude']).toList(), [3.0, 4.0]);
   });
 
   test('samples appended by a separate writer instance are visible', () async {
@@ -77,13 +86,13 @@ void main() {
     await writer.add({'latitude': 10.0});
 
     final drained = await reader.readPending();
-    expect(drained.map((s) => s['latitude']).toList(), [9.0, 10.0]);
+    expect(drained.map((s) => s.sample['latitude']).toList(), [9.0, 10.0]);
 
     // The reader's drain must not drop a concurrently appended sample.
     await reader.commit(const []);
     await writer.add({'latitude': 11.0});
     final next = await reader.readPending();
-    expect(next.map((s) => s['latitude']).toList(), [11.0]);
+    expect(next.map((s) => s.sample['latitude']).toList(), [11.0]);
   });
 
   test('clear removes buffered samples', () async {
@@ -91,5 +100,73 @@ void main() {
     await b.add({'latitude': 1.0});
     await b.clear();
     expect(await b.readPending(), isEmpty);
+  });
+
+  test('records the capturing guard and origin with each sample', () async {
+    final b = await newBuffer();
+    await b.add(
+      {'latitude': 1.0},
+      owner: 'employee-doc-a',
+      origin: 'https://cisskerala.site/',
+    );
+
+    final drained = await b.readPending();
+    expect(drained.single.owner, 'employee-doc-a');
+    expect(drained.single.origin, 'https://cisskerala.site/');
+    expect(
+      drained.single.belongsTo(
+        owner: 'employee-doc-a',
+        origin: 'https://cisskerala.site',
+      ),
+      isTrue,
+      reason: 'A trailing slash on either side must not change the origin',
+    );
+    expect(
+      drained.single.belongsTo(
+        owner: 'employee-doc-b',
+        origin: 'https://cisskerala.site',
+      ),
+      isFalse,
+    );
+    expect(
+      drained.single.belongsTo(
+        owner: 'employee-doc-a',
+        origin: 'https://other.example',
+      ),
+      isFalse,
+    );
+  });
+
+  test('a sample without an envelope is never attributable', () async {
+    final b = await newBuffer();
+    // A bare row, as written before the envelope existed.
+    await b.add({'latitude': 1.0});
+
+    final drained = await b.readPending();
+    expect(drained.single.isAttributed, isFalse);
+    expect(
+      drained.single.belongsTo(
+        owner: 'employee-doc-a',
+        origin: 'https://cisskerala.site',
+      ),
+      isFalse,
+    );
+  });
+
+  test('committing keeps unattributed rows in the spool', () async {
+    final b = await newBuffer();
+    await b.add(
+      {'latitude': 1.0},
+      owner: 'employee-doc-a',
+      origin: 'https://cisskerala.site',
+    );
+    await b.add({'latitude': 2.0});
+
+    final drained = await b.readPending();
+    await b.commit(<TrackingSpoolEntry>[drained.last]);
+
+    final remaining = await b.readPending();
+    expect(remaining.single.sample['latitude'], 2.0);
+    expect(remaining.single.isAttributed, isFalse);
   });
 }

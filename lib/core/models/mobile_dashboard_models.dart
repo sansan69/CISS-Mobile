@@ -307,6 +307,10 @@ class FieldOfficerAttendanceEntry {
     required this.dateLabel,
     this.checkIn,
     this.checkOut,
+    this.checkInAt,
+    this.checkOutAt,
+    this.shiftStartsAt,
+    this.shiftEndsAt,
     required this.dutyPointName,
     required this.shiftLabel,
     required this.status,
@@ -332,6 +336,10 @@ class FieldOfficerAttendanceEntry {
   final String dateLabel;
   final String? checkIn;
   final String? checkOut;
+  final DateTime? checkInAt;
+  final DateTime? checkOutAt;
+  final DateTime? shiftStartsAt;
+  final DateTime? shiftEndsAt;
   final String dutyPointName;
   final String shiftLabel;
   final String status;
@@ -375,6 +383,14 @@ class FieldOfficerAttendanceEntry {
       dateLabel: (json['date'] as String?) ?? '',
       checkIn: json['checkIn'] as String?,
       checkOut: json['checkOut'] as String?,
+      checkInAt:
+          DateTime.tryParse(json['checkInAt'] as String? ?? '')?.toLocal(),
+      checkOutAt:
+          DateTime.tryParse(json['checkOutAt'] as String? ?? '')?.toLocal(),
+      shiftStartsAt:
+          DateTime.tryParse(json['shiftStartsAt'] as String? ?? '')?.toLocal(),
+      shiftEndsAt:
+          DateTime.tryParse(json['shiftEndsAt'] as String? ?? '')?.toLocal(),
       dutyPointName: (json['dutyPointName'] as String?) ?? '',
       shiftLabel: (json['shiftLabel'] as String?) ?? '',
       status: (json['status'] as String?) ?? '',

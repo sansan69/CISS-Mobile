@@ -102,6 +102,10 @@ flutter:
 
   assets:
     - assets/ciss-logo.png
+    # PDF-only faces: Inter is CFF-flavoured OpenType, which the PDF writer
+    # cannot embed, so its default Helvetica would silently drop the muster
+    # roll's em dash and bullet. Roboto is the Apache-2.0 face Flutter ships.
+    - assets/fonts/pdf/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

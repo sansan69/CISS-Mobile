@@ -4,6 +4,73 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../offline/willingness_queue.dart' show willingnessOrigin;
+
+/// One spooled location sample together with the identity of whoever captured
+/// it.
+///
+/// The spool file is shared by every account that ever signed in on a device,
+/// so a bare sample cannot be attributed safely: dispatching it with whatever
+/// credentials happen to be current could file one guard's breadcrumbs under
+/// another guard's session. Each entry therefore records the capturing owner
+/// (the guard's employee document id) and the API origin it was captured for.
+///
+/// [owner] and [origin] are null only for legacy rows written before the
+/// envelope existed. Those rows are never dispatched; they stay quarantined
+/// until the spool's sample cap retires them.
+class TrackingSpoolEntry {
+  const TrackingSpoolEntry({required this.sample, this.owner, this.origin});
+
+  final Map<String, dynamic> sample;
+  final String? owner;
+  final String? origin;
+
+  /// True when this row carries enough identity to be dispatched at all.
+  bool get isAttributed =>
+      owner != null &&
+      owner!.isNotEmpty &&
+      origin != null &&
+      origin!.isNotEmpty;
+
+  /// True when the currently signed-in guard, talking to [origin], is entitled
+  /// to deliver this sample.
+  bool belongsTo({required String owner, required String origin}) =>
+      isAttributed &&
+      this.owner == owner &&
+      willingnessOrigin(this.origin!) == willingnessOrigin(origin);
+
+  Map<String, dynamic> toEnvelopeJson() => <String, dynamic>{
+    'owner': owner,
+    'origin': origin,
+    'sample': sample,
+  };
+
+  /// Parses one spool line. A line without the envelope is a legacy sample and
+  /// keeps a null owner so it can never be attributed by accident.
+  static TrackingSpoolEntry? fromLine(Map<String, dynamic> decoded) {
+    final sample = decoded['sample'];
+    if (sample is Map &&
+        decoded.containsKey('owner') &&
+        decoded.containsKey('origin')) {
+      final owner = decoded['owner'];
+      final origin = decoded['origin'];
+      return TrackingSpoolEntry(
+        sample: Map<String, dynamic>.from(sample),
+        owner: owner is String ? owner : null,
+        origin: origin is String ? origin : null,
+      );
+    }
+    return TrackingSpoolEntry(sample: Map<String, dynamic>.from(decoded));
+  }
+
+  /// Envelope form is kept whenever any identity was recorded, so a partially
+  /// attributed row stays distinguishable from a genuinely legacy one.
+  String encode() =>
+      (owner != null || origin != null)
+          ? jsonEncode(toEnvelopeJson())
+          : jsonEncode(sample);
+}
+
 /// Persistent, bounded, **cross-isolate-safe** buffer of location samples
 /// captured while the live heartbeat POST could not reach the server.
 ///
@@ -24,6 +91,9 @@ import 'package:path_provider/path_provider.dart';
 ///   spool aside and reads it oldest-first, so a concurrent [add] always lands
 ///   in a fresh live file and is never lost. [commit] rewrites the drain with
 ///   the un-sent remainder, letting the flush clear each chunk as it succeeds.
+/// * **Ownership:** every line is an envelope carrying the capturing guard and
+///   API origin plus the sample. Only rows matching the dispatching guard and
+///   origin are delivered; anything else is retained. See [TrackingSpoolEntry].
 ///
 /// Samples are capped at [maxSamples], evicting the oldest, both while draining
 /// and (lazily) while appending so a long offline stretch cannot grow the file
@@ -45,7 +115,8 @@ class TrackingBuffer {
   int? _appendedCount;
 
   Future<void> init([Directory? directory]) async {
-    final dir = directory ??
+    final dir =
+        directory ??
         _directoryOverride ??
         await getApplicationDocumentsDirectory();
     await dir.create(recursive: true);
@@ -64,11 +135,25 @@ class TrackingBuffer {
   File get _liveFile => File('${_dir.path}/$fileName');
   File get _drainFile => File('${_dir.path}/$drainFileName');
 
-  /// Appends [sample] to the live spool. Safe to call from the background
-  /// isolate; a single small append to an O_APPEND file is atomic.
-  Future<void> add(Map<String, dynamic> sample) async {
-    final line = jsonEncode(sample);
-    await _liveFile.writeAsString('$line\n', mode: FileMode.append, flush: true);
+  /// Appends [sample] to the live spool, tagged with the guard ([owner]) and
+  /// API origin that captured it. Safe to call from the background isolate; a
+  /// single small append to an O_APPEND file is atomic.
+  Future<void> add(
+    Map<String, dynamic> sample, {
+    String? owner,
+    String? origin,
+  }) async {
+    final line =
+        TrackingSpoolEntry(
+          sample: sample,
+          owner: owner,
+          origin: origin,
+        ).encode();
+    await _liveFile.writeAsString(
+      '$line\n',
+      mode: FileMode.append,
+      flush: true,
+    );
     final count = _appendedCount;
     if (count == null) {
       _appendedCount = await _countLines(_liveFile);
@@ -80,10 +165,10 @@ class TrackingBuffer {
     }
   }
 
-  /// All buffered samples in oldest-first order, **without** draining. Values
+  /// All buffered entries in oldest-first order, **without** draining. Values
   /// from the live spool plus any leftover drain file.
-  Future<List<Map<String, dynamic>>> pending() async {
-    final samples = <Map<String, dynamic>>[];
+  Future<List<TrackingSpoolEntry>> pending() async {
+    final samples = <TrackingSpoolEntry>[];
     if (await _drainFile.exists()) {
       samples.addAll(await _readLines(_drainFile));
     }
@@ -97,7 +182,7 @@ class TrackingBuffer {
   /// sample oldest-first. Safe against a concurrent [add] from another isolate:
   /// the live file is renamed aside (never mutated in place), so new appends go
   /// to a fresh file this drain will not see or clobber.
-  Future<List<Map<String, dynamic>>> readPending() async {
+  Future<List<TrackingSpoolEntry>> readPending() async {
     final live = _liveFile;
     final drain = _drainFile;
 
@@ -135,7 +220,10 @@ class TrackingBuffer {
   /// Persists [remaining] as the un-sent tail of the drained batch. The flush
   /// calls this after every successful chunk; passing an empty list clears the
   /// drain, so a fully delivered batch leaves nothing behind.
-  Future<void> commit(List<Map<String, dynamic>> remaining) async {
+  ///
+  /// Entries the current guard is not entitled to deliver stay in the spool
+  /// rather than being dropped or reassigned to the active credentials.
+  Future<void> commit(List<TrackingSpoolEntry> remaining) async {
     final drain = _drainFile;
     if (remaining.isEmpty) {
       if (await drain.exists()) await drain.delete();
@@ -157,22 +245,20 @@ class TrackingBuffer {
 
   // ── internals ────────────────────────────────────────────────────────────
 
-  List<Map<String, dynamic>> _cap(
-    List<Map<String, dynamic>> samples,
-  ) {
+  List<TrackingSpoolEntry> _cap(List<TrackingSpoolEntry> samples) {
     if (samples.length <= maxSamples) return samples;
     return samples.sublist(samples.length - maxSamples);
   }
 
-  String _encodeLines(List<Map<String, dynamic>> samples) {
+  String _encodeLines(List<TrackingSpoolEntry> samples) {
     final buffer = StringBuffer();
     for (final sample in samples) {
-      buffer.writeln(jsonEncode(sample));
+      buffer.writeln(sample.encode());
     }
     return buffer.toString();
   }
 
-  Future<List<Map<String, dynamic>>> _readLines(File file) async {
+  Future<List<TrackingSpoolEntry>> _readLines(File file) async {
     final String content;
     try {
       content = await file.readAsString();
@@ -180,13 +266,16 @@ class TrackingBuffer {
       debugPrint('TrackingBuffer: could not read ${file.path}: $e');
       return const [];
     }
-    final samples = <Map<String, dynamic>>[];
+    final samples = <TrackingSpoolEntry>[];
     for (final line in content.split('\n')) {
       if (line.trim().isEmpty) continue;
       try {
         final decoded = jsonDecode(line);
         if (decoded is Map) {
-          samples.add(Map<String, dynamic>.from(decoded));
+          final entry = TrackingSpoolEntry.fromLine(
+            Map<String, dynamic>.from(decoded),
+          );
+          if (entry != null) samples.add(entry);
         }
       } catch (_) {
         // Skip a torn/partial trailing line rather than dropping the batch.
@@ -198,10 +287,7 @@ class TrackingBuffer {
   Future<int> _countLines(File file) async {
     try {
       final content = await file.readAsString();
-      return content
-          .split('\n')
-          .where((line) => line.trim().isNotEmpty)
-          .length;
+      return content.split('\n').where((line) => line.trim().isNotEmpty).length;
     } catch (_) {
       return 0;
     }
@@ -213,10 +299,11 @@ class TrackingBuffer {
       _appendedCount = 0;
       return;
     }
-    final lines = (await live.readAsString())
-        .split('\n')
-        .where((line) => line.trim().isNotEmpty)
-        .toList();
+    final lines =
+        (await live.readAsString())
+            .split('\n')
+            .where((line) => line.trim().isNotEmpty)
+            .toList();
     if (lines.length <= maxSamples) {
       _appendedCount = lines.length;
       return;

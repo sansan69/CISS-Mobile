@@ -25,10 +25,11 @@ class OpenDutySessionCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final records = ref.watch(attendanceHistoryProvider).valueOrNull;
-    final session = records == null
-        ? null
-        : openDutySession(records, now: ref.read(clockProvider)());
+    final records = ref.watch(recentAttendanceHistoryProvider).valueOrNull;
+    final session =
+        records == null
+            ? null
+            : openDutySession(records, now: ref.read(clockProvider)());
     if (session == null) return const SizedBox.shrink();
 
     final tokens = CissThemeTokens.of(context);

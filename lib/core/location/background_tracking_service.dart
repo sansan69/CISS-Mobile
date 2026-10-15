@@ -233,13 +233,32 @@ Future<TrackingBuffer?> _ensureTrackingBuffer() async {
 }
 
 /// Persists a failed heartbeat so [SyncService] can flush it in a batch later.
-Future<void> _bufferFailedHeartbeat(Map<String, dynamic> payload) async {
+///
+/// The capturing guard and API origin are recorded with the sample: the spool
+/// file outlives the session and the account, so a later flush must be able to
+/// tell whose breadcrumb this is and which backend it belongs to.
+Future<void> _bufferFailedHeartbeat(
+  Map<String, dynamic> payload, {
+  String? owner,
+  String? origin,
+}) async {
   try {
     final buffer = await _ensureTrackingBuffer();
-    await buffer?.add(payload);
+    await buffer?.add(payload, owner: owner, origin: origin);
   } catch (e) {
     debugPrint('Failed to buffer tracking sample: $e');
   }
+}
+
+/// The guard whose breadcrumbs these are, as recorded by [start]. The document
+/// id is preferred because it is the identity the server attributes sessions
+/// with; an unattributable context yields null and the sample is quarantined.
+String? _spoolOwner(Map<String, dynamic>? siteContext) {
+  final docId = (siteContext?['employeeDocId'] as String?)?.trim();
+  if (docId != null && docId.isNotEmpty) return docId;
+  final employeeId = (siteContext?['employeeId'] as String?)?.trim();
+  if (employeeId != null && employeeId.isNotEmpty) return employeeId;
+  return null;
 }
 
 @pragma('vm:entry-point')
@@ -344,10 +363,11 @@ void onStart(ServiceInstance service) async {
       isMock: position.isMocked,
       isGPSOn: isGpsOn,
       wifiConnected: telemetry['wifiConnected'] == true,
-      batteryPercentage: (((telemetry['batteryLevel'] as num?) ?? 0) * 100)
-          .round()
-          .clamp(0, 100)
-          .toInt(),
+      batteryPercentage:
+          (((telemetry['batteryLevel'] as num?) ?? 0) * 100)
+              .round()
+              .clamp(0, 100)
+              .toInt(),
       networkType: (telemetry['networkType'] ?? 'none').toString(),
       time: DateTime.now().toUtc(),
     );
@@ -559,7 +579,11 @@ void onStart(ServiceInstance service) async {
           // so the batch sync can deliver it once the server recovers. The
           // 403/409 session-closed branch returns above and is intentionally
           // not buffered (the server would reject the sample too).
-          await _bufferFailedHeartbeat(heartbeatPayload);
+          await _bufferFailedHeartbeat(
+            heartbeatPayload,
+            owner: _spoolOwner(siteContext),
+            origin: baseUrl,
+          );
           _updateNotification(
             service,
             siteContext,
@@ -569,7 +593,11 @@ void onStart(ServiceInstance service) async {
         }
       } catch (httpErr) {
         debugPrint('Heartbeat upload error (will retry next cycle): $httpErr');
-        await _bufferFailedHeartbeat(heartbeatPayload);
+        await _bufferFailedHeartbeat(
+          heartbeatPayload,
+          owner: _spoolOwner(siteContext),
+          origin: baseUrl,
+        );
         _updateNotification(
           service,
           siteContext,

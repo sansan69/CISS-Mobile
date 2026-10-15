@@ -248,6 +248,9 @@ class AttendanceRecordModel {
     required this.dutyPointName,
     required this.shiftLabel,
     this.time,
+    this.reportedAt,
+    this.shiftStartsAt,
+    this.shiftEndsAt,
     this.distanceMeters,
     this.photoUrl,
   });
@@ -258,6 +261,9 @@ class AttendanceRecordModel {
   final String dutyPointName;
   final String shiftLabel;
   final String? time;
+  final DateTime? reportedAt;
+  final DateTime? shiftStartsAt;
+  final DateTime? shiftEndsAt;
   final num? distanceMeters;
   final String? photoUrl;
 
@@ -270,6 +276,14 @@ class AttendanceRecordModel {
       dutyPointName: (json['dutyPointName'] as String?) ?? '',
       shiftLabel: (json['shiftLabel'] as String?) ?? '',
       time: json['time'] as String?,
+      reportedAt:
+          DateTime.tryParse(
+            (json['reportedAt'] ?? json['createdAt']) as String? ?? '',
+          )?.toLocal(),
+      shiftStartsAt:
+          DateTime.tryParse(json['shiftStartsAt'] as String? ?? '')?.toLocal(),
+      shiftEndsAt:
+          DateTime.tryParse(json['shiftEndsAt'] as String? ?? '')?.toLocal(),
       distanceMeters: json['distanceMeters'] as num?,
       photoUrl: json['photoUrl'] as String?,
     );

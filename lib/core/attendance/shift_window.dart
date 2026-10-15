@@ -59,8 +59,19 @@ ShiftWindow shiftWindowFor({
   required DateTime businessDate,
   String? shiftLabel,
   required DateTime checkIn,
+  DateTime? shiftStartsAt,
+  DateTime? shiftEndsAt,
 }) {
   final day = startOfDay(businessDate);
+  if (shiftStartsAt != null &&
+      shiftEndsAt != null &&
+      shiftEndsAt.isAfter(shiftStartsAt)) {
+    return ShiftWindow(
+      businessDate: day,
+      start: shiftStartsAt,
+      end: shiftEndsAt,
+    );
+  }
   final clock = shiftClockFrom(shiftLabel);
   if (clock != null) {
     final start = day.add(clock.start);

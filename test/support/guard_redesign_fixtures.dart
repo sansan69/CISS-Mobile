@@ -102,6 +102,7 @@ GuardDashboardSnapshot dashboardFixture({
   String? shift = 'Night duty',
   String? date = '2026-10-14',
   bool unavailable = false,
+  int absentDays = 2,
 }) => GuardDashboardSnapshot(
   employeeName: name,
   employeeId: employeeId,
@@ -109,7 +110,7 @@ GuardDashboardSnapshot dashboardFixture({
   district: district,
   profilePhotoUrl: null,
   presentDays: 18,
-  absentDays: 2,
+  absentDays: absentDays,
   workingDays: 22,
   leaveBalance: null,
   latestEvalScore: null,

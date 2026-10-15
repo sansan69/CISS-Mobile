@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:ciss_mobile/app/theme/app_theme.dart';
 import 'package:ciss_mobile/core/cache/preload_controller.dart';
 import 'package:ciss_mobile/core/i18n/app_language.dart';
@@ -19,7 +21,6 @@ import 'package:ciss_mobile/core/fcm/notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 
 class _TestLanguage extends AppLanguageController {
   _TestLanguage(AppLanguage language) {
@@ -190,48 +191,49 @@ void main() {
     expect(controller.state, AppLanguage.malayalam);
   });
 
-  testWidgets('tracking health reports missing preconditions and repairs them', (
-    tester,
-  ) async {
-    final readiness = _FakeReadiness(
-      _readinessSnapshot(const <ReadinessItem, ReadinessState>{
-        ReadinessItem.location: ReadinessState.denied,
-        ReadinessItem.batteryExemption: ReadinessState.denied,
-      }),
-    );
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: <Override>[
-          readinessSourceProvider.overrideWithValue(readiness),
-          trackingServiceProbeProvider.overrideWithValue(
-            const _FakeTrackingService(TrackingServiceState.running),
-          ),
-        ],
-        child: MaterialApp(
-          theme: buildCissTheme(Brightness.light),
-          home: const Scaffold(
-            body: Padding(
-              padding: EdgeInsets.all(16),
-              child: TrackingHealthCard(),
+  testWidgets(
+    'tracking health reports missing preconditions and repairs them',
+    (tester) async {
+      final readiness = _FakeReadiness(
+        _readinessSnapshot(const <ReadinessItem, ReadinessState>{
+          ReadinessItem.location: ReadinessState.denied,
+          ReadinessItem.batteryExemption: ReadinessState.denied,
+        }),
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: <Override>[
+            readinessSourceProvider.overrideWithValue(readiness),
+            trackingServiceProbeProvider.overrideWithValue(
+              const _FakeTrackingService(TrackingServiceState.running),
+            ),
+          ],
+          child: MaterialApp(
+            theme: buildCissTheme(Brightness.light),
+            home: const Scaffold(
+              body: Padding(
+                padding: EdgeInsets.all(16),
+                child: TrackingHealthCard(),
+              ),
             ),
           ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    // The card reads device state only after an explicit check.
-    await tester.tap(find.text('Check'));
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
+      // The card reads device state only after an explicit check.
+      await tester.tap(find.text('Check'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Action needed'), findsNWidgets(2));
-    expect(find.text('Running'), findsOneWidget);
+      expect(find.text('Action needed'), findsNWidgets(2));
+      expect(find.text('Running'), findsOneWidget);
 
-    await tester.tap(find.byType(FilledButton).first);
-    await tester.pumpAndSettle();
+      await tester.tap(find.byType(FilledButton).first);
+      await tester.pumpAndSettle();
 
-    expect(readiness.requests, <ReadinessItem>[ReadinessItem.location]);
-    expect(find.text('Action needed'), findsOneWidget);
-  });
+      expect(readiness.requests, <ReadinessItem>[ReadinessItem.location]);
+      expect(find.text('Action needed'), findsOneWidget);
+    },
+  );
 
   testWidgets('unread notifications appear on the navigation bar', (
     tester,
@@ -240,53 +242,96 @@ void main() {
     expect(find.text('3'), findsOneWidget);
   });
 
-  test('muster roll PDF is a printable document that grows with records', () async {
-    final base = MusterRollData(
-      dateLabel: '15/10/2026',
-      totalForce: 315,
-      onDuty: 2,
-      checkedOut: 1,
-      siteOnDuty: const <String, int>{'Ernakulam centre': 2},
-      rows: <MusterRollRow>[
-        const MusterRollRow(
-          name: 'Asha Nair',
-          employeeId: 'CISS-100',
-          site: 'Ernakulam centre',
-          checkIn: '06:05',
-          checkOut: '—',
-          status: 'On duty',
-        ),
-      ],
-      generatedAt: '15 Oct 2026, 12:00',
-    );
-    final bytes = await buildMusterRollPdf(base);
-    expect(String.fromCharCodes(bytes.take(4)), '%PDF');
-    expect(bytes.length, greaterThan(2000));
-
-    final bigger = await buildMusterRollPdf(
-      MusterRollData(
-        dateLabel: base.dateLabel,
-        totalForce: base.totalForce,
-        onDuty: base.onDuty,
-        checkedOut: base.checkedOut,
-        siteOnDuty: base.siteOnDuty,
+  test(
+    'muster roll PDF is a printable document that grows with records',
+    () async {
+      final base = MusterRollData(
+        dateLabel: '15/10/2026',
+        totalForce: 315,
+        onDuty: 2,
+        checkedOut: 1,
+        siteOnDuty: const <String, int>{'Ernakulam centre': 2},
         rows: <MusterRollRow>[
-          ...base.rows,
-          ...List<MusterRollRow>.generate(
-            40,
-            (index) => MusterRollRow(
-              name: 'Guard $index',
-              employeeId: 'CISS-${200 + index}',
-              site: 'Site $index',
-              checkIn: '06:0$index',
-              checkOut: '18:0$index',
-              status: 'Checked out',
-            ),
+          const MusterRollRow(
+            name: 'Asha Nair',
+            employeeId: 'CISS-100',
+            site: 'Ernakulam centre',
+            checkIn: '06:05',
+            checkOut: '—',
+            status: 'On duty',
           ),
         ],
-        generatedAt: base.generatedAt,
+        generatedAt: '15 Oct 2026, 12:00',
+      );
+      final bytes = await buildMusterRollPdf(base);
+      expect(String.fromCharCodes(bytes.take(4)), '%PDF');
+      expect(bytes.length, greaterThan(2000));
+
+      final bigger = await buildMusterRollPdf(
+        MusterRollData(
+          dateLabel: base.dateLabel,
+          totalForce: base.totalForce,
+          onDuty: base.onDuty,
+          checkedOut: base.checkedOut,
+          siteOnDuty: base.siteOnDuty,
+          rows: <MusterRollRow>[
+            ...base.rows,
+            ...List<MusterRollRow>.generate(
+              40,
+              (index) => MusterRollRow(
+                name: 'Guard $index',
+                employeeId: 'CISS-${200 + index}',
+                site: 'Site $index',
+                checkIn: '06:0$index',
+                checkOut: '18:0$index',
+                status: 'Checked out',
+              ),
+            ),
+          ],
+          generatedAt: base.generatedAt,
+        ),
+      );
+      expect(bigger.length, greaterThan(bytes.length));
+    },
+  );
+
+  test('muster roll embeds a font that prints the em dash and bullet', () async {
+    // The PDF writer's built-in Helvetica cannot encode U+2014/U+2022 and warns
+    // instead of printing, so a report could reach a client with the missing
+    // check-out marker silently blanked out.
+    final warnings = <String>[];
+    await runZoned(
+      () async {
+        await buildMusterRollPdf(
+          const MusterRollData(
+            dateLabel: '15/10/2026',
+            totalForce: 1,
+            onDuty: 1,
+            checkedOut: 0,
+            siteOnDuty: <String, int>{'Ernakulam centre': 1},
+            rows: <MusterRollRow>[
+              MusterRollRow(
+                name: 'Asha Nair',
+                employeeId: 'CISS-100',
+                site: 'Ernakulam centre',
+                checkIn: '06:05',
+                checkOut: '—',
+                status: 'On duty',
+              ),
+            ],
+            generatedAt: '15 Oct 2026, 12:00',
+          ),
+        );
+      },
+      zoneSpecification: ZoneSpecification(
+        print: (_, _, _, String line) => warnings.add(line),
       ),
     );
-    expect(bigger.length, greaterThan(bytes.length));
+
+    expect(
+      warnings.where((line) => line.contains('Unable to find a font to draw')),
+      isEmpty,
+      reason: 'U+2014 and U+2022 must be covered by the embedded font',
+    );
   });
 }

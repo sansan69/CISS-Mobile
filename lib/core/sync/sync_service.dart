@@ -8,6 +8,7 @@ import '../network/mobile_repository.dart';
 import '../network/api_client.dart';
 import '../location/background_tracking_service.dart';
 import '../location/tracking_buffer.dart';
+import '../location/tracking_session_store.dart';
 import '../offline/offline_queue.dart';
 import '../offline/offline_request.dart';
 
@@ -17,9 +18,12 @@ class SyncService {
     this._queue,
     this._trackingBuffer, {
     Future<void> Function()? syncWillingness,
-  }) : _syncWillingness = syncWillingness;
+    Future<String?> Function()? trackingOwner,
+  }) : _syncWillingness = syncWillingness,
+       _trackingOwner = trackingOwner;
 
   final Future<void> Function()? _syncWillingness;
+  final Future<String?> Function()? _trackingOwner;
 
   final MobileRepository _repository;
   final OfflineQueue _queue;
@@ -158,7 +162,7 @@ class SyncService {
   /// failure (offline, non-2xx, auth) is logged and the un-sent tail is retried
   /// on the next [processQueue] pass.
   Future<void> _flushTrackingSamples() async {
-    final List<Map<String, dynamic>> pending;
+    final List<TrackingSpoolEntry> pending;
     try {
       pending = await _trackingBuffer.readPending();
     } catch (error) {
@@ -167,14 +171,34 @@ class SyncService {
     }
     if (pending.isEmpty) return;
 
-    final chunks = chunked(pending, trackingBatchChunkSize);
-    var sent = 0;
-    for (final chunk in chunks) {
+    // The spool file is shared by every account this device has ever used and
+    // survives logout, so delivery is restricted to rows this guard captured
+    // for this backend. Anything else — another guard's samples, or legacy rows
+    // written before the envelope existed — stays in the spool untouched rather
+    // than being posted under the current credentials.
+    final owner = await _currentTrackingOwner();
+    final origin = _repository.dutyApiBaseUrl;
+    final deliverable = <int>[];
+    if (owner != null && owner.isNotEmpty) {
+      for (var index = 0; index < pending.length; index++) {
+        if (pending[index].belongsTo(owner: owner, origin: origin)) {
+          deliverable.add(index);
+        }
+      }
+    }
+    if (deliverable.isEmpty) return;
+
+    final delivered = <int>{};
+    for (final chunk in chunked(deliverable, trackingBatchChunkSize)) {
       try {
         final dio = _repository.apiClient.dio;
         final response = await dio.post<dynamic>(
           '/api/mobile/tracking/batch',
-          data: <String, dynamic>{'samples': chunk},
+          data: <String, dynamic>{
+            'samples': <Map<String, dynamic>>[
+              for (final index in chunk) pending[index].sample,
+            ],
+          },
           options: Options(headers: await _repository.authHeaders()),
         );
         final data = response.data;
@@ -183,19 +207,38 @@ class SyncService {
             data['error']?.toString() ?? 'Server rejected tracking batch',
           );
         }
-        sent += chunk.length;
+        delivered.addAll(chunk);
         // Persist progress: keep only the un-sent tail so a crash mid-flush
         // does not resend the chunks that already landed. An empty remainder
         // clears the spool.
-        await _trackingBuffer.commit(pending.sublist(sent));
+        await _trackingBuffer.commit(<TrackingSpoolEntry>[
+          for (var index = 0; index < pending.length; index++)
+            if (!delivered.contains(index)) pending[index],
+        ]);
       } catch (error) {
         foundation.debugPrint(
-          'Tracking batch sync failed (${pending.length} samples, '
-          '$sent already sent), will retry later: $error',
+          'Tracking batch sync failed (${deliverable.length} deliverable '
+          'samples, ${delivered.length} already sent), will retry later: '
+          '$error',
         );
         break;
       }
     }
+  }
+
+  /// The guard the current credentials belong to, or null when it cannot be
+  /// established locally — in which case nothing is dispatched.
+  Future<String?> _currentTrackingOwner() async {
+    final injected = _trackingOwner;
+    if (injected != null) return injected();
+    try {
+      final saved = await const TrackingSessionStore().load();
+      final owner = (saved?['employeeDocId'] as String?)?.trim();
+      if (owner != null && owner.isNotEmpty) return owner;
+    } catch (error) {
+      foundation.debugPrint('Could not read the tracking owner: $error');
+    }
+    return null;
   }
 
   Future<bool> _processRequest(OfflineRequest request) async {

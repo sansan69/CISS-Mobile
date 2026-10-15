@@ -22,8 +22,7 @@ class OpenDutySession {
 
   /// True when the check-in happened before the day the guard is reading the
   /// screen on, which is what an overnight duty looks like at 02:00.
-  bool startedBefore(DateTime moment) =>
-      checkInAt.isBefore(startOfDay(moment));
+  bool startedBefore(DateTime moment) => checkInAt.isBefore(startOfDay(moment));
 
   bool get isOpen => status == OpenDutyStatus.open;
 }
@@ -51,13 +50,23 @@ OpenDutySession? openDutySession(
 }) {
   final punches = <_Punch>[];
   for (final record in records) {
-    final at = parsePunchTime(
-      record.time,
-      onDate: parseRowDate(record.dateLabel),
-    );
+    var at =
+        record.reportedAt ??
+        parsePunchTime(record.time, onDate: parseRowDate(record.dateLabel));
     if (at == null) continue;
     final isIn = record.status.trim().toLowerCase() == 'in';
     if (!isIn && record.status.trim().toLowerCase() != 'out') continue;
+    // Older API payloads carry only the operational date and HH:mm. For a
+    // named overnight shift, an early-morning OUT belongs to the next day.
+    // New payloads use reportedAt and never need this inference.
+    final shiftClock = shiftClockFrom(record.shiftLabel);
+    if (record.reportedAt == null &&
+        !isIn &&
+        shiftClock != null &&
+        shiftClock.end <= shiftClock.start &&
+        Duration(hours: at.hour, minutes: at.minute) < shiftClock.start) {
+      at = at.add(const Duration(days: 1));
+    }
     punches.add(_Punch(at: at, isIn: isIn, record: record));
   }
   if (punches.isEmpty) return null;
@@ -74,9 +83,11 @@ OpenDutySession? openDutySession(
   if (open == null) return null;
 
   final window = shiftWindowFor(
-    businessDate: startOfDay(open.at),
+    businessDate: parseRowDate(open.record.dateLabel) ?? startOfDay(open.at),
     shiftLabel: open.record.shiftLabel,
     checkIn: open.at,
+    shiftStartsAt: open.record.shiftStartsAt,
+    shiftEndsAt: open.record.shiftEndsAt,
   );
   return OpenDutySession(
     checkInAt: open.at,

@@ -173,14 +173,15 @@ void main() {
     expect(find.byType(GuardTrainingLeaderboardScreen), findsOneWidget);
   });
 
-  testWidgets('month counts remain readable without three equal metric cards', (
+  testWidgets('month counts show recorded days without absent totals', (
     tester,
   ) async {
-    await mount(tester);
+    await mount(tester, data: dashboardFixture(absentDays: 99));
     await tester.scrollUntilVisible(find.text('Present'), 240);
     expect(find.byType(MetricCard), findsNothing);
+    expect(find.text('Absent'), findsNothing);
+    expect(find.text('99'), findsNothing);
     expect(find.text('18'), findsOneWidget);
-    expect(find.text('2'), findsOneWidget);
     expect(find.text('22'), findsOneWidget);
   });
 

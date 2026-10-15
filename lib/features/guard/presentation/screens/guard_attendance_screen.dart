@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/haptics.dart';
 import '../../../../../core/models/attendance_models.dart';
+import '../../../../../core/time/clock.dart';
 import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/network/providers.dart';
@@ -81,7 +82,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   /// If the most recent record is OUT or no history, default to IN.
   Future<void> _initStatusFromHistory() async {
     try {
-      final records = await ref.read(attendanceHistoryProvider.future);
+      final records = await ref.read(recentAttendanceHistoryProvider.future);
       if (records.isEmpty) return;
 
       final latest = records.first;
@@ -384,7 +385,8 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           );
       if (!result.blocksSubmit) return false;
       if (mounted) {
-        final reason = result.reason ?? 'Attendance blocked by server validation.';
+        final reason =
+            result.reason ?? 'Attendance blocked by server validation.';
         setState(() => _error = reason);
         ScaffoldMessenger.of(
           context,
@@ -670,6 +672,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
             _status = _status == 'In' ? 'Out' : 'In';
           });
           ref.invalidate(attendanceHistoryProvider);
+          ref.invalidate(recentAttendanceHistoryProvider);
           unawaited(
             SuccessOverlay.show(
               context,
@@ -704,6 +707,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                 _status = _status == 'In' ? 'Out' : 'In';
               });
               ref.invalidate(attendanceHistoryProvider);
+              ref.invalidate(recentAttendanceHistoryProvider);
             }
           }
         } else {
@@ -1028,21 +1032,32 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                                 },
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 200),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: _status == 'In'
-                                        ? tokens.glowEmerald.withValues(alpha: 0.15)
-                                        : tokens.surfaceMuted,
-                                    borderRadius: BorderRadius.circular(AppRadius.md),
+                                    color:
+                                        _status == 'In'
+                                            ? tokens.glowEmerald.withValues(
+                                              alpha: 0.15,
+                                            )
+                                            : tokens.surfaceMuted,
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadius.md,
+                                    ),
                                     border: Border.all(
-                                      color: _status == 'In'
-                                          ? tokens.glowEmerald
-                                          : tokens.border,
+                                      color:
+                                          _status == 'In'
+                                              ? tokens.glowEmerald
+                                              : tokens.border,
                                       width: _status == 'In' ? 1.5 : 1.0,
                                     ),
-                                    boxShadow: _status == 'In'
-                                        ? AppShadows.glow(tokens.glowEmerald)
-                                        : null,
+                                    boxShadow:
+                                        _status == 'In'
+                                            ? AppShadows.glow(
+                                              tokens.glowEmerald,
+                                            )
+                                            : null,
                                   ),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1050,9 +1065,10 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                                       Icon(
                                         Icons.login_rounded,
                                         size: 18,
-                                        color: _status == 'In'
-                                            ? tokens.glowEmerald
-                                            : tokens.inkMuted,
+                                        color:
+                                            _status == 'In'
+                                                ? tokens.glowEmerald
+                                                : tokens.inkMuted,
                                       ),
                                       const SizedBox(width: 8),
                                       Text(
@@ -1061,9 +1077,10 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                                           fontSize: 13,
                                           fontWeight: FontWeight.w800,
                                           letterSpacing: 0.8,
-                                          color: _status == 'In'
-                                              ? tokens.glowEmerald
-                                              : tokens.inkMuted,
+                                          color:
+                                              _status == 'In'
+                                                  ? tokens.glowEmerald
+                                                  : tokens.inkMuted,
                                         ),
                                       ),
                                     ],
@@ -1080,21 +1097,30 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                                 },
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 200),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: _status == 'Out'
-                                        ? tokens.glowAmber.withValues(alpha: 0.15)
-                                        : tokens.surfaceMuted,
-                                    borderRadius: BorderRadius.circular(AppRadius.md),
+                                    color:
+                                        _status == 'Out'
+                                            ? tokens.glowAmber.withValues(
+                                              alpha: 0.15,
+                                            )
+                                            : tokens.surfaceMuted,
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadius.md,
+                                    ),
                                     border: Border.all(
-                                      color: _status == 'Out'
-                                          ? tokens.glowAmber
-                                          : tokens.border,
+                                      color:
+                                          _status == 'Out'
+                                              ? tokens.glowAmber
+                                              : tokens.border,
                                       width: _status == 'Out' ? 1.5 : 1.0,
                                     ),
-                                    boxShadow: _status == 'Out'
-                                        ? AppShadows.glow(tokens.glowAmber)
-                                        : null,
+                                    boxShadow:
+                                        _status == 'Out'
+                                            ? AppShadows.glow(tokens.glowAmber)
+                                            : null,
                                   ),
                                   child: Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
@@ -1102,9 +1128,10 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                                       Icon(
                                         Icons.logout_rounded,
                                         size: 18,
-                                        color: _status == 'Out'
-                                            ? tokens.glowAmber
-                                            : tokens.inkMuted,
+                                        color:
+                                            _status == 'Out'
+                                                ? tokens.glowAmber
+                                                : tokens.inkMuted,
                                       ),
                                       const SizedBox(width: 8),
                                       Text(
@@ -1113,9 +1140,10 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                                           fontSize: 13,
                                           fontWeight: FontWeight.w800,
                                           letterSpacing: 0.8,
-                                          color: _status == 'Out'
-                                              ? tokens.glowAmber
-                                              : tokens.inkMuted,
+                                          color:
+                                              _status == 'Out'
+                                                  ? tokens.glowAmber
+                                                  : tokens.inkMuted,
                                         ),
                                       ),
                                     ],
@@ -1202,7 +1230,8 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                               ),
                             ),
                           ),
-                        if (moduleEnabled(ref, 'break') && _status == 'Out') ...[
+                        if (moduleEnabled(ref, 'break') &&
+                            _status == 'Out') ...[
                           const SizedBox(height: 8),
                           _BreakPanel(
                             onBreak: _attendance.onBreak,
@@ -1213,56 +1242,74 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
                         const SizedBox(height: 14),
                         // ── Tactile Glowing Submit Button ──
                         GestureDetector(
-                          onTap: (_busy ||
-                                  (_status == 'Out' && !_attendance.canCheckOut))
-                              ? null
-                              : () => _submitAttendance(profile),
+                          onTap:
+                              (_busy ||
+                                      (_status == 'Out' &&
+                                          !_attendance.canCheckOut))
+                                  ? null
+                                  : () => _submitAttendance(profile),
                           child: Container(
                             width: double.infinity,
                             height: 52,
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: _status == 'In'
-                                    ? [const Color(0xFF059669), tokens.glowEmerald]
-                                    : [const Color(0xFFD97706), tokens.glowAmber],
+                                colors:
+                                    _status == 'In'
+                                        ? [
+                                          const Color(0xFF059669),
+                                          tokens.glowEmerald,
+                                        ]
+                                        : [
+                                          const Color(0xFFD97706),
+                                          tokens.glowAmber,
+                                        ],
                               ),
-                              borderRadius: BorderRadius.circular(AppRadius.pill),
-                              boxShadow: _status == 'In'
-                                  ? AppShadows.glow(tokens.glowEmerald)
-                                  : AppShadows.glow(tokens.glowAmber),
+                              borderRadius: BorderRadius.circular(
+                                AppRadius.pill,
+                              ),
+                              boxShadow:
+                                  _status == 'In'
+                                      ? AppShadows.glow(tokens.glowEmerald)
+                                      : AppShadows.glow(tokens.glowAmber),
                             ),
                             child: Center(
-                              child: _busy
-                                  ? const SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator.adaptive(
-                                      strokeWidth: 2.5,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                    ),
-                                  )
-                                  : Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        _status == 'In'
-                                            ? Icons.fingerprint_rounded
-                                            : Icons.verified_user_rounded,
-                                        color: Colors.white,
-                                        size: 20,
+                              child:
+                                  _busy
+                                      ? const SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child:
+                                            CircularProgressIndicator.adaptive(
+                                              strokeWidth: 2.5,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                    Colors.white,
+                                                  ),
+                                            ),
+                                      )
+                                      : Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            _status == 'In'
+                                                ? Icons.fingerprint_rounded
+                                                : Icons.verified_user_rounded,
+                                            color: Colors.white,
+                                            size: 20,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'CONFIRM & SUBMIT ${_status == 'In' ? 'CLOCK-IN' : 'CLOCK-OUT'}',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 14,
+                                              letterSpacing: 0.8,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'CONFIRM & SUBMIT ${_status == 'In' ? 'CLOCK-IN' : 'CLOCK-OUT'}',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 14,
-                                          letterSpacing: 0.8,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
                             ),
                           ),
                         ),
@@ -1398,6 +1445,29 @@ final FutureProvider<List<AttendanceRecordModel>> attendanceHistoryProvider =
     FutureProvider<List<AttendanceRecordModel>>((Ref ref) {
       return ref.read(mobileRepositoryProvider).fetchAttendanceHistory();
     });
+
+List<String> attendanceHistoryMonthsFor(DateTime now) {
+  String monthKey(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}';
+  return <String>[
+    monthKey(DateTime(now.year, now.month - 1, 1)),
+    monthKey(now),
+  ];
+}
+
+/// The open-duty card needs the previous month for overnight sessions filed by
+/// IN date. The monthly history screen continues to use attendanceHistoryProvider.
+final FutureProvider<List<AttendanceRecordModel>>
+recentAttendanceHistoryProvider = FutureProvider<List<AttendanceRecordModel>>((
+  Ref ref,
+) async {
+  final repository = ref.read(mobileRepositoryProvider);
+  final months = attendanceHistoryMonthsFor(ref.read(clockProvider)());
+  final batches = await Future.wait(
+    months.map((month) => repository.fetchAttendanceHistory(month: month)),
+  );
+  return batches.expand((records) => records).toList(growable: false);
+});
 
 class _AttendanceHistorySection extends ConsumerWidget {
   const _AttendanceHistorySection();
@@ -1552,7 +1622,6 @@ class _AttendanceHistorySection extends ConsumerWidget {
     final total = records.length;
     final presentCount =
         records.where((r) => r.status == 'In' || r.status == 'Present').length;
-    final absentCount = records.where((r) => r.status == 'Absent').length;
     final lateCount = records.where((r) => r.status == 'Late').length;
     // Check-out records are the OUT ones
     final outCount = records.where((r) => r.status == 'Out').length;
@@ -1595,8 +1664,6 @@ class _AttendanceHistorySection extends ConsumerWidget {
               ),
               _buildStatDivider(tokens),
               _buildStatItem('Out', '$outCount', tokens.warning, tokens),
-              _buildStatDivider(tokens),
-              _buildStatItem('Absent', '$absentCount', tokens.danger, tokens),
             ],
           ),
           if (lateCount > 0) ...[
@@ -1985,9 +2052,10 @@ class _GeofenceRadarCard extends StatelessWidget {
       isInside = distanceMeters <= site!.geofenceRadiusMeters;
     }
 
-    final Color toneColor = !hasPosition || site == null
-        ? tokens.inkMuted
-        : isInside
+    final Color toneColor =
+        !hasPosition || site == null
+            ? tokens.inkMuted
+            : isInside
             ? tokens.glowEmerald
             : tokens.glowAmber;
 
@@ -2017,7 +2085,9 @@ class _GeofenceRadarCard extends StatelessWidget {
             ),
             child: Icon(
               hasPosition && site != null
-                  ? (isInside ? Icons.radar_rounded : Icons.location_off_rounded)
+                  ? (isInside
+                      ? Icons.radar_rounded
+                      : Icons.location_off_rounded)
                   : Icons.my_location_rounded,
               color: toneColor,
               size: 22,
@@ -2067,10 +2137,10 @@ class _GeofenceRadarCard extends StatelessWidget {
                   site == null
                       ? 'Select an assigned post to calibrate radar'
                       : !hasPosition
-                          ? 'Awaiting high-precision GPS lock...'
-                          : isInside
-                              ? 'Within perimeter (${distanceMeters!.round()}m from center)'
-                              : 'Distance: ${distanceMeters!.round()}m (Limit: ${site!.geofenceRadiusMeters}m)',
+                      ? 'Awaiting high-precision GPS lock...'
+                      : isInside
+                      ? 'Within perimeter (${distanceMeters!.round()}m from center)'
+                      : 'Distance: ${distanceMeters!.round()}m (Limit: ${site!.geofenceRadiusMeters}m)',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -2081,10 +2151,7 @@ class _GeofenceRadarCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     '${site!.siteName} • ${site!.district}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: tokens.inkMuted,
-                    ),
+                    style: TextStyle(fontSize: 11, color: tokens.inkMuted),
                   ),
                 ],
               ],
@@ -2093,11 +2160,7 @@ class _GeofenceRadarCard extends StatelessWidget {
           const SizedBox(width: 8),
           IconButton(
             onPressed: onRecalibrate,
-            icon: Icon(
-              Icons.refresh_rounded,
-              size: 18,
-              color: tokens.inkMuted,
-            ),
+            icon: Icon(Icons.refresh_rounded, size: 18, color: tokens.inkMuted),
             tooltip: 'Recalibrate GPS',
           ),
         ],
@@ -2107,10 +2170,7 @@ class _GeofenceRadarCard extends StatelessWidget {
 }
 
 class _BiometricPhotoCard extends StatelessWidget {
-  const _BiometricPhotoCard({
-    required this.photoPath,
-    required this.onCapture,
-  });
+  const _BiometricPhotoCard({required this.photoPath, required this.onCapture});
 
   final String? photoPath;
   final VoidCallback onCapture;
@@ -2142,7 +2202,10 @@ class _BiometricPhotoCard extends StatelessWidget {
                 top: 10,
                 left: 10,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.7),
                     borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -2179,7 +2242,10 @@ class _BiometricPhotoCard extends StatelessWidget {
                 child: GestureDetector(
                   onTap: onCapture,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.75),
                       borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -2188,7 +2254,11 @@ class _BiometricPhotoCard extends StatelessWidget {
                     child: const Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.camera_alt_rounded, size: 14, color: Colors.white),
+                        Icon(
+                          Icons.camera_alt_rounded,
+                          size: 14,
+                          color: Colors.white,
+                        ),
                         SizedBox(width: 6),
                         Text(
                           'Retake',
@@ -2216,10 +2286,7 @@ class _BiometricPhotoCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: tokens.surfaceMuted.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(AppRadius.card),
-          border: Border.all(
-            color: tokens.specularBorder,
-            width: 1,
-          ),
+          border: Border.all(color: tokens.specularBorder, width: 1),
         ),
         child: Stack(
           children: [
@@ -2314,10 +2381,7 @@ class _BiometricPhotoCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     'GPS and timestamp automatically embedded',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: tokens.inkMuted,
-                    ),
+                    style: TextStyle(fontSize: 11, color: tokens.inkMuted),
                   ),
                 ],
               ),

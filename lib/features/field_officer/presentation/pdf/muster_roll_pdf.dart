@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
+import 'pdf_fonts.dart';
+
 /// One guard row of the muster roll.
 class MusterRollRow {
   const MusterRollRow({
@@ -53,9 +55,13 @@ class MusterRollData {
 /// Equivalent to the CISS-AMS `api/pdf_api.dart` report path, but generated
 /// on-device so it works with no connectivity.
 Future<Uint8List> buildMusterRollPdf(MusterRollData data) async {
+  // Embed a font that can actually print the em dash and bullet this report
+  // uses, instead of silently dropping them from the officer's copy.
+  final theme = await PdfFonts.theme();
   final document = pw.Document(
     title: 'CISS Muster Roll',
     author: 'CISS Workforce',
+    theme: theme,
   );
   final sites =
       data.siteOnDuty.entries.toList()
@@ -76,10 +82,7 @@ Future<Uint8List> buildMusterRollPdf(MusterRollData data) async {
             ),
             pw.Text(
               'Muster Roll — ${data.dateLabel}',
-              style: pw.TextStyle(
-                fontSize: 13,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 10),
             pw.TableHelper.fromTextArray(
@@ -101,10 +104,7 @@ Future<Uint8List> buildMusterRollPdf(MusterRollData data) async {
             pw.SizedBox(height: 14),
             pw.Text(
               'Site deployment',
-              style: pw.TextStyle(
-                fontSize: 12,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 6),
             if (sites.isEmpty)

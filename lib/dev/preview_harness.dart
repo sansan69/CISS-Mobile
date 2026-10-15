@@ -96,6 +96,9 @@ List<Override> _guardOverrides() => <Override>[
   ),
   attendanceSitesProvider.overrideWith((ref) async => mockAttendanceSites),
   attendanceHistoryProvider.overrideWith((ref) async => mockAttendanceHistory),
+  recentAttendanceHistoryProvider.overrideWith(
+    (ref) async => mockAttendanceHistory,
+  ),
   guardPayslipsProvider.overrideWith((ref) async => mockPayslips),
   guardIncidentsProvider.overrideWith((ref) async => mockIncidents),
   guardEvaluationsProvider.overrideWith((ref) async => mockEvaluations),

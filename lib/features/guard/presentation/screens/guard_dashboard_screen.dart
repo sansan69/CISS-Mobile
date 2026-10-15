@@ -248,8 +248,6 @@ class GuardDashboardScreen extends ConsumerWidget {
                       children: <Widget>[
                         _MonthCount(label: 'Present', value: data.presentDays),
                         const Divider(),
-                        _MonthCount(label: 'Absent', value: data.absentDays),
-                        const Divider(),
                         _MonthCount(label: 'Working', value: data.workingDays),
                       ],
                     ),

@@ -1,6 +1,6 @@
 # Backend and Firebase connection audit
 
-**Date:** 16 October 2026. **Scope:** every Firebase and HTTP dependency the mobile app uses, checked against the live project (`ciss-workforce`) and the deployed backend (`https://cisskerala.site`).
+**Original label:** 16 October 2026. **Deployment correction verified:** 15 October 2026, 23:00 IST. **Scope:** every Firebase and HTTP dependency the mobile app uses, checked against the live project (`ciss-workforce`) and the deployed backend (`https://cisskerala.site`).
 
 **Method.** Firebase: the Firebase MCP read the active project, its registered apps and the *deployed* Firestore rules; the deployed rules are byte-identical to `firestore.rules` in the sibling web/backend checkout, so that file is the source of truth. HTTP: every `/api/...` literal in `lib/**` (56 paths, interpolations replaced with a probe value) was requested once with GET and, where a route is write-only, once with POST and an empty body. A 401/405/400 means the route exists and refused an unauthenticated request; 404 means the route is absent. Trailing-slash variants answer 308 to the canonical path, so they were ruled out as an artefact.
 
@@ -19,7 +19,7 @@
 
 The app's other Firebase paths are rule-compatible: `fcmTokens/{uid}_mobile` writes only the allow-listed keys under an id matching `uid + '_.*'`; the fallback `notifications` read is provably scoped by `recipientUid == uid` and its update touches only `read`/`readAt`; attendance photos go through server routes (`/api/public/attendance/upload-token` then `/api/public/attendance/upload`), so Storage rules do not gate them; field-officer report photos write to `foReports/{folder}/{uid}/...`, which the Storage rule allows for a field officer.
 
-## 2. Firestore reads that the rules refuse
+## 2. Firestore read issues and current resolution
 
 Firestore evaluates a *list* rule against the query, not against the documents returned, so a rule that references `resource.data` can only authorise a query that names the value itself.
 
@@ -29,54 +29,19 @@ Firestore evaluates a *list* rule against the query, not against the documents r
 
 Fixed: `streamActiveLocations`/`fetchActiveLocations` now take the officer's districts, use `==` for one district and `in` for several (capped at Firestore's 30), and log the attempted scope when a read is refused. Both call sites pass `authSession.assignedDistricts`. Covered by `test/live_location_scope_test.dart`.
 
-### 2.2 Guard day-timeline breadcrumbs — needs a backend decision
+### 2.2 Guard day-timeline breadcrumbs — rules fix deployed
 
-`guardLocations/{id}/locationHistory` has the same shape of rule
-(`resource.data.district in token.assignedDistricts`), and the officer's timeline reads a date range with an `orderBy`, which can never be authorised from a field on the history document. Two ways to close it; neither is applied yet, because both are production changes to the shared project:
+The deployed rules now use `officerOwnsGuardLocation(employeeId)`, which resolves the district from the parent `guardLocations` document. Fresh read-only comparison found deployed Firestore and Storage rules equal to the reviewed sibling worktree at `1ce4b100`. All 137 declared composite indexes match the deployed index signatures, and all 137 are `READY`.
 
-**Option A — rules (recommended).** Read the district from the parent document, which makes the condition document-independent and therefore provable for a list query:
+The earlier statement that neither breadcrumb fix had been applied is superseded. Seven guard-location emulator checks pass, including parent lookup and district-scoped live-location reads. An end-to-end breadcrumb **list** query remains unverified because the local emulator hangs on subcollection list requests even with rules bypassed; a static assertion protects the helper's use. An authenticated production list/phone walkthrough is still needed.
 
-```javascript
-function officerOwnsGuardLocation(employeeId) {
-  return isFieldOfficer() &&
-    request.auth.token.assignedDistricts != null &&
-    get(/databases/$(database)/documents/guardLocations/$(employeeId))
-      .data.district in request.auth.token.assignedDistricts;
-}
+## 3. Mobile endpoints — deployed route inventory corrected
 
-match /guardLocations/{employeeId} {
-  match /locationHistory/{historyId} {
-    allow read: if readStateMatches() && (isAdmin() || isHR() || isAccounts() || isCompliance() ||
-      officerOwnsGuardLocation(employeeId) ||
-      (isClientUser() && clientUserClientName() != null &&
-        resource.data.clientName == clientUserClientName()));
-  }
-}
-```
+The earlier missing-route list is superseded by the deployment at web/backend commit `1ce4b100`. Fresh unauthenticated GET probes of all 56 literal mobile API paths returned 34 × 401, 20 × 405, 1 × 400 and 1 × 200, with no 404, 5xx or network errors. Guard duties, willingness, field-officer assignments and leaderboard are present. A write-only route answering 405 to GET confirms route presence, not successful authenticated behavior.
 
-Cost: one extra document read per request. No client change, no new index, and the client branch keeps working.
+Evidence: `/tmp/ciss-astra-audit-api-probes.json`. This check does not submit attendance, change willingness, assign guards, or verify authenticated production responses. The separate `/api/client/attendance` endpoint still returns HTTP 500 for a missing bearer token; that pre-existing auth-error mapping issue is recorded in the full-stack audit.
 
-**Option B — client filter plus an index.** Add `where('district','==',district)` to `_loadHistory` (the screen already loads the parent document, which carries `district`) and add `locationHistory (district ASC, recordedAt ASC)` to `firestore.indexes.json`. This needs an index deploy instead of a rules deploy.
-
-Until one lands, the timeline now distinguishes the two cases in the UI: a refused read shows "Movement history could not be loaded" instead of claiming the guard recorded no movement.
-
-## 3. Mobile endpoints the deployed backend does not implement
-
-404 on the live backend for every method, with no trailing-slash variant:
-
-| Endpoint | Called by | Model parsed |
-| --- | --- | --- |
-| `GET /api/guard/duties` | guard Duties tab (`fetchGuardDuties`) | `{duties: [...GuardDuty]}` |
-| `POST /api/guard/duties/{workOrderId}/willingness` | guard duty response, incl. the offline willingness queue | `{success, willingness, version, respondedAt, replayed}` |
-| `POST /api/field-officer/work-orders/{id}/willingness` | FO work-order willingness sheet (a primary FO destination) | same receipt |
-| `GET /api/field-officer/assignments` (+ `/{id}`) | FO assignments screen, opened from the work orders screen | `{assignments: [...GuardAssignment]}` |
-| `GET /api/guard/leaderboard` | guard training leaderboard | *exists in the backend repo, not deployed* — deployment lag, not missing code |
-
-Field contract the mobile already parses for a duty (`lib/core/models/duty_models.dart`): `id, kind, status, workOrderId, siteId, siteName, clientName, district, date, startsAt, endsAt, respondBy, shiftLabel, examName, examCode, canRespond, willingnessVersion, willingness, maleGuardsRequired, femaleGuardsRequired, willingCount, unavailableCount, ineligibilityReason`. The willingness body the app sends is `{response, clientRequestId, expectedVersion}`.
-
-A 404 is not treated as retryable (`CissError.isRetryableNetworkError` rejects 4xx), so a queued willingness response is kept and reported as "Response not sent: …" rather than retried forever.
-
-**Not implemented here on purpose.** These routes live in the sibling web/backend project, are part of the cross-repo duties stream, and take effect only after a deployment; the mobile half is already correct and waiting.
+See `2026-10-15-astra-full-stack-audit.md` for the new cross-contract and concurrency findings. Deployment availability alone does not close those defects.
 
 ## 4. Re-running this audit
 
