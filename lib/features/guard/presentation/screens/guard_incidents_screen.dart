@@ -11,6 +11,7 @@ import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/offline/draft_service.dart';
+import '../../../../../core/submission_identity.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
@@ -44,6 +45,7 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
 
   String? _message;
   bool _loading = false;
+  final SubmissionIdentity _submissionIdentity = SubmissionIdentity();
 
   static const String _draftKey = 'guard_incident_draft';
 
@@ -127,25 +129,43 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
         'locationText': _locationController.text.trim(),
         'reportedAt': DateTime.now().toUtc().toIso8601String(),
       };
+      final clientRequestId = _submissionIdentity.forPayload(
+        {...payload, 'photoIdentity': _photo?.path},
+        ignoredKeys: {'reportedAt'},
+      );
+      payload['reportedAt'] = _submissionIdentity.capture(
+        'reportedAt',
+        payload['reportedAt'],
+      );
+      payload['clientRequestId'] = clientRequestId;
 
+      List<String>? uploadedPhotoUrls;
       try {
         List<String> photoUrls = [];
         if (photoDataUrl != null) {
-          final uploadResult = await ref
-              .read(mobileRepositoryProvider)
-              .uploadAttendancePhoto(
-                employeeDocId:
-                    profile.id.isNotEmpty ? profile.id : profile.employeeId,
-                dataUrl: photoDataUrl,
-                siteId: _selectedSite!.id,
-              );
+          final uploadResult =
+              _submissionIdentity.readCapture<Map<String, dynamic>>(
+                'incidentPhotoUpload',
+              ) ??
+              await ref
+                  .read(mobileRepositoryProvider)
+                  .uploadAttendancePhoto(
+                    employeeDocId:
+                        profile.id.isNotEmpty ? profile.id : profile.employeeId,
+                    dataUrl: photoDataUrl,
+                    siteId: _selectedSite!.id,
+                    attemptId: clientRequestId,
+                  );
+          _submissionIdentity.capture('incidentPhotoUpload', uploadResult);
           photoUrls.add(uploadResult['url']);
         }
+        uploadedPhotoUrls = photoUrls;
 
         await ref.read(mobileRepositoryProvider).createGuardIncident({
           ...payload,
           'photoUrls': photoUrls,
         });
+        _submissionIdentity.complete();
 
         await ref.read(draftServiceProvider).clearDraft(_draftKey);
 
@@ -167,9 +187,18 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                 method: 'POST',
                 body: {
                   ...payload,
-                  if (photoDataUrl != null) 'photoDataUrls': [photoDataUrl],
+                  if (uploadedPhotoUrls != null)
+                    'photoUrls': uploadedPhotoUrls
+                  else if (photoDataUrl != null)
+                    'photoDataUrls': [photoDataUrl],
+                  if (uploadedPhotoUrls == null && photoDataUrl != null) ...{
+                    'attendanceAttemptId': clientRequestId,
+                    'employeeDocId':
+                        profile.id.isNotEmpty ? profile.id : profile.employeeId,
+                  },
                 },
               );
+          _submissionIdentity.complete();
 
           await ref.read(draftServiceProvider).clearDraft(_draftKey);
 

@@ -52,6 +52,7 @@ class ApiClient {
           // prevents a permanently rejected token from recursing through
           // this interceptor indefinitely.
           if (error.response?.statusCode == 401 &&
+              error.requestOptions.extra[kSkipApiAuth] != true &&
               error.requestOptions.extra[_authRetryMarker] != true) {
             try {
               if (!await _identityIsCurrent(error.requestOptions)) {

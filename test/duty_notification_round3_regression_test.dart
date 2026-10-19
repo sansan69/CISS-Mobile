@@ -210,6 +210,8 @@ class OriginRepo extends repro.Repo {
 
   @override
   Future<List<GuardProfileModel>> fetchFieldOfficerGuards({
+    int? limit,
+    String? after,
     String? district,
     bool includeInactive = false,
   }) async => [];

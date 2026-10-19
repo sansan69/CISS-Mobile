@@ -1,3 +1,4 @@
+import '../../../shared/sensitive_screen.dart';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -45,16 +46,13 @@ class GuardPayslipsScreen extends ConsumerWidget {
       await file.writeAsBytes(bytes, flush: true);
 
       if (forceShare) {
-        await Share.shareXFiles(
-          [
-            XFile(
-              file.path,
-              mimeType: 'application/pdf',
-              name: 'payslip-$sanitizedPeriod.pdf',
-            ),
-          ],
-          text: 'CISS Payslip - ${payslip.periodLabel}',
-        );
+        await Share.shareXFiles([
+          XFile(
+            file.path,
+            mimeType: 'application/pdf',
+            name: 'payslip-$sanitizedPeriod.pdf',
+          ),
+        ], text: 'CISS Payslip - ${payslip.periodLabel}');
         return;
       }
 
@@ -71,22 +69,19 @@ class GuardPayslipsScreen extends ConsumerWidget {
 
       if (!launched) {
         // Graceful fallback to share sheet if no PDF viewer handles the intent
-        await Share.shareXFiles(
-          [
-            XFile(
-              file.path,
-              mimeType: 'application/pdf',
-              name: 'payslip-$sanitizedPeriod.pdf',
-            ),
-          ],
-          text: 'CISS Payslip - ${payslip.periodLabel}',
-        );
+        await Share.shareXFiles([
+          XFile(
+            file.path,
+            mimeType: 'application/pdf',
+            name: 'payslip-$sanitizedPeriod.pdf',
+          ),
+        ], text: 'CISS Payslip - ${payslip.periodLabel}');
       }
     } catch (error) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open payslip: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not open payslip: $error')));
     }
   }
 
@@ -232,69 +227,74 @@ class GuardPayslipsScreen extends ConsumerWidget {
             onRetry: () => ref.invalidate(guardPayslipsProvider),
           ),
       data: (payslips) {
-        return ScreenScaffold(
-          title: 'Payslips',
-          subtitle: 'Monthly payroll slips',
-          onRefresh: () async => ref.invalidate(guardPayslipsProvider),
-          actions: <Widget>[
-            IconButton(
-              onPressed: () => ref.invalidate(guardPayslipsProvider),
-              icon: const Icon(Icons.refresh_rounded),
-            ),
-          ],
-          children: <Widget>[
-            GuardHeroPanel(
-              eyebrow: 'Payslips',
-              title:
-                  '${payslips.length} payslip${payslips.length == 1 ? '' : 's'}',
-              subtitle:
-                  payslips.isEmpty
-                      ? 'Published monthly payslips will appear here.'
-                      : 'Tap any period to view details or download PDF.',
-              icon: Icons.account_balance_wallet_rounded,
-              accentColor: tokens.warning,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            GuardMetricStrip(
-              items: <GuardMetricItem>[
-                GuardMetricItem(
-                  label: 'Records',
-                  value: '${payslips.length}',
+        return SensitiveScreen(
+          child: ScreenScaffold(
+            title: 'Payslips',
+            subtitle: 'Monthly payroll slips',
+            onRefresh: () async => ref.invalidate(guardPayslipsProvider),
+            actions: <Widget>[
+              IconButton(
+                onPressed: () => ref.invalidate(guardPayslipsProvider),
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ],
+            children: <Widget>[
+              GuardHeroPanel(
+                eyebrow: 'Payslips',
+                title:
+                    '${payslips.length} payslip${payslips.length == 1 ? '' : 's'}',
+                subtitle:
+                    payslips.isEmpty
+                        ? 'Published monthly payslips will appear here.'
+                        : 'Tap any period to view details or download PDF.',
+                icon: Icons.account_balance_wallet_rounded,
+                accentColor: tokens.warning,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              GuardMetricStrip(
+                items: <GuardMetricItem>[
+                  GuardMetricItem(
+                    label: 'Records',
+                    value: '${payslips.length}',
+                    icon: Icons.receipt_long_rounded,
+                    color: tokens.primary,
+                  ),
+                  GuardMetricItem(
+                    label: 'Format',
+                    value: 'PDF',
+                    icon: Icons.picture_as_pdf_rounded,
+                    color: tokens.danger,
+                  ),
+                  GuardMetricItem(
+                    label: 'Action',
+                    value: 'Open',
+                    icon: Icons.open_in_new_rounded,
+                    color: tokens.accent,
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              if (payslips.isEmpty)
+                const StateBlock(
                   icon: Icons.receipt_long_rounded,
-                  color: tokens.primary,
+                  title: 'No payslips published',
+                  message:
+                      'Monthly payslips will appear here after payroll is processed.',
                 ),
-                GuardMetricItem(
-                  label: 'Format',
-                  value: 'PDF',
-                  icon: Icons.picture_as_pdf_rounded,
-                  color: tokens.danger,
+              ...payslips.map(
+                (payslip) => GuardRecordCard(
+                  title: payslip.periodLabel,
+                  subtitle: payslip.netPayLabel,
+                  icon: Icons.payments_rounded,
+                  chip: const StatusChip(
+                    label: 'PDF',
+                    tone: StatusChipTone.info,
+                  ),
+                  onTap: () => _showDetailSheet(context, ref, payslip),
                 ),
-                GuardMetricItem(
-                  label: 'Action',
-                  value: 'Open',
-                  icon: Icons.open_in_new_rounded,
-                  color: tokens.accent,
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            if (payslips.isEmpty)
-              const StateBlock(
-                icon: Icons.receipt_long_rounded,
-                title: 'No payslips published',
-                message:
-                    'Monthly payslips will appear here after payroll is processed.',
               ),
-            ...payslips.map(
-              (payslip) => GuardRecordCard(
-                title: payslip.periodLabel,
-                subtitle: payslip.netPayLabel,
-                icon: Icons.payments_rounded,
-                chip: const StatusChip(label: 'PDF', tone: StatusChipTone.info),
-                onTap: () => _showDetailSheet(context, ref, payslip),
-              ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );

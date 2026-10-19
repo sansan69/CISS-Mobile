@@ -1,9 +1,12 @@
+import '../i18n/app_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'apk_downloader.dart';
+import 'play_update_service.dart';
 import 'app_update_service.dart';
 import '../settings/remote_config.dart';
 import '../settings/remote_config_provider.dart';
@@ -56,9 +59,38 @@ class _AppUpdateGateState extends ConsumerState<AppUpdateGate> {
       return;
     }
 
+    if (isPlayDistribution) {
+      final service = ref.read(playUpdateServiceProvider);
+      final packageInfo = await PackageInfo.fromPlatform();
+      final mandatory = isBelowMinimumVersion(
+        packageInfo.version,
+        config.app.minSupportedVersion,
+      );
+      final updateStatus = await service.check();
+      if (!mounted ||
+          !shouldShowPlayUpdate(updateStatus, mandatory: mandatory)) {
+        return;
+      }
+      _dialogOpen = true;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: !mandatory,
+        builder:
+            (_) => PlayUpdateDialog(
+              service: service,
+              mandatory: mandatory,
+            ),
+      );
+      _dialogOpen = false;
+      return;
+    }
+
     final result =
         await ref.read(appUpdateServiceProvider).checkForAndroidUpdate();
-    if (!mounted || result == null || !result.hasUpdate || result.update == null) {
+    if (!mounted ||
+        result == null ||
+        !result.hasUpdate ||
+        result.update == null) {
       return;
     }
 
@@ -67,14 +99,15 @@ class _AppUpdateGateState extends ConsumerState<AppUpdateGate> {
     await showDialog<void>(
       context: context,
       barrierDismissible: !mandatory,
-      builder: (ctx) => _UpdateDialog(
-        result: result,
-        mandatory: mandatory,
-        onLater: () {
-          if (ctx.mounted) Navigator.of(ctx).pop();
-        },
-        onBrowserFallback: (update) => _browserFallback(update),
-      ),
+      builder:
+          (ctx) => _UpdateDialog(
+            result: result,
+            mandatory: mandatory,
+            onLater: () {
+              if (ctx.mounted) Navigator.of(ctx).pop();
+            },
+            onBrowserFallback: (update) => _browserFallback(update),
+          ),
     );
     _dialogOpen = false;
   }
@@ -100,16 +133,16 @@ class _MaintenanceDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => PopScope(
-        canPop: false,
-        child: AlertDialog(
-          icon: const Icon(Icons.build_rounded, size: 32),
-          title: const Text('Under maintenance'),
-          content: const Text(
-            'CISS Workforce is temporarily unavailable for scheduled '
-            'maintenance. Please try again shortly.',
-          ),
-        ),
-      );
+    canPop: false,
+    child: AlertDialog(
+      icon: const Icon(Icons.build_rounded, size: 32),
+      title: const Text('Under maintenance'),
+      content: const Text(
+        'CISS Workforce is temporarily unavailable for scheduled '
+        'maintenance. Please try again shortly.',
+      ),
+    ),
+  );
 }
 
 /// The initial update-available dialog.
@@ -146,9 +179,10 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
   @override
   Widget build(BuildContext context) {
     final update = widget.result.update!;
-    final sizeMb = update.sizeBytes > 0
-        ? (update.sizeBytes / (1024 * 1024)).toStringAsFixed(1)
-        : null;
+    final sizeMb =
+        update.sizeBytes > 0
+            ? (update.sizeBytes / (1024 * 1024)).toStringAsFixed(1)
+            : null;
 
     return PopScope(
       canPop: !widget.mandatory && _phase == _UpdatePhase.idle,
@@ -177,7 +211,8 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
                 child: Row(
                   children: [
                     SizedBox(
-                      width: 16, height: 16,
+                      width: 16,
+                      height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                     SizedBox(width: 8),
@@ -191,7 +226,8 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
                 child: Row(
                   children: [
                     SizedBox(
-                      width: 16, height: 16,
+                      width: 16,
+                      height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                     SizedBox(width: 8),
@@ -230,7 +266,7 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
           if (!widget.mandatory)
             TextButton(
               onPressed: widget.onLater,
-              child: const Text('Later'),
+              child: Text(AppStrings.of(context).readinessLater),
             ),
           FilledButton.icon(
             icon: const Icon(Icons.download_rounded),
@@ -258,7 +294,7 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
           if (!widget.mandatory)
             TextButton(
               onPressed: widget.onLater,
-              child: const Text('Later'),
+              child: Text(AppStrings.of(context).readinessLater),
             ),
         ];
     }
@@ -285,14 +321,18 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
         cancelToken: cancelToken,
         onProgress: (received, total) {
           if (!mounted) return;
-          setState(() { _received = received; _total = total; });
+          setState(() {
+            _received = received;
+            _total = total;
+          });
         },
       );
     } on ApkHashMismatchError {
       if (!mounted) return;
       setState(() {
         _phase = _UpdatePhase.idle;
-        _errorMessage = 'Download integrity check failed. This may indicate '
+        _errorMessage =
+            'Download integrity check failed. This may indicate '
             'a corrupted download. Please try again or use the browser download.';
       });
       return;
@@ -307,9 +347,10 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
       if (!mounted) return;
       setState(() {
         _phase = _UpdatePhase.idle;
-        _errorMessage = cancelToken.isCancelled
-            ? 'Download cancelled.'
-            : 'Network error: ${e.message}. Check your connection and try again.';
+        _errorMessage =
+            cancelToken.isCancelled
+                ? 'Download cancelled.'
+                : 'Network error: ${e.message}. Check your connection and try again.';
       });
       return;
     } catch (e) {
@@ -343,24 +384,25 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
       final shouldOpen = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Permission required'),
-          content: const Text(
-            'To install this update, CISS Workforce needs permission to '
-            'install apps from unknown sources. Open system settings to '
-            'grant this?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
+        builder:
+            (ctx) => AlertDialog(
+              title: const Text('Permission required'),
+              content: const Text(
+                'To install this update, CISS Workforce needs permission to '
+                'install apps from unknown sources. Open system settings to '
+                'grant this?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: const Text('Open settings'),
+                ),
+              ],
             ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Open settings'),
-            ),
-          ],
-        ),
       );
 
       if (shouldOpen == true) {
@@ -420,8 +462,7 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
       case _UpdatePhase.installing:
         return const Icon(Icons.system_update_rounded, size: 32);
       case _UpdatePhase.done:
-        return Icon(Icons.check_circle_rounded,
-            size: 32, color: Colors.green);
+        return Icon(Icons.check_circle_rounded, size: 32, color: Colors.green);
     }
   }
 
@@ -457,27 +498,97 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
           ],
           if (update.releaseNotes.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Text(
-              'What changed',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
+            Text('What changed', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
             ...update.releaseNotes
                 .take(4)
-                .map((note) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('• '),
-                          Expanded(child: Text(note)),
-                        ],
-                      ),
-                    )),
+                .map(
+                  (note) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [const Text('• '), Expanded(child: Text(note))],
+                    ),
+                  ),
+                ),
           ],
         ],
       );
     }
     return const SizedBox.shrink();
   }
+}
+
+/// A mandatory update stays above the app even if Play cancels or is offline.
+class PlayUpdateDialog extends StatefulWidget {
+  const PlayUpdateDialog({
+    super.key,
+    required this.service,
+    required this.mandatory,
+  });
+  final PlayUpdateService service;
+  final bool mandatory;
+  @override
+  State<PlayUpdateDialog> createState() => _PlayUpdateDialogState();
+}
+
+class _PlayUpdateDialogState extends State<PlayUpdateDialog> {
+  bool _busy = false;
+  bool _failed = false;
+  Future<void> _install() async {
+    setState(() {
+      _busy = true;
+      _failed = false;
+    });
+    final success = await widget.service.install();
+    if (!mounted) return;
+    if (success) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _busy = false;
+      _failed = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => PopScope(
+    canPop: !widget.mandatory,
+    child: AlertDialog(
+      title: Text(
+        AppStrings.of(
+          context,
+        ).label(widget.mandatory ? 'playRequired' : 'playAvailable'),
+      ),
+      content: Text(
+        AppStrings.of(
+          context,
+        ).label(_failed ? 'playFailed' : 'playDescription'),
+      ),
+      actions: [
+        if (!widget.mandatory)
+          TextButton(
+            onPressed: _busy ? null : () => Navigator.of(context).pop(),
+            child: Text(AppStrings.of(context).readinessLater),
+          ),
+        TextButton(
+          onPressed:
+              () => launchUrl(
+                Uri.parse(
+                  'https://play.google.com/store/apps/details?id=co.in.ciss.ciss_mobile',
+                ),
+                mode: LaunchMode.externalApplication,
+              ),
+          child: const Text('Google Play'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _install,
+          child: Text(
+            AppStrings.of(context).label(_busy ? 'playUpdating' : 'playUpdate'),
+          ),
+        ),
+      ],
+    ),
+  );
 }

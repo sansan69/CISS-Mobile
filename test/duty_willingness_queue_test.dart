@@ -35,10 +35,51 @@ DioException failure(int code) => DioException(
   ),
 );
 void main() {
+  late DateTime now;
+  setUp(() {
+    now = DateTime.utc(2026, 10, 18);
+  });
+  test(
+    'retry deadline and receipt survive restart with monotonic choice sequence',
+    () async {
+      final store = MemoryStore();
+      final q = WillingnessQueue(store, now: () => now, jitter: () => 0.5);
+      final op = await choose(q);
+      var attempts = 0;
+      Future<WillingnessReceipt> send(WillingnessOperation row) async {
+        if (++attempts == 1) throw failure(503);
+        return WillingnessReceipt(response: row.response, version: 1);
+      }
+
+      await q.process(
+        owner: () => 'auth-a',
+        origin: () => 'https://a.invalid',
+        send: send,
+      );
+      final restored = WillingnessQueue(store, now: () => now);
+      await restored.process(
+        owner: () => 'auth-a',
+        origin: () => 'https://a.invalid',
+        send: send,
+      );
+      expect(attempts, 1);
+      now = now.add(const Duration(minutes: 6));
+      await restored.process(
+        owner: () => 'auth-a',
+        origin: () => 'https://a.invalid',
+        send: send,
+      );
+      expect(attempts, 2);
+      final saved = restored.forOwner('auth-a', 'https://a.invalid').single;
+      expect(saved.acknowledgedAt, now);
+      expect((await choose(restored)).sequence, greaterThan(op.sequence));
+    },
+  );
+
   test(
     'new choice after receipt uses acknowledged version even before feed refresh',
     () async {
-      final q = WillingnessQueue(MemoryStore());
+      final q = WillingnessQueue(MemoryStore(), now: () => now);
       await q.load();
       await choose(q);
       await q.process(
@@ -87,7 +128,7 @@ void main() {
     },
   );
   test('transport retries preserve request body UUID and CAS', () async {
-    final q = WillingnessQueue(MemoryStore());
+    final q = WillingnessQueue(MemoryStore(), now: () => now);
     await q.load();
     final op = await choose(q);
     await q.process(
@@ -100,6 +141,7 @@ void main() {
                 type: DioExceptionType.connectionTimeout,
               ),
     );
+    now = now.add(const Duration(minutes: 6));
     await q.process(
       owner: () => 'auth-a',
       origin: () => 'https://a.invalid',
@@ -111,7 +153,7 @@ void main() {
     );
   });
   test('capacity failure retains every pending request', () async {
-    final q = WillingnessQueue(MemoryStore());
+    final q = WillingnessQueue(MemoryStore(), now: () => now);
     await q.load();
     for (var i = 0; i < WillingnessQueue.capacity; i++) {
       await q.choose(
@@ -170,7 +212,7 @@ void main() {
   test(
     'inflight predecessor receipt rebases successor without deleting newer choice',
     () async {
-      final q = WillingnessQueue(MemoryStore());
+      final q = WillingnessQueue(MemoryStore(), now: () => now);
       await q.load();
       final first = await choose(q);
       final latch = Completer<WillingnessReceipt>();
@@ -203,7 +245,7 @@ void main() {
   );
   for (final status in [401, 429, 500]) {
     test('$status retains pending UUID through retry', () async {
-      final q = WillingnessQueue(MemoryStore());
+      final q = WillingnessQueue(MemoryStore(), now: () => now);
       await q.load();
       final op = await choose(q);
       await q.process(
@@ -212,6 +254,7 @@ void main() {
         send: (o) async => throw failure(status),
       );
       expect(q.forOwner('auth-a', 'https://a.invalid').single.state, 'pending');
+      now = now.add(const Duration(minutes: 6));
       await q.process(
         owner: () => 'auth-a',
         origin: () => 'https://a.invalid',
@@ -240,6 +283,7 @@ void main() {
         origin: () => 'https://a.invalid',
         send: send,
       );
+      now = now.add(const Duration(minutes: 6));
       await q.process(
         owner: () => 'auth-a',
         origin: () => 'https://a.invalid',
@@ -259,7 +303,7 @@ void main() {
     });
   }
   test('session switch during a send prevents dispatch of successor', () async {
-    final q = WillingnessQueue(MemoryStore());
+    final q = WillingnessQueue(MemoryStore(), now: () => now);
     await q.load();
     await choose(q);
     var uid = 'auth-a';
@@ -287,7 +331,7 @@ void main() {
   test(
     'one receipt retires only the acknowledged duty and keeps the rest pending',
     () async {
-      final q = WillingnessQueue(MemoryStore());
+      final q = WillingnessQueue(MemoryStore(), now: () => now);
       await q.load();
       await q.choose(
         ownerUid: 'auth-a',
@@ -330,6 +374,7 @@ void main() {
       );
       expect(q.forOwner('auth-a', 'https://a.invalid').last.id, second.id);
       sent.clear();
+      now = now.add(const Duration(minutes: 6));
       await q.process(
         owner: () => 'auth-a',
         origin: () => 'https://a.invalid',

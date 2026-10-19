@@ -67,9 +67,9 @@ class MobileRepository implements AuthRepository {
   Future<Map<String, String>> _deviceHeaders() async {
     try {
       final id = (await _deviceIdProvider?.call())?.trim() ?? '';
-      return id.isEmpty ? const <String, String>{} : <String, String>{
-        'X-Device-Id': id,
-      };
+      return id.isEmpty
+          ? const <String, String>{}
+          : <String, String>{'X-Device-Id': id};
     } catch (error) {
       debugPrint('Device id unavailable for this request: $error');
       return const <String, String>{};
@@ -263,9 +263,7 @@ class MobileRepository implements AuthRepository {
   }) async {
     try {
       final deviceHeaders =
-          identifyDevice
-              ? await _deviceHeaders()
-              : const <String, String>{};
+          identifyDevice ? await _deviceHeaders() : const <String, String>{};
       final response = await _apiClient.dio.post<dynamic>(
         path,
         data: body,
@@ -1147,6 +1145,7 @@ class MobileRepository implements AuthRepository {
     String? attemptId,
     String? verificationToken,
     bool authenticated = true,
+    Future<bool> Function()? identityGuard,
   }) async {
     final ownerKey = employeeDocId.trim();
     if (!RegExp(r'^[0-9A-Za-z_-]+$').hasMatch(ownerKey)) {
@@ -1172,11 +1171,20 @@ class MobileRepository implements AuthRepository {
           if (verificationToken != null && verificationToken.isNotEmpty)
             'attendanceVerificationToken': verificationToken,
         },
-        options:
-            authenticated
-                ? null
-                : Options(extra: <String, dynamic>{kSkipApiAuth: true}),
+        options: Options(
+          extra: <String, dynamic>{
+            if (!authenticated) kSkipApiAuth: true,
+            if (identityGuard != null) kApiRequestIdentityGuard: identityGuard,
+          },
+        ),
       );
+      if (identityGuard != null && !await identityGuard()) {
+        throw DioException(
+          requestOptions: RequestOptions(path: '/api/public/attendance/upload'),
+          type: DioExceptionType.cancel,
+          message: kApiRequestIdentityChanged,
+        );
+      }
       final tokenData = _mapResponse(tokenResponse.data);
       final uploadToken = tokenData['uploadToken'] as String?;
       if (uploadToken == null || uploadToken.isEmpty) {
@@ -1189,10 +1197,12 @@ class MobileRepository implements AuthRepository {
           'photoDataUrl': dataUrl,
           'uploadToken': uploadToken,
         },
-        options:
-            authenticated
-                ? null
-                : Options(extra: <String, dynamic>{kSkipApiAuth: true}),
+        options: Options(
+          extra: <String, dynamic>{
+            if (!authenticated) kSkipApiAuth: true,
+            if (identityGuard != null) kApiRequestIdentityGuard: identityGuard,
+          },
+        ),
       );
       return _mapResponse(response.data);
     } catch (error) {
@@ -1211,8 +1221,12 @@ class MobileRepository implements AuthRepository {
   Future<Map<String, dynamic>> uploadReportPhoto({
     required String path,
     required String dataUrl,
+    Future<bool> Function()? identityGuard,
   }) async {
     try {
+      if (identityGuard != null && !await identityGuard()) {
+        throw StateError(kApiRequestIdentityChanged);
+      }
       final bytes = Uint8List.fromList(_dataUrlToBytes(dataUrl));
       final storage = _regionService.activeStorage;
       final reference = storage.ref(path);
@@ -1220,7 +1234,13 @@ class MobileRepository implements AuthRepository {
         bytes,
         SettableMetadata(contentType: 'image/jpeg'),
       );
+      if (identityGuard != null && !await identityGuard()) {
+        throw StateError(kApiRequestIdentityChanged);
+      }
       final url = await reference.getDownloadURL();
+      if (identityGuard != null && !await identityGuard()) {
+        throw StateError(kApiRequestIdentityChanged);
+      }
       return <String, dynamic>{'url': url, 'path': path};
     } catch (error) {
       if (error is FirebaseException &&
@@ -1295,13 +1315,18 @@ class MobileRepository implements AuthRepository {
     double? lat,
     double? lng,
     double? accuracy,
+    String? capturedAt,
+    String? sessionId,
+    String? clientRequestId,
   }) async {
     return _postJson(_attendanceBreakPath, <String, dynamic>{
       'action': action,
-      'lat': lat,
-      'lng': lng,
-      'accuracy': accuracy,
-      'capturedAt': DateTime.now().toUtc().toIso8601String(),
+      if (lat != null) 'lat': lat,
+      if (lng != null) 'lng': lng,
+      if (accuracy != null) 'accuracy': accuracy,
+      if (sessionId != null) 'sessionId': sessionId,
+      if (clientRequestId != null) 'clientRequestId': clientRequestId,
+      'capturedAt': capturedAt ?? DateTime.now().toUtc().toIso8601String(),
     });
   }
 
@@ -1707,26 +1732,55 @@ class MobileRepository implements AuthRepository {
   Future<List<GuardProfileModel>> fetchFieldOfficerGuards({
     String? district,
     bool includeInactive = false,
+    int? limit,
+    String? after,
+  }) async =>
+      (await fetchFieldOfficerGuardsPage(
+        district: district,
+        includeInactive: includeInactive,
+        limit: limit,
+        after: after,
+      )).guards;
+
+  Future<GuardDirectoryPage> fetchFieldOfficerGuardsPage({
+    String? district,
+    bool includeInactive = false,
+    int? limit,
+    String? after,
   }) async {
-    final queryParameters = <String, dynamic>{
-      if (district != null && district.trim().isNotEmpty)
-        'district': district.trim(),
-      if (includeInactive) 'includeInactive': true,
-    };
-    final data = await _getJson(
+    var data = await _getJson(
       '/api/field-officer/guards',
-      queryParameters: queryParameters.isEmpty ? null : queryParameters,
+      queryParameters: {
+        if (district != null && district.trim().isNotEmpty)
+          'district': district.trim(),
+        if (includeInactive) 'includeInactive': true,
+        if (limit != null) 'limit': limit,
+        if (after != null) 'after': after,
+      },
     );
-    final guards = data['guards'] as List<dynamic>? ?? const <dynamic>[];
-    return guards
-        .whereType<Map<String, dynamic>>()
-        .map(
-          (json) => GuardProfileModel.fromJson(
-            json,
-            id: (json['id'] as String?) ?? '',
-          ),
-        )
-        .toList();
+    // Older deployments do not expose continuation; request their complete roster.
+    if (limit != null && after == null && !data.containsKey('nextCursor')) {
+      data = await _getJson(
+        '/api/field-officer/guards',
+        queryParameters: {
+          if (district != null) 'district': district,
+          if (includeInactive) 'includeInactive': true,
+        },
+      );
+    }
+    final guards = data['guards'] as List<dynamic>? ?? const [];
+    return GuardDirectoryPage(
+      guards
+          .whereType<Map<String, dynamic>>()
+          .map(
+            (json) => GuardProfileModel.fromJson(
+              json,
+              id: json['id'] as String? ?? '',
+            ),
+          )
+          .toList(),
+      data['nextCursor'] as String?,
+    );
   }
 
   /// Fetch guards for a specific client/site (used by guard attendee picker)
@@ -1852,7 +1906,8 @@ class MobileRepository implements AuthRepository {
   /// aggregated range endpoint answers this in a single request; a deployment
   /// without it falls back to one call per date, merged by row id so a punch
   /// returned by both is counted once.
-  Future<List<FieldOfficerAttendanceEntry>> fetchGuardAttendanceForBusinessDate({
+  Future<List<FieldOfficerAttendanceEntry>>
+  fetchGuardAttendanceForBusinessDate({
     required DateTime businessDate,
     String? district,
     int lookbackDays = 1,
@@ -2049,4 +2104,10 @@ class MobileRepository implements AuthRepository {
       'reason': reason,
     });
   }
+}
+
+class GuardDirectoryPage {
+  const GuardDirectoryPage(this.guards, this.nextCursor);
+  final List<GuardProfileModel> guards;
+  final String? nextCursor;
 }

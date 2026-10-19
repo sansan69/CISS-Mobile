@@ -87,8 +87,7 @@ class AppStrings {
   String get readinessOpenScreen => _values['readinessOpenScreen']!;
   String get readinessOemTitle => _values['readinessOemTitle']!;
   String get readinessOemBody => _values['readinessOemBody']!;
-  String get readinessOemOpenSettings =>
-      _values['readinessOemOpenSettings']!;
+  String get readinessOemOpenSettings => _values['readinessOemOpenSettings']!;
   String get readinessOemStepSelect => _values['readinessOemStepSelect']!;
   String get readinessOemStepUnrestrict =>
       _values['readinessOemStepUnrestrict']!;
@@ -149,6 +148,37 @@ class AppStringsScope extends InheritedWidget {
 }
 
 const Map<String, String> _en = <String, String>{
+  'offlineSaveFailed':
+      'Could not save offline. Keep this screen open and retry.',
+  "syncHealth": "Sync health",
+  "syncCounts": "{pending} pending · {rejected} need review",
+  "syncOldest": "Oldest pending: {time}",
+  "syncAck": "Last saved by server: {time}",
+  "syncFailure": "Last issue: {reason}",
+  "syncRejected":
+      "The server declined a queued record. Contact your officer; it will not be retried automatically.",
+  "syncNow": "Sync now",
+  "syncNone": "None",
+  "syncScope": "Attendance and reports",
+  "directoryLoadMore": "Load more employees",
+  "directoryPageError": "Could not load more employees.",
+  "directorySearchLoaded": "Searches loaded employees. Scroll to load more.",
+  "directoryAuditError":
+      "Could not record employee access. Connect and try again.",
+  "policies": "Policies",
+  "policyPrivacy": "Privacy policy",
+  "policyTerms": "Terms of use",
+  "policyPsara": "PSARA information",
+  "policyNotConfigured":
+      "Contact the office for company policies. Online links have not been configured.",
+  "playRequired": "Update required",
+  "playAvailable": "Update available",
+  "playDescription":
+      "Install the latest CISS Workforce update from Google Play.",
+  "playFailed":
+      "The update did not finish. Check your connection and retry, or open Google Play.",
+  "playUpdate": "Update",
+  "playUpdating": "Updating…",
   'navHome': 'Home',
   'navAttendance': 'Attendance',
   'navEmployees': 'Employees',
@@ -200,7 +230,8 @@ const Map<String, String> _en = <String, String>{
   'readinessBatteryWhy':
       'Android suspends background apps unless they are exempt. Set CISS to Unrestricted, then allow auto-start on the next step.',
   'readinessBannerTitle': 'Finish device setup',
-  'readinessBannerBody': 'Some permissions or device settings are still missing.',
+  'readinessBannerBody':
+      'Some permissions or device settings are still missing.',
   'readinessStateGranted': 'Allowed',
   'readinessStateDenied': 'Denied',
   'readinessStateBlocked': 'Blocked',
@@ -265,6 +296,37 @@ const Map<String, String> _en = <String, String>{
 };
 
 const Map<String, String> _hi = <String, String>{
+  'offlineSaveFailed':
+      'ऑफ़लाइन सहेजा नहीं जा सका। यह स्क्रीन खुली रखें और फिर कोशिश करें।',
+  "syncHealth": "सिंक स्थिति",
+  "syncCounts": "{pending} लंबित · {rejected} की समीक्षा आवश्यक",
+  "syncOldest": "सबसे पुराना लंबित: {time}",
+  "syncAck": "सर्वर पर पिछली बचत: {time}",
+  "syncFailure": "पिछली समस्या: {reason}",
+  "syncRejected":
+      "सर्वर ने एक रिकॉर्ड अस्वीकार किया। अपने अधिकारी से संपर्क करें; इसे अपने आप फिर नहीं भेजा जाएगा।",
+  "syncNow": "अभी सिंक करें",
+  "syncNone": "कोई नहीं",
+  "syncScope": "उपस्थिति और रिपोर्ट",
+  "directoryLoadMore": "और कर्मचारी लोड करें",
+  "directoryPageError": "और कर्मचारी लोड नहीं हो सके।",
+  "directorySearchLoaded":
+      "लोड किए कर्मचारियों में खोजता है। और लोड करने के लिए स्क्रॉल करें।",
+  "directoryAuditError":
+      "कर्मचारी तक पहुँच रिकॉर्ड नहीं हो सकी। कनेक्ट होकर फिर कोशिश करें।",
+  "policies": "नीतियाँ",
+  "policyPrivacy": "गोपनीयता नीति",
+  "policyTerms": "उपयोग की शर्तें",
+  "policyPsara": "PSARA जानकारी",
+  "policyNotConfigured":
+      "कंपनी की नीतियों के लिए कार्यालय से संपर्क करें। ऑनलाइन लिंक अभी उपलब्ध नहीं हैं।",
+  "playRequired": "अपडेट आवश्यक",
+  "playAvailable": "अपडेट उपलब्ध",
+  "playDescription": "Google Play से नवीनतम CISS Workforce अपडेट इंस्टॉल करें।",
+  "playFailed":
+      "अपडेट पूरा नहीं हुआ। कनेक्शन जाँचकर फिर कोशिश करें या Google Play खोलें।",
+  "playUpdate": "अपडेट करें",
+  "playUpdating": "अपडेट हो रहा है…",
   'navHome': 'होम',
   'navAttendance': 'उपस्थिति',
   'navEmployees': 'कर्मचारी',
@@ -369,7 +431,8 @@ const Map<String, String> _hi = <String, String>{
   'dutyCloseShiftHint':
       'यह शिफ्ट बंद नहीं हुई। उपस्थिति खोलकर चेक-आउट दर्ज करें।',
   'navigate': 'रास्ता देखें',
-  'navigateUnavailable': 'इस जगह को खोलने के लिए कोई मैप ऐप या ब्राउज़र नहीं मिला।',
+  'navigateUnavailable':
+      'इस जगह को खोलने के लिए कोई मैप ऐप या ब्राउज़र नहीं मिला।',
   'policyUnavailableTitle': 'पेज ऑफ़लाइन उपलब्ध नहीं',
   'policyUnavailableBody':
       'यह पेज लोड नहीं हो सका। कनेक्शन जाँचकर फिर कोशिश करें, या ब्राउज़र में खोलें।',
@@ -380,6 +443,38 @@ const Map<String, String> _hi = <String, String>{
 };
 
 const Map<String, String> _ml = <String, String>{
+  'offlineSaveFailed':
+      'ഓഫ്‌ലൈനിൽ സംരക്ഷിക്കാനായില്ല. ഈ സ്ക്രീൻ തുറന്നുവച്ച് വീണ്ടും ശ്രമിക്കുക.',
+  "syncHealth": "സിങ്ക് നില",
+  "syncCounts": "{pending} അയയ്ക്കാനുണ്ട് · {rejected} പരിശോധിക്കണം",
+  "syncOldest": "ഏറ്റവും പഴയ ബാക്കി: {time}",
+  "syncAck": "സെർവറിൽ അവസാനം സംരക്ഷിച്ചത്: {time}",
+  "syncFailure": "അവസാന പ്രശ്നം: {reason}",
+  "syncRejected":
+      "സെർവർ ഒരു റെക്കോർഡ് നിരസിച്ചു. ഓഫീസറെ ബന്ധപ്പെടുക; ഇത് സ്വമേധയാ വീണ്ടും അയയ്ക്കില്ല.",
+  "syncNow": "ഇപ്പോൾ സിങ്ക് ചെയ്യുക",
+  "syncNone": "ഇല്ല",
+  "syncScope": "ഹാജറും റിപ്പോർട്ടുകളും",
+  "directoryLoadMore": "കൂടുതൽ ജീവനക്കാരെ കാണുക",
+  "directoryPageError": "കൂടുതൽ ജീവനക്കാരെ ലോഡ് ചെയ്യാനായില്ല.",
+  "directorySearchLoaded":
+      "ലോഡ് ചെയ്ത ജീവനക്കാരിൽ തിരയുന്നു. കൂടുതൽ കാണാൻ സ്ക്രോൾ ചെയ്യുക.",
+  "directoryAuditError":
+      "ജീവനക്കാരന്റെ വിവരങ്ങൾ തുറന്നത് രേഖപ്പെടുത്താനായില്ല. കണക്റ്റ് ചെയ്ത് വീണ്ടും ശ്രമിക്കുക.",
+  "policies": "നയങ്ങൾ",
+  "policyPrivacy": "സ്വകാര്യതാ നയം",
+  "policyTerms": "ഉപയോഗ നിബന്ധനകൾ",
+  "policyPsara": "PSARA വിവരങ്ങൾ",
+  "policyNotConfigured":
+      "കമ്പനി നയങ്ങൾക്ക് ഓഫീസുമായി ബന്ധപ്പെടുക. ഓൺലൈൻ ലിങ്കുകൾ സജ്ജീകരിച്ചിട്ടില്ല.",
+  "playRequired": "അപ്‌ഡേറ്റ് ആവശ്യമാണ്",
+  "playAvailable": "അപ്‌ഡേറ്റ് ലഭ്യമാണ്",
+  "playDescription":
+      "Google Play-യിൽ നിന്ന് CISS Workforce-ന്റെ പുതിയ അപ്‌ഡേറ്റ് ഇൻസ്റ്റാൾ ചെയ്യുക.",
+  "playFailed":
+      "അപ്‌ഡേറ്റ് പൂർത്തിയായില്ല. കണക്ഷൻ പരിശോധിച്ച് വീണ്ടും ശ്രമിക്കുക, അല്ലെങ്കിൽ Google Play തുറക്കുക.",
+  "playUpdate": "അപ്‌ഡേറ്റ് ചെയ്യുക",
+  "playUpdating": "അപ്‌ഡേറ്റ് ചെയ്യുന്നു…",
   'navHome': 'ഹോം',
   'navAttendance': 'ഹാജർ',
   'navEmployees': 'ജീവനക്കാർ',
@@ -391,7 +486,8 @@ const Map<String, String> _ml = <String, String>{
   'language': 'ഭാഷ',
   'languageSubtitle': 'മെനുകൾക്കും ലേബലുകൾക്കും ഭാഷ തിരഞ്ഞെടുക്കുക',
   'trackingHealth': 'ട്രാക്കിംഗ് നില',
-  'trackingHealthSubtitle': 'ഡ്യൂട്ടി ട്രാക്കിംഗ് പശ്ചാത്തലത്തിൽ പ്രവർത്തിപ്പിക്കുക',
+  'trackingHealthSubtitle':
+      'ഡ്യൂട്ടി ട്രാക്കിംഗ് പശ്ചാത്തലത്തിൽ പ്രവർത്തിപ്പിക്കുക',
   'ok': 'കുഴപ്പമില്ല',
   'actionNeeded': 'നടപടി വേണം',
   'fix': 'ശരിയാക്കുക',

@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> Status note, 2026-10-18: this is the historical execution checklist. Its unticked
+> script steps are not a current pending-feature list. Module settings, tracking,
+> breaks and shift parity have shipped and are covered by regression tests.
+> Current continuation status: `../reports/2026-10-18-continuation.md`.
+
 **Goal:** Add a server-driven module-gating subsystem and bring attendance/tracking payloads to CISS-AMS parity in the `ciss_mobile` Flutter app.
 
 **Architecture:** One `RemoteConfig` value (app config + `ModuleFlags`) fetched from `GET /api/mobile/settings`, cached encrypted in Hive, exposed via `remoteConfigProvider`, and enforced by a GoRouter `redirect` + `ModuleGate` widget (hard-hide + redirect). Tracking parity extends the existing `BackgroundTrackingService` heartbeat with AMS field names, adds a Hive `TrackingBuffer` flushed via a batch endpoint, a break/early-checkout state machine, and server-authoritative geo+IP validation.

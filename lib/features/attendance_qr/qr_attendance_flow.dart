@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'package:ciss_mobile/core/security/attendance_integrity.dart';
+import 'package:ciss_mobile/core/telemetry/app_telemetry.dart';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -780,6 +783,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
   }
 
   Future<void> _submitAttendance() async {
+    final telemetry = ref.read(appTelemetryProvider);
     final site = _selectedSite;
     final employee = _employee;
     if (site == null || employee == null) return;
@@ -797,6 +801,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
 
     Map<String, dynamic>? submissionPayload;
 
+    unawaited(telemetry.record('attendance_funnel', stage: 'attempt'));
     try {
       final repo = ref.read(mobileRepositoryProvider);
 
@@ -868,6 +873,9 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
         'photoCapturedAt': now.toUtc().toIso8601String(),
         'locationCapturedAt': now.toUtc().toIso8601String(),
         'photoStoragePath': photoStoragePath,
+        ...await ref
+            .read(attendanceIntegrityProvider)
+            .evidence(clientRequestId),
         'attendanceAttemptId': clientRequestId,
         'attendanceVerificationToken': employee.verificationToken,
         'deviceInfo': <String, dynamic>{'userAgent': 'flutter-mobile-qr'},
@@ -892,6 +900,13 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
           uploadResult['path'] as String? ?? photoStoragePath;
 
       await repo.submitAttendance(payload);
+      unawaited(
+        telemetry.record(
+          'attendance_funnel',
+          stage: 'outcome',
+          reason: 'saved',
+        ),
+      );
 
       if (!mounted) return;
       setState(() {
@@ -926,6 +941,16 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
         );
       }
     } on DioException catch (e) {
+      if (!CissError.isRetryableNetworkError(e)) {
+        unawaited(
+          telemetry.record(
+            'attendance_funnel',
+            stage: 'outcome',
+            reason: 'punch_failed',
+            failed: true,
+          ),
+        );
+      }
       if (CissError.isRetryableNetworkError(e)) {
         // Offline: queue for sync
         try {
@@ -934,8 +959,20 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
               .enqueue(
                 path: '/api/attendance/submit',
                 method: 'POST',
-                body: {...?submissionPayload, 'photoDataUrl': _photoDataUrl},
+                body: <String, dynamic>{
+                  ...?submissionPayload,
+                  if (submissionPayload?['photoUrl'] is! String ||
+                      (submissionPayload!['photoUrl'] as String).trim().isEmpty)
+                    'photoDataUrl': _photoDataUrl,
+                },
               );
+          unawaited(
+            telemetry.record(
+              'attendance_funnel',
+              stage: 'outcome',
+              reason: 'queued_offline',
+            ),
+          );
 
           if (!mounted) return;
           if (_attendanceStatus == 'Out') {
@@ -958,6 +995,14 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
             ),
           );
         } catch (_) {
+          unawaited(
+            telemetry.record(
+              'attendance_funnel',
+              stage: 'outcome',
+              reason: 'offline_storage_failed',
+              failed: true,
+            ),
+          );
           if (!mounted) return;
           setState(() => _loading = false);
           ScaffoldMessenger.of(context).showSnackBar(
@@ -970,6 +1015,14 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
       setState(() => _loading = false);
       rethrow;
     } catch (e) {
+      unawaited(
+        telemetry.record(
+          'attendance_funnel',
+          stage: 'outcome',
+          reason: 'punch_failed',
+          failed: true,
+        ),
+      );
       if (!mounted) return;
       setState(() => _loading = false);
       ScaffoldMessenger.of(context).showSnackBar(

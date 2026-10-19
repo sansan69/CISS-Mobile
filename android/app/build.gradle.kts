@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.util.Base64
 
 plugins {
     id("com.android.application")
@@ -23,6 +24,12 @@ if (releaseBuildRequested && !keystoreFile.exists()) {
     )
 }
 
+val dartDefinitions = (project.findProperty("dart-defines") as String?)
+    ?.split(",")?.mapNotNull {
+        runCatching { String(Base64.getDecoder().decode(it)) }.getOrNull()
+    }?.associate { it.substringBefore("=") to it.substringAfter("=", "") } ?: emptyMap()
+val playDistribution = dartDefinitions["CISS_DISTRIBUTION"] == "play"
+
 android {
     namespace = "co.in.ciss.ciss_mobile"
     compileSdk = 36
@@ -45,6 +52,14 @@ android {
         targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    if (playDistribution) {
+        // tools:node values cannot be manifest placeholders. A higher-priority
+        // overlay removes the sideload permission for each Play build mode.
+        for (variant in listOf("debug", "release", "profile")) {
+            sourceSets.maybeCreate(variant).manifest.srcFile("src/play/AndroidManifest.xml")
+        }
     }
 
     signingConfigs {

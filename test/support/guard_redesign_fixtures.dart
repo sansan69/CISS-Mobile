@@ -89,6 +89,12 @@ class NoNetworkRepository implements MobileRepository {
   String get dutyApiBaseUrl => 'https://fixture.invalid';
 
   @override
+  Future<Map<String, dynamic>> postGeneric(String path, Map<String, dynamic> body) async {
+    if (path == '/api/field-officer/employee-access') return {'success': true};
+    throw StateError('Unexpected write $path');
+  }
+
+  @override
   dynamic noSuchMethod(Invocation invocation) {
     throw StateError('Unexpected repository call ${invocation.memberName}');
   }

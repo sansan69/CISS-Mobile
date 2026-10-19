@@ -7,6 +7,7 @@ import 'sync_service.dart';
 import '../../features/guard/application/duty_willingness_controller.dart';
 import '../../features/auth/application/auth_controller.dart';
 import 'dart:async';
+import '../region/region_service.dart';
 
 final offlineQueueProvider = ChangeNotifierProvider<OfflineQueue>((ref) {
   return OfflineQueue();
@@ -19,8 +20,16 @@ final trackingBufferProvider = Provider<TrackingBuffer>((ref) {
 });
 
 final syncServiceProvider = Provider<SyncService>((ref) {
-  final repository = ref.read(mobileRepositoryProvider);
+  ref.watch(regionGraphRevisionProvider);
+  final repository = ref.watch(mobileRepositoryProvider);
   final queue = ref.read(offlineQueueProvider);
+  queue.bindIdentity(() async {
+    final current = ref.read(mobileRepositoryProvider);
+    return OfflineQueueIdentity(
+      ownerUid: current.currentUser?.uid,
+      origin: current.dutyApiBaseUrl,
+    );
+  });
   final trackingBuffer = ref.read(trackingBufferProvider);
   final service = SyncService(
     repository,

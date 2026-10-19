@@ -6,11 +6,54 @@ import 'package:uuid/uuid.dart';
 
 import 'offline_request.dart';
 
+class OfflineQueueIdentity {
+  const OfflineQueueIdentity({required this.ownerUid, required this.origin});
+  final String? ownerUid;
+  final String origin;
+}
+
+String _normalizedOrigin(String value) {
+  final uri = Uri.tryParse(value.trim());
+  if (uri == null || !uri.hasAuthority) {
+    return value.trim().replaceFirst(RegExp(r'/+$'), '');
+  }
+  return '${uri.scheme.toLowerCase()}://${uri.authority.toLowerCase()}';
+}
+
+String _streamKey({
+  required String path,
+  required Map<String, dynamic> body,
+  required String? ownerUid,
+  required bool publicProof,
+}) {
+  if (publicProof) {
+    final employee = body['employeeId'] ?? body['employeeDocId'] ?? '';
+    return 'public:${body['attendanceSessionId'] ?? employee}';
+  }
+  if (ownerUid != null &&
+      (path == '/api/attendance/submit' ||
+          path == '/api/mobile/attendance/break')) {
+    // Attendance and break actions mutate one employee-wide server session.
+    // Keep them ordered together across sites and endpoint paths.
+    return 'guard-attendance:$ownerUid';
+  }
+  final causalId =
+      body['requestId'] ?? body['workOrderId'] ?? body['attendanceSessionId'];
+  return 'owner:${ownerUid ?? ''}:$path:${causalId ?? ''}';
+}
+
 class OfflineQueue extends ChangeNotifier {
   static const String boxName = 'offline_queue';
   static const String _keyName = 'hive_encryption_key';
+  static const _metaName = 'offline_queue_meta';
+  Future<void> _writes = Future.value();
   final _uuid = const Uuid();
   final _secureStorage = const FlutterSecureStorage();
+  Future<OfflineQueueIdentity> Function()? _identityProvider;
+
+  void bindIdentity(Future<OfflineQueueIdentity> Function() provider) {
+    _identityProvider = provider;
+  }
 
   Future<HiveAesCipher?> getEncryptionCipher() async {
     try {
@@ -35,6 +78,31 @@ class OfflineQueue extends ChangeNotifier {
   Future<void> init() async {
     final cipher = await getEncryptionCipher();
     await Hive.openBox<Map>(boxName, encryptionCipher: cipher);
+    await Hive.openBox<dynamic>(_metaName, encryptionCipher: cipher);
+    // One-time migration in insertion order, even when legacy timestamps tie.
+    var sequence = (_meta.get('sequence') as int?) ?? 0;
+    for (final key in _box.keys.toList()) {
+      try {
+        final row = Map<String, dynamic>.from(_box.get(key)!);
+        final existing = row['sequence'] is int ? row['sequence'] as int : 0;
+        if (existing > sequence) sequence = existing;
+        if (row['streamKey'] == null) {
+          row['state'] = 'quarantined';
+          row['lastError'] = 'legacy_identity_missing';
+          row['streamKey'] = 'legacy:$key';
+          await _box.put(key, row);
+        }
+        if (existing == 0) {
+          row['sequence'] = ++sequence;
+          await _box.put(key, row);
+        }
+      } catch (_) {
+        debugPrint(
+          'OfflineQueue: unreadable legacy row retained for recovery.',
+        );
+      }
+    }
+    await _meta.put('sequence', sequence);
   }
 
   Box<Map> get _box {
@@ -52,6 +120,35 @@ class OfflineQueue extends ChangeNotifier {
   /// queue is initialized.
   bool get isInitialized => Hive.isBoxOpen(boxName);
 
+  Box<dynamic> get _meta => Hive.box<dynamic>(_metaName);
+  int get pendingCount =>
+      isInitialized
+          ? getQueuedRequests().where((r) => r.state == 'pending').length
+          : 0;
+  int get rejectedCount =>
+      isInitialized
+          ? getQueuedRequests().where((r) => r.state == 'rejected').length
+          : 0;
+  DateTime? get oldestPending =>
+      isInitialized
+          ? getQueuedRequests()
+              .where((r) => r.state == 'pending')
+              .firstOrNull
+              ?.createdAt
+          : null;
+  DateTime? get lastAcknowledgedAt =>
+      Hive.isBoxOpen(_metaName)
+          ? DateTime.tryParse(_meta.get('lastAck')?.toString() ?? '')
+          : null;
+  String? get lastFailureReason =>
+      Hive.isBoxOpen(_metaName) ? _meta.get('lastFailure') as String? : null;
+  Future<void> acknowledge(String id, DateTime at) async {
+    // Retire before storing health metadata; stable request IDs make replay safe.
+    await removeRequest(id);
+    await _meta.put('lastAck', at.toIso8601String());
+    notifyListeners();
+  }
+
   int get queueSize => isInitialized ? _box.length : 0;
 
   static const int maxQueueSize = 100;
@@ -60,25 +157,58 @@ class OfflineQueue extends ChangeNotifier {
     required String path,
     required String method,
     required Map<String, dynamic> body,
-  }) async {
-    // Drop oldest request if at capacity
-    if (_box.length >= maxQueueSize) {
-      final oldest = _box.keys.first;
-      await _box.delete(oldest);
-      debugPrint(
-        'OfflineQueue: evicted oldest request $oldest (max $maxQueueSize reached)',
+  }) {
+    // Capture the owner/deployment at the call site; serializing durable writes
+    // must not rebind an earlier request after a later account switch.
+    final identityFuture = _identityProvider?.call();
+    final next = _writes.then((_) async {
+      if (_box.length >= maxQueueSize) {
+        throw StateError(
+          'Sync queue is full. Connect and sync before recording more.',
+        );
+      }
+      final id = _uuid.v4();
+      final identity = await identityFuture;
+      final publicProof =
+          path == '/api/attendance/submit' &&
+          body['attendanceVerificationToken'] is String &&
+          (body['attendanceVerificationToken'] as String).trim().isNotEmpty;
+      final sequence = ((_meta.get('sequence') as int?) ?? 0) + 1;
+      await _meta.put('sequence', sequence);
+      final request = OfflineRequest(
+        id: id,
+        path: path,
+        method: method,
+        body: {
+          ...body,
+          if (path == '/api/attendance/submit' &&
+              body['clientRequestId'] == null)
+            'clientRequestId': id,
+        },
+        ownerUid: publicProof ? null : identity?.ownerUid,
+        origin: identity == null ? null : _normalizedOrigin(identity.origin),
+        streamKey: _streamKey(
+          path: path,
+          body: body,
+          ownerUid: publicProof ? null : identity?.ownerUid,
+          publicProof: publicProof,
+        ),
+        state:
+            identity == null || (!publicProof && identity.ownerUid == null)
+                ? 'quarantined'
+                : 'pending',
+        lastError:
+            identity == null || (!publicProof && identity.ownerUid == null)
+                ? 'identity_unavailable_at_enqueue'
+                : null,
+        createdAt: DateTime.now(),
+        sequence: sequence,
       );
-    }
-    final id = _uuid.v4();
-    final request = OfflineRequest(
-      id: id,
-      path: path,
-      method: method,
-      body: body,
-      createdAt: DateTime.now(),
-    );
-    await _box.put(id, request.toJson());
-    notifyListeners();
+      await _box.put(id, request.toJson());
+      notifyListeners();
+    });
+    _writes = next.catchError((Object _) {});
+    return next;
   }
 
   List<OfflineRequest> getQueuedRequests() {
@@ -91,7 +221,7 @@ class OfflineQueue extends ChangeNotifier {
         debugPrint('Skipping corrupted offline queue entry: $e');
       }
     }
-    requests.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    requests.sort((a, b) => a.sequence.compareTo(b.sequence));
     return requests;
   }
 
@@ -102,6 +232,9 @@ class OfflineQueue extends ChangeNotifier {
 
   Future<void> updateRequest(OfflineRequest request) async {
     await _box.put(request.id, request.toJson());
+    if (request.lastError != null) {
+      await _meta.put('lastFailure', request.lastError);
+    }
     notifyListeners();
   }
 

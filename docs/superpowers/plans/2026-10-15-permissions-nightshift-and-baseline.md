@@ -107,12 +107,19 @@ Judged correct and left alone: at most one open pair per guard; a closed overnig
   - Test: intent selection with a fake launcher, including the no-app fallback chain.
 - [x] **T3.3 `flutter_udid`.** `lib/core/device/device_identity.dart` caches `FlutterUdid.consistentUdid` in Hive after the first read (restart-stable, never throws), and `MobileRepository` sends `X-Device-Id` on `/api/attendance/submit` and the duty-willingness POST. The punch payload also carries `deviceId` and `punchDeviceChanged` when the handset differs from the last punch, which is a flag on the record and never a refusal. `lib/features/shared/device_identity_row.dart` shows "This device" and the id on the guard profile and the field-officer hub.
   - Test: header injection via a fake client; a changed id produces a flag on the next punch and never an exception.
-- [~] **T3.4 `webview_flutter`.** `lib/features/shared/policy_webview_screen.dart` reads a policy page in-app from either a remote URL or a bundled asset, with JavaScript disabled, a main-frame-only failure state, a retry, and an "Open in browser" escape hatch (absent for a bundled page, which has nothing to hand off). Not yet reachable from a menu: the app has no policy links today, and inventing the office's Terms/PSARA URLs or shipping placeholder legal copy would be worse than leaving the surface ready to plug in.
+- [~] **T3.4 `webview_flutter`.** `lib/features/shared/policy_webview_screen.dart` reads a policy page in-app from either a remote URL or a bundled asset, with JavaScript disabled, a main-frame-only failure state, a retry, and an "Open in browser" escape hatch (absent for a bundled page, which has nothing to hand off). Now reachable through the policy card in both role menus; HTTPS policy URLs are configurable by build defines. Approved legal URLs/content still need to be supplied.
   - Test: route renders for a local `assets/` fixture; failure state offers the escape hatch.
 
 **Phase 3 status: implemented; the on-device checks are outstanding.** `flutter analyze` clean, the full suite green (513 tests), `flutter build apk --debug` succeeds with the four new plugins registered. New tests: `test/address_cache_test.dart` (key rounding, TTL, offline, missing box, throwing geocoder), `test/device_identity_test.dart` (single read, restart stability, failing platform read, changed-device flag), `test/device_header_test.dart` (header present, absent without an id, and a read failure that still punches), `test/device_actions_test.dart` (navigate tiers and failure snackbar, address shown or silent, policy failure state and escape hatch). Two defects surfaced while writing them and are fixed: an address lookup made the caller wait on a disk write (a widget test that never settled exposed it — the cache store is now write-through and injectable), and the policy failure-state buttons overflowed a narrow screen at large text.
 
 ## Phase 4 — Industry baseline from the web research
+
+**2026-10-18 implementation update:** Local implementations are now present for
+T4.1–T4.5. External configuration and on-device gates remain; see
+[continuation report](../reports/2026-10-18-continuation.md) and
+[Play release guide](../../release/google-play.md). Checkboxes below remain open
+until their full acceptance gates, including external checks, are satisfied.
+
 
 Ordered by value; 4.1 and 4.4 are mobile-only, 4.3 needs a backend cursor, 4.2 needs the decisions below.
 

@@ -1,3 +1,4 @@
+import '../../../../../core/i18n/app_strings.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,11 +35,18 @@ StatusChipTone _statusTone(String status) => switch (_statusLabel(status)) {
   _ => StatusChipTone.info,
 };
 
-final FutureProvider<List<GuardProfileModel>> fieldOfficerGuardsProvider =
-    FutureProvider<List<GuardProfileModel>>((Ref ref) {
-      return ref
-          .read(mobileRepositoryProvider)
-          .fetchFieldOfficerGuards(includeInactive: true);
+final directoryNextCursorProvider = StateProvider.autoDispose<String?>(
+  (ref) => null,
+);
+final fieldOfficerGuardsProvider =
+    FutureProvider.autoDispose<List<GuardProfileModel>>((ref) async {
+      final repository = ref.watch(mobileRepositoryProvider);
+      final page = await repository.fetchFieldOfficerGuardsPage(
+        includeInactive: true,
+        limit: 50,
+      );
+      ref.read(directoryNextCursorProvider.notifier).state = page.nextCursor;
+      return page.guards;
     });
 
 class FieldOfficerGuardsScreen extends ConsumerStatefulWidget {
@@ -55,9 +63,66 @@ class _FieldOfficerGuardsScreenState
   String _query = '';
   String _client = 'All';
   String _status = 'All';
+  final _scroll = ScrollController();
+  final _additional = <GuardProfileModel>[];
+  bool _loadingMore = false;
+  String? _pageError;
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(() {
+      if (_scroll.position.extentAfter < 400 && _pageError == null) _loadMore();
+    });
+  }
+
+  Future<void> _loadMore() async {
+    final after = ref.read(directoryNextCursorProvider);
+    if (_loadingMore || after == null) return;
+    final first = ref.read(fieldOfficerGuardsProvider).valueOrNull;
+    final repository = ref.read(mobileRepositoryProvider);
+    setState(() {
+      _loadingMore = true;
+      _pageError = null;
+    });
+    try {
+      final page = await repository.fetchFieldOfficerGuardsPage(
+        includeInactive: true,
+        limit: 50,
+        after: after,
+      );
+      if (!mounted ||
+          !identical(first, ref.read(fieldOfficerGuardsProvider).valueOrNull) ||
+          !identical(repository, ref.read(mobileRepositoryProvider))) {
+        return;
+      }
+      setState(() {
+        final ids = {
+          ...?first?.map((g) => g.id),
+          ..._additional.map((g) => g.id),
+        };
+        _additional.addAll(page.guards.where((g) => ids.add(g.id)));
+      });
+      ref.read(directoryNextCursorProvider.notifier).state = page.nextCursor;
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _pageError = AppStrings.of(context).label('directoryPageError'),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  void _refresh() {
+    _additional.clear();
+    ref.read(directoryNextCursorProvider.notifier).state = null;
+    ref.invalidate(fieldOfficerGuardsProvider);
+  }
 
   @override
   void dispose() {
+    _scroll.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -65,6 +130,10 @@ class _FieldOfficerGuardsScreenState
   @override
   Widget build(BuildContext context) {
     final guardsAsync = ref.watch(fieldOfficerGuardsProvider);
+    final nextCursor = ref.watch(directoryNextCursorProvider);
+    ref.listen(fieldOfficerGuardsProvider, (previous, next) {
+      if (next.isLoading) _additional.clear();
+    });
     return guardsAsync.when(
       loading:
           () => const Scaffold(
@@ -105,7 +174,8 @@ class _FieldOfficerGuardsScreenState
               ),
             ),
           ),
-      data: (guards) {
+      data: (firstPage) {
+        final guards = [...firstPage, ..._additional];
         final clients =
             guards
                 .map((guard) => guard.clientName.trim())
@@ -126,183 +196,227 @@ class _FieldOfficerGuardsScreenState
           backgroundColor: tokens.canvas,
           body: SafeArea(
             child: RefreshIndicator(
-              onRefresh: () async => ref.invalidate(fieldOfficerGuardsProvider),
-              child: ListView(
+              onRefresh: () async => _refresh(),
+              child: ListView.builder(
+                controller: _scroll,
+                itemCount: 1 + filtered.length + (nextCursor == null ? 0 : 1),
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.md,
                   AppSpacing.md,
                   AppSpacing.md,
                   100,
                 ),
-                children: <Widget>[
-                  _DirectoryHeader(
-                    onLiveMap:
-                        () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const FieldOfficerLiveMapScreen(),
-                          ),
-                        ),
-                    onRefresh: () => ref.invalidate(fieldOfficerGuardsProvider),
-                    // The list already supplies the screen margin, so the
-                    // header must not add a second indent that would push it
-                    // out of line with the search field and employee cards.
-                    horizontalPadding: 0,
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final narrow =
-                          constraints.maxWidth < 360 ||
-                          MediaQuery.textScalerOf(context).scale(1) > 1.3;
-                      final cards = <Widget>[
-                        MetricCard(
-                          label: 'Employees',
-                          value: guards.length.toString(),
-                          color: tokens.primary,
-                        ),
-                        MetricCard(
-                          label: 'Districts',
-                          value:
-                              '${guards.map((g) => g.district).where((d) => d.trim().isNotEmpty).toSet().length}',
-                          color: tokens.accent,
-                        ),
-                      ];
-                      if (narrow) {
-                        return Column(
-                          children: [
-                            SizedBox(width: double.infinity, child: cards[0]),
-                            const SizedBox(height: AppSpacing.sm),
-                            SizedBox(width: double.infinity, child: cards[1]),
-                          ],
-                        );
-                      }
-                      return IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Expanded(child: cards[0]),
-                            const SizedBox(width: AppSpacing.sm),
-                            Expanded(child: cards[1]),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  TextField(
-                    controller: _searchController,
-                    onChanged: (value) => setState(() => _query = value),
-                    decoration: InputDecoration(
-                      labelText: 'Search employees',
-                      hintText: 'Name, employee ID, client, district, phone',
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      filled: true,
-                      fillColor: tokens.surface,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Column(
+                itemBuilder: (context, index) {
+                  if (index > 0 && index <= filtered.length) {
+                    return _GuardDirectoryRow(filtered[index - 1]);
+                  }
+                  if (index > filtered.length) {
+                    return Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          if (_pageError != null) Text(_pageError!),
+                          if (_loadingMore)
+                            const CircularProgressIndicator()
+                          else
+                            TextButton(
+                              onPressed: _loadMore,
+                              child: Text(
+                                AppStrings.of(
+                                  context,
+                                ).label('directoryLoadMore'),
+                              ),
+                            ),
+                        ],
+                      ),
+                    );
+                  }
+                  return Column(
                     children: <Widget>[
-                      SizedBox(
-                        width: double.infinity,
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          value: selectedClient,
-                          decoration: const InputDecoration(
-                            labelText: 'Client',
-                          ),
-                          items:
-                              <String>['All', ...clients]
-                                  .map(
-                                    (v) => DropdownMenuItem(
-                                      value: v,
-                                      child: Text(
-                                        v,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                          onChanged:
-                              (value) =>
-                                  setState(() => _client = value ?? 'All'),
+                      _DirectoryHeader(
+                        onLiveMap:
+                            () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder:
+                                    (_) => const FieldOfficerLiveMapScreen(),
+                              ),
+                            ),
+                        onRefresh: () => _refresh(),
+                        // The list already supplies the screen margin, so the
+                        // header must not add a second indent that would push it
+                        // out of line with the search field and employee cards.
+                        horizontalPadding: 0,
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final narrow =
+                              constraints.maxWidth < 360 ||
+                              MediaQuery.textScalerOf(context).scale(1) > 1.3;
+                          final cards = <Widget>[
+                            MetricCard(
+                              label: 'Employees',
+                              value: guards.length.toString(),
+                              color: tokens.primary,
+                            ),
+                            MetricCard(
+                              label: 'Districts',
+                              value:
+                                  '${guards.map((g) => g.district).where((d) => d.trim().isNotEmpty).toSet().length}',
+                              color: tokens.accent,
+                            ),
+                          ];
+                          if (narrow) {
+                            return Column(
+                              children: [
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: cards[0],
+                                ),
+                                const SizedBox(height: AppSpacing.sm),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: cards[1],
+                                ),
+                              ],
+                            );
+                          }
+                          return IntrinsicHeight(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Expanded(child: cards[0]),
+                                const SizedBox(width: AppSpacing.sm),
+                                Expanded(child: cards[1]),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      TextField(
+                        controller: _searchController,
+                        onChanged: (value) => setState(() => _query = value),
+                        decoration: InputDecoration(
+                          labelText: 'Search employees',
+                          helperText:
+                              nextCursor == null
+                                  ? null
+                                  : AppStrings.of(
+                                    context,
+                                  ).label('directorySearchLoaded'),
+                          hintText:
+                              'Name, employee ID, client, district, phone',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          filled: true,
+                          fillColor: tokens.surface,
                         ),
                       ),
                       const SizedBox(height: AppSpacing.sm),
-                      SizedBox(
-                        width: double.infinity,
-                        child: DropdownButtonFormField<String>(
-                          isExpanded: true,
-                          value: _status,
-                          decoration: const InputDecoration(
-                            labelText: 'Status',
+                      Column(
+                        children: <Widget>[
+                          SizedBox(
+                            width: double.infinity,
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              value: selectedClient,
+                              decoration: const InputDecoration(
+                                labelText: 'Client',
+                              ),
+                              items:
+                                  <String>['All', ...clients]
+                                      .map(
+                                        (v) => DropdownMenuItem(
+                                          value: v,
+                                          child: Text(
+                                            v,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                              onChanged:
+                                  (value) =>
+                                      setState(() => _client = value ?? 'All'),
+                            ),
                           ),
-                          items:
-                              <String>[
-                                    'All',
-                                    'Pending Review',
-                                    'Active',
-                                    'Inactive',
-                                    'On Leave',
-                                    'Exited',
-                                  ]
-                                  .map(
-                                    (v) => DropdownMenuItem(
-                                      value: v,
-                                      child: Text(
-                                        v,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                          onChanged:
-                              (value) =>
-                                  setState(() => _status = value ?? 'All'),
+                          const SizedBox(height: AppSpacing.sm),
+                          SizedBox(
+                            width: double.infinity,
+                            child: DropdownButtonFormField<String>(
+                              isExpanded: true,
+                              value: _status,
+                              decoration: const InputDecoration(
+                                labelText: 'Status',
+                              ),
+                              items:
+                                  <String>[
+                                        'All',
+                                        'Pending Review',
+                                        'Active',
+                                        'Inactive',
+                                        'On Leave',
+                                        'Exited',
+                                      ]
+                                      .map(
+                                        (v) => DropdownMenuItem(
+                                          value: v,
+                                          child: Text(
+                                            v,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      )
+                                      .toList(),
+                              onChanged:
+                                  (value) =>
+                                      setState(() => _status = value ?? 'All'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: AppSpacing.sm,
+                        children: <Widget>[
+                          Text(
+                            '${filtered.length} of ${guards.length} employees',
+                          ),
+                          TextButton.icon(
+                            onPressed:
+                                _query.isEmpty &&
+                                        selectedClient == 'All' &&
+                                        _status == 'All'
+                                    ? null
+                                    : () => setState(() {
+                                      _query = '';
+                                      _client = 'All';
+                                      _status = 'All';
+                                      _searchController.clear();
+                                    }),
+                            icon: const Icon(Icons.restart_alt_rounded),
+                            label: const Text('Reset'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      if (guards.isEmpty)
+                        const StateBlock(
+                          icon: Icons.person_off_rounded,
+                          title: 'No employees found',
+                          message:
+                              'Employees assigned to your districts will appear here once available.',
+                        )
+                      else if (filtered.isEmpty)
+                        const StateBlock(
+                          icon: Icons.search_off_rounded,
+                          title: 'No matching employees',
+                          message: 'Try changing your search or filters.',
                         ),
-                      ),
                     ],
-                  ),
-                  Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: AppSpacing.sm,
-                    children: <Widget>[
-                      Text('${filtered.length} of ${guards.length} employees'),
-                      TextButton.icon(
-                        onPressed:
-                            _query.isEmpty &&
-                                    selectedClient == 'All' &&
-                                    _status == 'All'
-                                ? null
-                                : () => setState(() {
-                                  _query = '';
-                                  _client = 'All';
-                                  _status = 'All';
-                                  _searchController.clear();
-                                }),
-                        icon: const Icon(Icons.restart_alt_rounded),
-                        label: const Text('Reset'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  if (guards.isEmpty)
-                    const StateBlock(
-                      icon: Icons.person_off_rounded,
-                      title: 'No employees found',
-                      message:
-                          'Employees assigned to your districts will appear here once available.',
-                    )
-                  else if (filtered.isEmpty)
-                    const StateBlock(
-                      icon: Icons.search_off_rounded,
-                      title: 'No matching employees',
-                      message: 'Try changing your search or filters.',
-                    )
-                  else
-                    ...filtered.map(_GuardDirectoryRow.new),
-                ],
+                  );
+                },
               ),
             ),
           ),
@@ -334,12 +448,12 @@ class _FieldOfficerGuardsScreenState
   }
 }
 
-class _GuardDirectoryRow extends StatelessWidget {
+class _GuardDirectoryRow extends ConsumerWidget {
   const _GuardDirectoryRow(this.guard);
   final GuardProfileModel guard;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = CissThemeTokens.of(context);
     final theme = Theme.of(context);
     final imageUrl = guard.profilePhotoUrl;
@@ -347,7 +461,25 @@ class _GuardDirectoryRow extends StatelessWidget {
     return ModernCard(
       margin: const EdgeInsets.only(bottom: 12),
       padding: EdgeInsets.zero,
-      onTap: () {
+      onTap: () async {
+        try {
+          await ref.read(mobileRepositoryProvider).postGeneric(
+            '/api/field-officer/employee-access',
+            {'employeeDocId': guard.id},
+          );
+        } catch (_) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  AppStrings.of(context).label('directoryAuditError'),
+                ),
+              ),
+            );
+          }
+          return;
+        }
+        if (!context.mounted) return;
         Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) => FieldOfficerGuardProfileScreen(guard: guard),
@@ -492,6 +624,7 @@ class _DirectoryHeader extends StatelessWidget {
 
   final VoidCallback? onLiveMap;
   final VoidCallback? onRefresh;
+
   /// Screen margin for the header content. Loading and error states render the
   /// header directly, while the loaded list already supplies the margin.
   final double horizontalPadding;

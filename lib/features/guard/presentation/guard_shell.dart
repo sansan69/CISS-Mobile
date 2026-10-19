@@ -19,6 +19,8 @@ import '../../shared/language_screen.dart';
 import '../../shared/device_readiness_screen.dart';
 import '../../shared/readiness_banner.dart';
 import '../../shared/tracking_health_card.dart';
+import '../../shared/sync_health_card.dart';
+import '../../shared/policy_links_card.dart';
 import 'screens/guard_attendance_screen.dart';
 import 'screens/guard_dashboard_screen.dart';
 import 'screens/guard_evaluations_screen.dart';
@@ -124,22 +126,23 @@ class _GuardShellState extends ConsumerState<GuardShell> {
                 Haptics.selection();
                 ref.read(guardTabIndexProvider.notifier).state = i;
               },
-              items: _tabs
-                  .map(
-                    (t) => FloatingNavItem(
-                      icon: t.icon,
-                      selectedIcon: t.activeIcon,
-                      label: switch (t.label) {
-                        'Home' => strings.navHome,
-                        'Duty' => strings.navDuty,
-                        'Activity' => strings.navActivity,
-                        'Profile' => strings.navProfile,
-                        _ => t.label,
-                      },
-                      badgeCount: t.label == 'Profile' ? unread : null,
-                    ),
-                  )
-                  .toList(),
+              items:
+                  _tabs
+                      .map(
+                        (t) => FloatingNavItem(
+                          icon: t.icon,
+                          selectedIcon: t.activeIcon,
+                          label: switch (t.label) {
+                            'Home' => strings.navHome,
+                            'Duty' => strings.navDuty,
+                            'Activity' => strings.navActivity,
+                            'Profile' => strings.navProfile,
+                            _ => t.label,
+                          },
+                          badgeCount: t.label == 'Profile' ? unread : null,
+                        ),
+                      )
+                      .toList(),
             ),
           ],
         ),
@@ -179,7 +182,8 @@ class GuardActivityScreen extends ConsumerWidget {
             ModernHero(
               eyebrow: 'Operations',
               title: 'Duty Activity',
-              subtitle: 'Patrol, hourly night checks, leave and incident reports.',
+              subtitle:
+                  'Patrol, hourly night checks, leave and incident reports.',
             ),
             const SizedBox(height: AppSpacing.lg),
             Padding(
@@ -188,7 +192,8 @@ class GuardActivityScreen extends ConsumerWidget {
                 children: <Widget>[
                   GuardRecordCard(
                     title: 'Patrol & Night Checks',
-                    subtitle: 'Hourly photo checks and patrol checkpoint rounds',
+                    subtitle:
+                        'Hourly photo checks and patrol checkpoint rounds',
                     icon: Icons.route_rounded,
                     onTap: () {
                       Navigator.of(context).push(
@@ -212,7 +217,8 @@ class GuardActivityScreen extends ConsumerWidget {
                   ),
                   GuardRecordCard(
                     title: 'Incident Reports',
-                    subtitle: 'Report field safety or security incidents with photo',
+                    subtitle:
+                        'Report field safety or security incidents with photo',
                     icon: Icons.report_gmailerrorred_outlined,
                     onTap: () {
                       Navigator.of(context).push(
@@ -250,7 +256,8 @@ class GuardProfileHubScreen extends ConsumerWidget {
             ModernHero(
               eyebrow: 'Account',
               title: 'Profile & Growth',
-              subtitle: 'Credentials, payslips, training modules, and settings.',
+              subtitle:
+                  'Credentials, payslips, training modules, and settings.',
             ),
             const SizedBox(height: AppSpacing.lg),
             Padding(
@@ -259,6 +266,8 @@ class GuardProfileHubScreen extends ConsumerWidget {
                 children: <Widget>[
                   const ReadinessBanner(),
                   const TrackingHealthCard(),
+                  const SyncHealthCard(),
+                  const PolicyLinksCard(),
                   const SizedBox(height: AppSpacing.md),
                   GuardRecordCard(
                     title: strings.readinessOpenScreen,
@@ -288,7 +297,8 @@ class GuardProfileHubScreen extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.md),
                   GuardRecordCard(
                     title: 'Personal Profile',
-                    subtitle: 'Personal details and document verification status',
+                    subtitle:
+                        'Personal details and document verification status',
                     icon: Icons.person_outline_rounded,
                     onTap: () {
                       Navigator.of(context).push(
@@ -312,7 +322,8 @@ class GuardProfileHubScreen extends ConsumerWidget {
                   ),
                   GuardRecordCard(
                     title: 'Training & Quizzes',
-                    subtitle: 'Assigned learning modules, tests, and certifications',
+                    subtitle:
+                        'Assigned learning modules, tests, and certifications',
                     icon: Icons.school_outlined,
                     onTap: () {
                       Navigator.of(context).push(
@@ -324,7 +335,8 @@ class GuardProfileHubScreen extends ConsumerWidget {
                   ),
                   GuardRecordCard(
                     title: 'Evaluations & Awards',
-                    subtitle: 'Performance ratings, criteria breakdown, and honors',
+                    subtitle:
+                        'Performance ratings, criteria breakdown, and honors',
                     icon: Icons.workspace_premium_outlined,
                     onTap: () {
                       Navigator.of(context).push(

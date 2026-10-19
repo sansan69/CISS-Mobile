@@ -1,3 +1,4 @@
+import '../../../shared/sensitive_screen.dart';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -75,70 +76,76 @@ class GuardDocumentUploadScreen extends ConsumerWidget {
         ),
     ];
 
-    return ScreenScaffold(
-      title: 'Upload documents',
-      subtitle: 'Missing enrolment documents',
-      children: <Widget>[
-        if (entries.isEmpty)
-          ModernCard(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Column(
-                children: <Widget>[
-                  Icon(
-                    Icons.verified_user_rounded,
-                    size: 40,
-                    color: tokens.success,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    'All documents are on file.',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+    return SensitiveScreen(
+      child: ScreenScaffold(
+        title: 'Upload documents',
+        subtitle: 'Missing enrolment documents',
+        children: <Widget>[
+          if (entries.isEmpty)
+            ModernCard(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  children: <Widget>[
+                    Icon(
+                      Icons.verified_user_rounded,
+                      size: 40,
+                      color: tokens.success,
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    'Contact the administrator if a correction is needed.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: tokens.inkMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else
-          ...entries.map(
-            (entry) => Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: ModernCard(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.lg,
-                    vertical: AppSpacing.sm,
-                  ),
-                  leading: Icon(entry.icon, color: tokens.primary),
-                  title: Text(
-                    entry.title,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: Text(entry.subtitle,
-                      style: TextStyle(color: tokens.inkMuted)),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => _GuardDocumentUploadForm(
-                        category: entry.key,
-                        profile: profile,
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      'All documents are on file.',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'Contact the administrator if a correction is needed.',
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(color: tokens.inkMuted),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ...entries.map(
+              (entry) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: ModernCard(
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.lg,
+                      vertical: AppSpacing.sm,
+                    ),
+                    leading: Icon(entry.icon, color: tokens.primary),
+                    title: Text(
+                      entry.title,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(
+                      entry.subtitle,
+                      style: TextStyle(color: tokens.inkMuted),
+                    ),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap:
+                        () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder:
+                                (_) => _GuardDocumentUploadForm(
+                                  category: entry.key,
+                                  profile: profile,
+                                ),
+                          ),
+                        ),
                   ),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -248,10 +255,11 @@ class _GuardDocumentUploadFormState
       );
       if (picked != null && mounted) {
         setState(
-          () => _front = DocumentUploadFile(
-            path: picked.path,
-            name: picked.name.isEmpty ? 'aadhaar.jpg' : picked.name,
-          ),
+          () =>
+              _front = DocumentUploadFile(
+                path: picked.path,
+                name: picked.name.isEmpty ? 'aadhaar.jpg' : picked.name,
+              ),
         );
       }
     } catch (error) {
@@ -270,7 +278,9 @@ class _GuardDocumentUploadFormState
       _error = null;
     });
     try {
-      await ref.read(mobileRepositoryProvider).uploadGuardDocument(
+      await ref
+          .read(mobileRepositoryProvider)
+          .uploadGuardDocument(
             category: widget.category,
             documentType: _isAadhaar ? null : _documentType,
             documentNumber: _isAadhaar ? null : _documentNumber.text.trim(),
@@ -368,13 +378,14 @@ class _GuardDocumentUploadFormState
           const SizedBox(height: AppSpacing.lg),
           FilledButton(
             onPressed: _submitting ? null : _submit,
-            child: _submitting
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Upload document'),
+            child:
+                _submitting
+                    ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                    : const Text('Upload document'),
           ),
         ],
       ],
@@ -452,8 +463,9 @@ class _GuardDocumentUploadFormState
                 Checkbox(
                   value: _consentAccepted,
                   activeColor: tokens.primary,
-                  onChanged: (value) =>
-                      setState(() => _consentAccepted = value ?? false),
+                  onChanged:
+                      (value) =>
+                          setState(() => _consentAccepted = value ?? false),
                 ),
                 const Expanded(
                   child: Padding(
@@ -474,9 +486,10 @@ class _GuardDocumentUploadFormState
 
   Widget _buildTypeSelector(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
-    final options = widget.category == 'identity'
-        ? kIdentityProofTypes
-        : kAddressProofTypes;
+    final options =
+        widget.category == 'identity'
+            ? kIdentityProofTypes
+            : kAddressProofTypes;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -493,12 +506,14 @@ class _GuardDocumentUploadFormState
                       selected: _documentType == option,
                       selectedColor: tokens.primarySoft,
                       labelStyle: TextStyle(
-                        color: _documentType == option
-                            ? tokens.primaryStrong
-                            : tokens.inkMuted,
-                        fontWeight: _documentType == option
-                            ? FontWeight.w700
-                            : FontWeight.w500,
+                        color:
+                            _documentType == option
+                                ? tokens.primaryStrong
+                                : tokens.inkMuted,
+                        fontWeight:
+                            _documentType == option
+                                ? FontWeight.w700
+                                : FontWeight.w500,
                       ),
                       onSelected: (_) => setState(() => _documentType = option),
                     ),
@@ -555,9 +570,10 @@ class _GuardDocumentUploadFormState
             fontWeight: value == null ? FontWeight.w400 : FontWeight.w600,
           ),
         ),
-        subtitle: value == null
-            ? const Text('JPEG, PNG or PDF · max 5 MB')
-            : const Text('Ready to upload'),
+        subtitle:
+            value == null
+                ? const Text('JPEG, PNG or PDF · max 5 MB')
+                : const Text('Ready to upload'),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[

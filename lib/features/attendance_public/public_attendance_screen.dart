@@ -1,3 +1,7 @@
+import 'package:ciss_mobile/core/i18n/app_strings.dart';
+import 'dart:async';
+import 'package:ciss_mobile/core/security/attendance_integrity.dart';
+import 'package:ciss_mobile/core/telemetry/app_telemetry.dart';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -137,6 +141,7 @@ class _PublicAttendanceScreenState
   }
 
   Future<void> _submit() async {
+    final telemetry = ref.read(appTelemetryProvider);
     if (_employee == null || _selectedSite == null || _photoPath == null) {
       setState(() => _submitError = 'Guard, site, and photo are required.');
       return;
@@ -152,6 +157,7 @@ class _PublicAttendanceScreenState
       _submitError = null;
     });
     Map<String, dynamic>? queuedPayload;
+    unawaited(telemetry.record('attendance_funnel', stage: 'attempt'));
     try {
       final repo = ref.read(mobileRepositoryProvider);
       final photoFile = File(_photoPath!);
@@ -204,6 +210,7 @@ class _PublicAttendanceScreenState
         'photoCapturedAt': capturedAt,
         'locationCapturedAt': capturedAt,
         'photoStoragePath': photoStoragePath,
+        ...await ref.read(attendanceIntegrityProvider).evidence(attemptId),
         'attendanceAttemptId': attemptId,
         'clientRequestId': attemptId,
         'reportedAtClient': capturedAt,
@@ -213,6 +220,7 @@ class _PublicAttendanceScreenState
       queuedPayload = <String, dynamic>{...payload, 'photoDataUrl': dataUrl};
 
       // Upload photo
+
       final uploadResp = await repo.uploadAttendancePhoto(
         employeeDocId: _employee!.id,
         dataUrl: dataUrl,
@@ -224,8 +232,18 @@ class _PublicAttendanceScreenState
       final photoUrl = uploadResp['url'] as String;
       payload['photoUrl'] = photoUrl;
       payload['photoStoragePath'] = uploadResp['path'] ?? photoStoragePath;
+      // If the following attendance POST times out, replay the exact uploaded
+      // object instead of carrying a stale raw image that could be re-uploaded.
+      queuedPayload = Map<String, dynamic>.from(payload);
 
       await repo.submitAttendance(payload);
+      unawaited(
+        telemetry.record(
+          'attendance_funnel',
+          stage: 'outcome',
+          reason: 'saved',
+        ),
+      );
 
       if (!mounted) return;
       Haptics.success();
@@ -234,14 +252,49 @@ class _PublicAttendanceScreenState
         _step = _PublicAttendanceStep.submit;
       });
     } on DioException catch (e) {
+      if (!CissError.isRetryableNetworkError(e)) {
+        unawaited(
+          telemetry.record(
+            'attendance_funnel',
+            stage: 'outcome',
+            reason: 'punch_failed',
+            failed: true,
+          ),
+        );
+      }
       if (CissError.isRetryableNetworkError(e)) {
-        await ref
-            .read(offlineQueueProvider)
-            .enqueue(
-              path: '/api/attendance/submit',
-              method: 'POST',
-              body: queuedPayload ?? <String, dynamic>{},
-            );
+        try {
+          await ref
+              .read(offlineQueueProvider)
+              .enqueue(
+                path: '/api/attendance/submit',
+                method: 'POST',
+                body: queuedPayload ?? <String, dynamic>{},
+              );
+        } catch (_) {
+          unawaited(
+            telemetry.record(
+              'attendance_funnel',
+              stage: 'outcome',
+              reason: 'offline_storage_failed',
+              failed: true,
+            ),
+          );
+          if (mounted) {
+            setState(() {
+              _isSubmitting = false;
+              _submitError = AppStrings.of(context).label('offlineSaveFailed');
+            });
+          }
+          return;
+        }
+        unawaited(
+          telemetry.record(
+            'attendance_funnel',
+            stage: 'outcome',
+            reason: 'queued_offline',
+          ),
+        );
         if (!mounted) return;
         Haptics.success();
         setState(() {
@@ -256,6 +309,14 @@ class _PublicAttendanceScreenState
         });
       }
     } catch (e) {
+      unawaited(
+        telemetry.record(
+          'attendance_funnel',
+          stage: 'outcome',
+          reason: 'punch_failed',
+          failed: true,
+        ),
+      );
       if (!mounted) return;
       setState(() {
         _submitError = e.toString().replaceFirst('Exception: ', '');

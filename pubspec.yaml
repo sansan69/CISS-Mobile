@@ -79,6 +79,10 @@ dependencies:
   maps_launcher: ^3.0.0+1
   flutter_udid: ^4.1.6
   webview_flutter: ^4.13.0
+  freerasp: ^8.2.4
+  screen_protector: ^1.5.3
+  firebase_analytics: ^11.6.0
+  in_app_update: ^4.2.5
 
 dev_dependencies:
   flutter_test:

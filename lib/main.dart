@@ -8,6 +8,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'app/app.dart';
+import 'core/security/attendance_integrity.dart';
 import 'core/fcm/providers.dart';
 import 'core/i18n/app_language.dart';
 import 'core/auth/legacy_biometric_credential_cleanup.dart';
@@ -15,7 +16,6 @@ import 'core/location/background_tracking_service.dart';
 import 'core/location/address_cache.dart';
 import 'core/device/device_identity.dart';
 import 'core/permissions/device_readiness.dart';
-import 'core/offline/offline_queue.dart';
 import 'core/offline/draft_service.dart';
 import 'core/sync/providers.dart';
 import 'core/sync/refresh_controller.dart';
@@ -56,7 +56,7 @@ Future<void> main() async {
   final cipher = await queue.getEncryptionCipher();
 
   await Hive.initFlutter();
-  await Hive.openBox<Map>(OfflineQueue.boxName, encryptionCipher: cipher);
+  await queue.init();
   await Hive.openBox<Map>(
     DraftService.boxName,
   ); // Non-encrypted for high-frequency drafts
@@ -99,6 +99,8 @@ Future<void> main() async {
   } catch (e) {
     debugPrint('Device identity init failed — punches omit the device id: $e');
   }
+
+  await container.read(attendanceIntegrityProvider).start();
 
   try {
     await Firebase.initializeApp(

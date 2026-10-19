@@ -8,6 +8,7 @@ import '../../../../../core/models/patrol_models.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/sync/providers.dart';
+import '../../../../../core/submission_identity.dart';
 import '../../../../../shared/widgets/camera_capture_screen.dart';
 import '../../../../../shared/widgets/portal_primitives.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
@@ -46,6 +47,7 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
   final TextEditingController _notesController = TextEditingController();
   bool _submitting = false;
   String? _error;
+  final SubmissionIdentity _submissionIdentity = SubmissionIdentity();
 
   @override
   void dispose() {
@@ -88,42 +90,59 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
       _error = null;
     });
 
+    final basePayload = <String, dynamic>{
+      'type': type,
+      'siteId': activeDuty.siteId,
+      if (activeDuty.dutyPointId != null) 'dutyPointId': activeDuty.dutyPointId,
+      if (activeDuty.shiftCode != null) 'shiftCode': activeDuty.shiftCode,
+      if (patrolPoint != null) 'patrolPointId': patrolPoint.id,
+      if (_notesController.text.trim().isNotEmpty)
+        'notes': _notesController.text.trim(),
+      'activityAt': DateTime.now().toUtc().toIso8601String(),
+    };
+    final clientRequestId = _submissionIdentity.forPayload(
+      {...basePayload, 'photoIdentity': _photoPath},
+      ignoredKeys: {'activityAt'},
+    );
+    basePayload['activityAt'] = _submissionIdentity.capture(
+      'activityAt',
+      basePayload['activityAt'],
+    );
+    basePayload['clientRequestId'] = clientRequestId;
+
+    String? photoUrl;
     try {
-      String? photoUrl;
       if (_photoPath != null) {
         final file = File(_photoPath!);
         final bytes = await file.readAsBytes();
         final dataUrl = await ref
             .read(mobileRepositoryProvider)
             .encodeFileToDataUrl(bytes, 'image/jpeg');
-        final uploadResult = await ref
-            .read(mobileRepositoryProvider)
-            .uploadAttendancePhoto(
-              employeeDocId:
-                  status.employeeDocId.isNotEmpty
-                      ? status.employeeDocId
-                      : status.employeeId,
-              dataUrl: dataUrl,
-              siteId: activeDuty.siteId,
-            );
+        final uploadResult =
+            _submissionIdentity.readCapture<Map<String, dynamic>>(
+              'patrolPhotoUpload',
+            ) ??
+            await ref
+                .read(mobileRepositoryProvider)
+                .uploadAttendancePhoto(
+                  employeeDocId:
+                      status.employeeDocId.isNotEmpty
+                          ? status.employeeDocId
+                          : status.employeeId,
+                  dataUrl: dataUrl,
+                  siteId: activeDuty.siteId,
+                  attemptId: clientRequestId,
+                );
+        _submissionIdentity.capture('patrolPhotoUpload', uploadResult);
         photoUrl = uploadResult['url'] as String?;
       }
 
-      await ref
-          .read(mobileRepositoryProvider)
-          .submitGuardPatrolActivity(<String, dynamic>{
-            'type': type,
-            'siteId': activeDuty.siteId,
-            if (activeDuty.dutyPointId != null)
-              'dutyPointId': activeDuty.dutyPointId,
-            if (activeDuty.shiftCode != null) 'shiftCode': activeDuty.shiftCode,
-            if (patrolPoint != null) 'patrolPointId': patrolPoint.id,
-            if (photoUrl case final String uploadedPhotoUrl)
-              'photoUrl': uploadedPhotoUrl,
-            if (_notesController.text.trim().isNotEmpty)
-              'notes': _notesController.text.trim(),
-            'activityAt': DateTime.now().toUtc().toIso8601String(),
-          });
+      await ref.read(mobileRepositoryProvider).submitGuardPatrolActivity({
+        ...basePayload,
+        if (photoUrl case final String uploadedPhotoUrl)
+          'photoUrl': uploadedPhotoUrl,
+      });
+      _submissionIdentity.complete();
 
       if (!mounted) return;
       setState(() {
@@ -163,24 +182,20 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
               path: '/api/guard/patrol',
               method: 'POST',
               body: <String, dynamic>{
-                'type': type,
-                'siteId': activeDuty.siteId,
+                ...basePayload,
                 // Required by the sync processor to re-upload a queued photo.
                 'employeeDocId':
                     status.employeeDocId.isNotEmpty
                         ? status.employeeDocId
                         : status.employeeId,
-                if (activeDuty.dutyPointId != null)
-                  'dutyPointId': activeDuty.dutyPointId,
-                if (activeDuty.shiftCode != null)
-                  'shiftCode': activeDuty.shiftCode,
-                if (patrolPoint != null) 'patrolPointId': patrolPoint.id,
-                if (queuedPhoto != null) 'photoDataUrl': queuedPhoto,
-                if (_notesController.text.trim().isNotEmpty)
-                  'notes': _notesController.text.trim(),
-                'activityAt': DateTime.now().toUtc().toIso8601String(),
+                if (photoUrl == null && queuedPhoto != null)
+                  'photoDataUrl': queuedPhoto,
+                if (photoUrl != null) 'photoUrl': photoUrl,
+                if (photoUrl == null && queuedPhoto != null)
+                  'attendanceAttemptId': clientRequestId,
               },
             );
+        _submissionIdentity.complete();
         setState(() => _error = 'Offline: Patrol activity queued for sync.');
         ref.invalidate(guardPatrolStatusProvider);
       } else {
@@ -361,9 +376,10 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                         if (status.hourlyRequirement.enabled &&
                             status.hourlyRequirement.nextDueAt != null)
                           TimeCounterChip(
-                            targetTime: DateTime.tryParse(
-                              status.hourlyRequirement.nextDueAt!,
-                            )?.toLocal(),
+                            targetTime:
+                                DateTime.tryParse(
+                                  status.hourlyRequirement.nextDueAt!,
+                                )?.toLocal(),
                             compact: true,
                           ),
                       ],

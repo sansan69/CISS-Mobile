@@ -1,3 +1,4 @@
+import '../../../shared/sensitive_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -23,100 +24,106 @@ class FieldOfficerGuardProfileScreen extends StatelessWidget {
         guard.fullName.trim().isEmpty ? 'Guard profile' : guard.fullName;
     final enrollmentDate = DateTime.tryParse(guard.createdAt ?? '');
 
-    return Scaffold(
-      backgroundColor: tokens.canvas,
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.md,
-            0,
-            AppSpacing.md,
-            AppSpacing.xxl,
-          ),
-          children: <Widget>[
-          BrandBanner(
-            title: displayName,
-            subtitle: 'Employee profile',
-            showBackButton: true,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          _ProfileHero(guard: guard),
-          const SizedBox(height: AppSpacing.md),
-          _ProfileSection(
-            title: 'Personal information',
-            icon: Icons.person_outline_rounded,
-            fields: <_ProfileFieldData>[
-              _ProfileFieldData('Full name', guard.fullName),
-              _ProfileFieldData('Date of birth', guard.dateOfBirth),
-              _ProfileFieldData('Gender', guard.gender),
-              _ProfileFieldData("Father's name", guard.fatherName),
-              _ProfileFieldData("Mother's name", guard.motherName),
-              _ProfileFieldData('Marital status', guard.maritalStatus),
-              if (_hasText(guard.maritalStatus, equals: 'married'))
-                _ProfileFieldData('Spouse name', guard.spouseName),
-              _ProfileFieldData(
-                'Educational qualification',
-                _preferredQualification(guard),
+    return SensitiveScreen(
+      child: Scaffold(
+        backgroundColor: tokens.canvas,
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              0,
+              AppSpacing.md,
+              AppSpacing.xxl,
+            ),
+            children: <Widget>[
+              BrandBanner(
+                title: displayName,
+                subtitle: 'Employee profile',
+                showBackButton: true,
               ),
-              _ProfileFieldData('Nationality', guard.nationality),
-              _ProfileFieldData('District', guard.district),
-              _ProfileFieldData(
-                'Enrollment date',
-                enrollmentDate != null
-                    ? MaterialLocalizations.of(
-                      context,
-                    ).formatMediumDate(enrollmentDate.toLocal())
-                    : null,
+              const SizedBox(height: AppSpacing.md),
+              _ProfileHero(guard: guard),
+              const SizedBox(height: AppSpacing.md),
+              _ProfileSection(
+                title: 'Personal information',
+                icon: Icons.person_outline_rounded,
+                fields: <_ProfileFieldData>[
+                  _ProfileFieldData('Full name', guard.fullName),
+                  _ProfileFieldData('Date of birth', guard.dateOfBirth),
+                  _ProfileFieldData('Gender', guard.gender),
+                  _ProfileFieldData("Father's name", guard.fatherName),
+                  _ProfileFieldData("Mother's name", guard.motherName),
+                  _ProfileFieldData('Marital status', guard.maritalStatus),
+                  if (_hasText(guard.maritalStatus, equals: 'married'))
+                    _ProfileFieldData('Spouse name', guard.spouseName),
+                  _ProfileFieldData(
+                    'Educational qualification',
+                    _preferredQualification(guard),
+                  ),
+                  _ProfileFieldData('Nationality', guard.nationality),
+                  _ProfileFieldData('District', guard.district),
+                  _ProfileFieldData(
+                    'Enrollment date',
+                    enrollmentDate != null
+                        ? MaterialLocalizations.of(
+                          context,
+                        ).formatMediumDate(enrollmentDate.toLocal())
+                        : null,
+                  ),
+                  _ProfileFieldData(
+                    'Identification mark',
+                    guard.identificationMark,
+                  ),
+                  _ProfileFieldData(
+                    'Height',
+                    guard.heightCm == null
+                        ? null
+                        : '${_numberText(guard.heightCm!)} cm',
+                  ),
+                  _ProfileFieldData(
+                    'Weight',
+                    guard.weightKg == null
+                        ? null
+                        : '${_numberText(guard.weightKg!)} kg',
+                  ),
+                ],
               ),
-              _ProfileFieldData(
-                'Identification mark',
-                guard.identificationMark,
+              const SizedBox(height: AppSpacing.md),
+              _ProfileSection(
+                title: 'Contact details',
+                icon: Icons.contact_phone_outlined,
+                fields: <_ProfileFieldData>[
+                  _ProfileFieldData('Phone number', guard.phoneNumber),
+                  _ProfileFieldData('Email address', guard.emailAddress),
+                  _ProfileFieldData(
+                    'Full address',
+                    guard.address,
+                    multiline: true,
+                  ),
+                ],
               ),
-              _ProfileFieldData(
-                'Height',
-                guard.heightCm == null
-                    ? null
-                    : '${_numberText(guard.heightCm!)} cm',
+              const SizedBox(height: AppSpacing.md),
+              _ProfileSection(
+                title: 'Employment details',
+                icon: Icons.work_outline_rounded,
+                fields: <_ProfileFieldData>[
+                  _ProfileFieldData('Employee ID', guard.employeeId),
+                  _ProfileFieldData('Client name', guard.clientName),
+                  if (guard.categoryLabel != null)
+                    _ProfileFieldData('TCS category', guard.categoryLabel!),
+                  _ProfileFieldData('Assigned site', guard.siteName),
+                  _ProfileFieldData('Job designation', guard.jobDesignation),
+                  _ProfileFieldData('Resource ID', guard.resourceIdNumber),
+                  _ProfileFieldData('Joining date', guard.joiningDate),
+                  _ProfileFieldData('Status', guard.status),
+                  if (_hasText(guard.exitDate))
+                    _ProfileFieldData('Exit date', guard.exitDate),
+                ],
               ),
-              _ProfileFieldData(
-                'Weight',
-                guard.weightKg == null
-                    ? null
-                    : '${_numberText(guard.weightKg!)} kg',
-              ),
+              const SizedBox(height: AppSpacing.md),
+              _IdentificationSection(guard: guard),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
-          _ProfileSection(
-            title: 'Contact details',
-            icon: Icons.contact_phone_outlined,
-            fields: <_ProfileFieldData>[
-              _ProfileFieldData('Phone number', guard.phoneNumber),
-              _ProfileFieldData('Email address', guard.emailAddress),
-              _ProfileFieldData('Full address', guard.address, multiline: true),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          _ProfileSection(
-            title: 'Employment details',
-            icon: Icons.work_outline_rounded,
-            fields: <_ProfileFieldData>[
-              _ProfileFieldData('Employee ID', guard.employeeId),
-              _ProfileFieldData('Client name', guard.clientName),
-              if (guard.categoryLabel != null)
-                _ProfileFieldData('TCS category', guard.categoryLabel!),
-              _ProfileFieldData('Assigned site', guard.siteName),
-              _ProfileFieldData('Job designation', guard.jobDesignation),
-              _ProfileFieldData('Resource ID', guard.resourceIdNumber),
-              _ProfileFieldData('Joining date', guard.joiningDate),
-              _ProfileFieldData('Status', guard.status),
-              if (_hasText(guard.exitDate))
-                _ProfileFieldData('Exit date', guard.exitDate),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          _IdentificationSection(guard: guard),
-          ],
         ),
       ),
     );

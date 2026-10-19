@@ -10,6 +10,7 @@ import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/models/leave_models.dart';
+import '../../../../../features/guard/application/leave_request_identity.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
@@ -40,6 +41,7 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
   String? _message;
   bool _loading = false;
   XFile? _medicalCertificate;
+  final LeaveRequestIdentity _requestIdentity = LeaveRequestIdentity();
   final ImagePicker _picker = ImagePicker();
 
   static final DateFormat _displayFmt = DateFormat('dd/MM/yyyy');
@@ -55,10 +57,7 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
 
   Future<void> _pickMedicalCertificate(ImageSource source) async {
     try {
-      final picked = await _picker.pickImage(
-        source: source,
-        imageQuality: 80,
-      );
+      final picked = await _picker.pickImage(source: source, imageQuality: 80);
       if (picked != null && mounted) {
         setState(() => _medicalCertificate = picked);
       }
@@ -128,12 +127,14 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
       'reason': _reasonController.text.trim(),
       if (attachmentUrl != null) 'attachmentUrl': attachmentUrl,
     };
+    payload['clientRequestId'] = _requestIdentity.forPayload(payload);
     try {
       await ref.read(mobileRepositoryProvider).createLeaveRequest(payload);
       ref.invalidate(guardLeaveProvider);
       _fromController.clear();
       _toController.clear();
       _reasonController.clear();
+      _requestIdentity.reset();
       setState(() {
         _fromDate = null;
         _toDate = null;
@@ -176,25 +177,26 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
   Future<void> _cancelLeave(LeaveRequestModel request) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Cancel Leave Request?'),
-        content: Text(
-          'Are you sure you want to cancel your ${request.type} leave request from ${request.fromDate} to ${request.toDate}?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Keep'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: FilledButton.styleFrom(
-              backgroundColor: CissThemeTokens.of(context).danger,
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('Cancel Leave Request?'),
+            content: Text(
+              'Are you sure you want to cancel your ${request.type} leave request from ${request.fromDate} to ${request.toDate}?',
             ),
-            child: const Text('Cancel Request'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Keep'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: CissThemeTokens.of(context).danger,
+                ),
+                child: const Text('Cancel Request'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
 
     if (confirmed != true || !mounted) return;
@@ -214,11 +216,13 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
       }
     } catch (error) {
       if (CissError.isRetryableNetworkError(error)) {
-        await ref.read(offlineQueueProvider).enqueue(
-          path: '/api/guard/leave',
-          method: 'PATCH',
-          body: <String, dynamic>{'requestId': request.id},
-        );
+        await ref
+            .read(offlineQueueProvider)
+            .enqueue(
+              path: '/api/guard/leave',
+              method: 'PATCH',
+              body: <String, dynamic>{'requestId': request.id},
+            );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -232,9 +236,7 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                error.toString().replaceFirst('Exception: ', ''),
-              ),
+              content: Text(error.toString().replaceFirst('Exception: ', '')),
             ),
           );
         }
@@ -551,51 +553,49 @@ class _GuardLeaveScreenState extends ConsumerState<GuardLeaveScreen> {
                     'Submitted leave requests and approval status will appear here.',
               )
             else
-              ...requests.map(
-                (request) {
-                  final isPending = request.status.toLowerCase() == 'pending';
-                  return GuardRecordCard(
-                    title: '${request.type.toUpperCase()} • ${request.status}',
-                    subtitle:
-                        '${request.fromDate} to ${request.toDate} • ${request.days} day(s)\n${request.reason}${request.attachmentUrl != null && request.attachmentUrl!.isNotEmpty ? '\n📎 Certificate attached' : ''}',
-                    icon: Icons.event_available_rounded,
-                    chip: StatusChip(
-                      label: request.status,
-                      tone:
-                          request.status.toLowerCase() == 'approved'
-                              ? StatusChipTone.success
-                              : request.status.toLowerCase() == 'rejected'
-                              ? StatusChipTone.danger
-                              : StatusChipTone.warning,
-                    ),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (request.attachmentUrl != null &&
-                            request.attachmentUrl!.isNotEmpty)
-                          IconButton(
-                            icon: const Icon(Icons.attachment_rounded, size: 20),
-                            color: tokens.primary,
-                            tooltip: 'View Certificate',
-                            onPressed:
-                                () => launchUrl(
-                                  Uri.parse(request.attachmentUrl!),
-                                  mode: LaunchMode.externalApplication,
-                                ),
-                          ),
-                        if (isPending)
-                          IconButton(
-                            icon: const Icon(Icons.cancel_outlined, size: 20),
-                            color: tokens.danger,
-                            tooltip: 'Cancel Request',
-                            onPressed:
-                                _loading ? null : () => _cancelLeave(request),
-                          ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+              ...requests.map((request) {
+                final isPending = request.status.toLowerCase() == 'pending';
+                return GuardRecordCard(
+                  title: '${request.type.toUpperCase()} • ${request.status}',
+                  subtitle:
+                      '${request.fromDate} to ${request.toDate} • ${request.days} day(s)\n${request.reason}${request.attachmentUrl != null && request.attachmentUrl!.isNotEmpty ? '\n📎 Certificate attached' : ''}',
+                  icon: Icons.event_available_rounded,
+                  chip: StatusChip(
+                    label: request.status,
+                    tone:
+                        request.status.toLowerCase() == 'approved'
+                            ? StatusChipTone.success
+                            : request.status.toLowerCase() == 'rejected'
+                            ? StatusChipTone.danger
+                            : StatusChipTone.warning,
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (request.attachmentUrl != null &&
+                          request.attachmentUrl!.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.attachment_rounded, size: 20),
+                          color: tokens.primary,
+                          tooltip: 'View Certificate',
+                          onPressed:
+                              () => launchUrl(
+                                Uri.parse(request.attachmentUrl!),
+                                mode: LaunchMode.externalApplication,
+                              ),
+                        ),
+                      if (isPending)
+                        IconButton(
+                          icon: const Icon(Icons.cancel_outlined, size: 20),
+                          color: tokens.danger,
+                          tooltip: 'Cancel Request',
+                          onPressed:
+                              _loading ? null : () => _cancelLeave(request),
+                        ),
+                    ],
+                  ),
+                );
+              }),
           ],
         );
       },

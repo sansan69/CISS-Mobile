@@ -1,3 +1,5 @@
+import 'dart:async';
+import '../../../../core/telemetry/app_telemetry.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../auth/application/auth_controller.dart';
@@ -59,10 +61,14 @@ class DutyWillingnessController {
           response: response,
           expectedVersion: duty.willingnessVersion,
         );
+    unawaited(
+      ref.read(appTelemetryProvider).record('duty_response', stage: 'queued'),
+    );
     await sync();
   }
 
   Future<void> sync() async {
+    final telemetry = ref.read(appTelemetryProvider);
     final owner = _owner;
     if (owner == null ||
         !ref
@@ -108,15 +114,20 @@ class DutyWillingnessController {
                 message: kApiRequestIdentityChanged,
               );
             }
-            return repo.setDutyWillingness(
-              workOrderId: op.workOrderId,
-              response: op.response,
-              clientRequestId: op.id,
-              expectedVersion: op.expectedVersion,
-              expectedOwnerUid: op.ownerUid,
-              expectedApiBaseUrl: op.apiBaseUrl,
-              isCurrentOperation: () async => runIsCurrent(),
-            );
+            return repo
+                .setDutyWillingness(
+                  workOrderId: op.workOrderId,
+                  response: op.response,
+                  clientRequestId: op.id,
+                  expectedVersion: op.expectedVersion,
+                  expectedOwnerUid: op.ownerUid,
+                  expectedApiBaseUrl: op.apiBaseUrl,
+                  isCurrentOperation: () async => runIsCurrent(),
+                )
+                .then((receipt) {
+                  unawaited(telemetry.record('duty_response', stage: 'saved'));
+                  return receipt;
+                });
           },
         );
     // Refresh after both receipts and business rejection: the server's answer

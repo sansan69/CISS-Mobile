@@ -32,6 +32,8 @@ class SchedulingRepository extends NoNetworkRepository {
   ];
   @override
   Future<List<GuardProfileModel>> fetchFieldOfficerGuards({
+    int? limit,
+    String? after,
     String? district,
     bool includeInactive = false,
   }) async =>

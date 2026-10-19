@@ -12,6 +12,7 @@ import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/report_models.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/network/ciss_error.dart';
+import '../../../../../core/submission_identity.dart';
 import '../../../../../core/sync/providers.dart';
 import '../../../../../core/offline/draft_service.dart';
 import '../../../../../shared/widgets/brand_banner.dart';
@@ -266,11 +267,7 @@ class _FieldOfficerReportsScreenState
           const SyncStatusBadge(),
           IconButton(
             onPressed: _refresh,
-            icon: Icon(
-              Icons.refresh_rounded,
-              color: tokens.inkMuted,
-              size: 20,
-            ),
+            icon: Icon(Icons.refresh_rounded, color: tokens.inkMuted, size: 20),
           ),
         ],
       ),
@@ -282,7 +279,6 @@ class _FieldOfficerReportsScreenState
           120 + MediaQuery.paddingOf(context).bottom,
         ),
         children: [
-
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
@@ -1064,6 +1060,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
   String _reportStatus = 'submitted'; // 'draft' | 'submitted'
   Map<String, double>? _visitLocation;
   bool _loading = false;
+  final SubmissionIdentity _submissionIdentity = SubmissionIdentity();
   String? _error;
   bool _showPreview = false;
 
@@ -1590,10 +1587,21 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         payload['visitLocation'] = _visitLocation;
       }
 
+      final submissionId = _submissionIdentity.forPayload({
+        ...payload,
+        'photoDataUrls': photoDataUrls,
+        'clientReportDataUrls': clientReportDataUrls,
+      });
+      payload['reportId'] = submissionId;
+      payload['submissionIdempotencyKey'] = submissionId;
+
+      List<String>? uploadedPhotoUrls;
+      String? uploadedClientReportUrl;
+      String? clientReportUrl;
       try {
         final photoUrls = await _uploadPhotos(folder: photoFolder);
+        uploadedPhotoUrls = photoUrls;
 
-        String? clientReportUrl;
         if (_tab == _Tab.training && _clientReportPhotos.isNotEmpty) {
           final timestamp = DateTime.now().millisecondsSinceEpoch;
           for (var i = 0; i < _clientReportPhotos.length; i++) {
@@ -1605,10 +1613,24 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                   ref.read(firebaseAuthProvider).currentUser?.uid ?? 'unknown';
               final path = 'foReports/trainingReportFiles/$uid/$safeName';
               final dataUrl = clientReportDataUrls[i];
-              final result = await ref
-                  .read(mobileRepositoryProvider)
-                  .uploadReportPhoto(path: path, dataUrl: dataUrl);
-              clientReportUrl = result['url'] as String?;
+              clientReportUrl =
+                  _submissionIdentity.readCapture<String>(
+                    'clientReportUrl-$i',
+                  ) ??
+                  (await ref
+                          .read(mobileRepositoryProvider)
+                          .uploadReportPhoto(
+                            path: path,
+                            dataUrl: dataUrl,
+                          ))['url']
+                      as String?;
+              if (clientReportUrl != null) {
+                _submissionIdentity.capture(
+                  'clientReportUrl-$i',
+                  clientReportUrl,
+                );
+              }
+              uploadedClientReportUrl = clientReportUrl;
             } catch (_) {}
           }
         }
@@ -1629,6 +1651,7 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
               .submitTrainingReport(finalPayload);
         }
 
+        _submissionIdentity.complete();
         await ref.read(draftServiceProvider).clearDraft(_draftKey);
         widget.onSubmitted();
         if (mounted) Navigator.of(context).pop();
@@ -1641,11 +1664,18 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
                 method: 'POST',
                 body: {
                   ...payload,
-                  'photoDataUrls': photoDataUrls,
-                  if (clientReportDataUrls.isNotEmpty)
+                  if (uploadedPhotoUrls != null)
+                    'photoUrls': uploadedPhotoUrls
+                  else
+                    'photoDataUrls': photoDataUrls,
+                  if (uploadedClientReportUrl != null)
+                    'clientReportUrl': uploadedClientReportUrl,
+                  if (uploadedClientReportUrl == null &&
+                      clientReportDataUrls.isNotEmpty)
                     'clientReportDataUrls': clientReportDataUrls,
                 },
               );
+          _submissionIdentity.complete();
           await ref.read(draftServiceProvider).clearDraft(_draftKey);
           widget.onSubmitted();
           if (mounted) Navigator.of(context).pop();

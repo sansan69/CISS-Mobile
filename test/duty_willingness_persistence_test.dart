@@ -93,6 +93,13 @@ void main() {
         'createdAt',
         'retryCount',
         'lastError',
+        'sequence',
+        'state',
+        'nextAttemptAt',
+        'ownerUid',
+        'origin',
+        'streamKey',
+        'conflictPolicy',
       ]),
     );
   });

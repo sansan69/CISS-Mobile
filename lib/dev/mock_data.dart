@@ -862,6 +862,8 @@ class ReadOnlyDutyPreviewRepository implements MobileRepository {
   ];
   @override
   Future<List<GuardProfileModel>> fetchFieldOfficerGuards({
+    int? limit,
+    String? after,
     String? district,
     bool includeInactive = false,
   }) async => [

@@ -1,0 +1,136 @@
+name: Build and publish Google Play release
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the verified bundle to Play (false builds only)
+        type: boolean
+        default: false
+      track:
+        type: choice
+        options: [internal, production]
+        default: internal
+      user_fraction:
+        description: Production staged rollout fraction (0.01 to less than 1)
+        default: '0.05'
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: google-play-release
+  cancel-in-progress: false
+jobs:
+  play:
+    runs-on: ubuntu-latest
+    environment: google-play
+    env:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      RASP_SIGNING_CERT_BASE64: ${{ secrets.RASP_SIGNING_CERT_BASE64 }}
+      RASP_WATCHER_EMAIL: ${{ secrets.RASP_WATCHER_EMAIL }}
+      ANDROID_SIGNING_CERT_SHA256: ${{ secrets.ANDROID_SIGNING_CERT_SHA256 }}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      FIREBASE_ANDROID_APP_ID: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+      CISS_PRIVACY_URL: ${{ vars.CISS_PRIVACY_URL }}
+      CISS_TERMS_URL: ${{ vars.CISS_TERMS_URL }}
+      CISS_PSARA_URL: ${{ vars.CISS_PSARA_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.29.0'
+          channel: stable
+          cache: true
+      - name: Configure signing and validate rollout
+        shell: bash
+        env:
+          ROLLOUT_FRACTION: ${{ inputs.user_fraction }}
+        run: |
+          set -euo pipefail
+          python3 -c 'import os; value=float(os.environ["ROLLOUT_FRACTION"]); assert 0.01 <= value < 1, "Invalid rollout fraction"'
+          for variable in ANDROID_KEYSTORE_BASE64 ANDROID_STORE_PASSWORD ANDROID_KEY_PASSWORD ANDROID_KEY_ALIAS ANDROID_SIGNING_CERT_SHA256 RASP_SIGNING_CERT_BASE64 RASP_WATCHER_EMAIL CISS_PRIVACY_URL CISS_TERMS_URL CISS_PSARA_URL; do
+            test -n "${!variable:-}" || { echo "Required secret $variable is missing"; exit 1; }
+          done
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/app/ciss-release.keystore
+          {
+            printf 'storePassword=%s\n' "$ANDROID_STORE_PASSWORD"
+            printf 'keyPassword=%s\n' "$ANDROID_KEY_PASSWORD"
+            printf 'keyAlias=%s\n' "$ANDROID_KEY_ALIAS"
+            printf 'storeFile=ciss-release.keystore\n'
+          } > android/key.properties
+          actual_digest="$(keytool -list -v -keystore android/app/ciss-release.keystore -storepass:env ANDROID_STORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" | sed -n 's/.*SHA256: //p' | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+          expected_digest="$(printf '%s' "$ANDROID_SIGNING_CERT_SHA256" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+          test "$actual_digest" = "$expected_digest" || { echo 'Signing certificate mismatch'; exit 1; }
+          python3 -c 'import os, urllib.parse; names=["CISS_PRIVACY_URL","CISS_TERMS_URL","CISS_PSARA_URL"]; assert all((u:=urllib.parse.urlparse(os.environ[n])).scheme=="https" and u.hostname and not u.username for n in names), "Policy URLs must use HTTPS"'
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - name: Build obfuscated Play bundle
+        run: >-
+          flutter build appbundle --release --obfuscate --split-debug-info=build/play-symbols
+          --dart-define=CISS_DISTRIBUTION=play
+          --dart-define=RASP_SIGNING_CERT_BASE64="$RASP_SIGNING_CERT_BASE64"
+          --dart-define=RASP_WATCHER_EMAIL="$RASP_WATCHER_EMAIL"
+          --dart-define=CISS_PRIVACY_URL="$CISS_PRIVACY_URL"
+          --dart-define=CISS_TERMS_URL="$CISS_TERMS_URL"
+          --dart-define=CISS_PSARA_URL="$CISS_PSARA_URL"
+      - name: Verify Play manifest does not request APK installation
+        run: |
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          manifests = [p for p in Path('build/app/intermediates').rglob('AndroidManifest.xml') if 'merged_manifest' in str(p) and 'release' in str(p)]
+          assert manifests, 'Merged release manifest not found'
+          assert all('android.permission.REQUEST_INSTALL_PACKAGES' not in p.read_text() for p in manifests), 'Play bundle contains sideload install permission'
+          PYCODE
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: play-release
+          path: |
+            build/app/outputs/bundle/release/app-release.aab
+            build/play-symbols
+            build/app/outputs/mapping/release/mapping.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Upload Flutter symbols to Crashlytics
+        if: ${{ inputs.publish && env.FIREBASE_SERVICE_ACCOUNT_JSON != '' && env.FIREBASE_ANDROID_APP_ID != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          credentials="$RUNNER_TEMP/firebase-symbols.json"
+          trap 'rm -f "$credentials"' EXIT
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$credentials"
+          export GOOGLE_APPLICATION_CREDENTIALS="$credentials"
+          npx --yes firebase-tools@15.34.0 crashlytics:symbols:upload --app "$FIREBASE_ANDROID_APP_ID" build/play-symbols
+
+      - name: Keep symbols for manual Crashlytics upload
+        if: ${{ inputs.publish && (env.FIREBASE_SERVICE_ACCOUNT_JSON == '' || env.FIREBASE_ANDROID_APP_ID == '') }}
+        run: echo 'Crashlytics credentials are not configured; Dart symbols remain attached to this workflow artifact.'
+      - name: Publish internal testing release
+        if: inputs.publish && inputs.track == 'internal'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: co.in.ciss.ciss_mobile
+          releaseFiles: build/app/outputs/bundle/release/app-release.aab
+          mappingFile: build/app/outputs/mapping/release/mapping.txt
+          track: internal
+          status: completed
+      - name: Publish staged production release
+        if: inputs.publish && inputs.track == 'production'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: co.in.ciss.ciss_mobile
+          releaseFiles: build/app/outputs/bundle/release/app-release.aab
+          mappingFile: build/app/outputs/mapping/release/mapping.txt
+          track: production
+          status: inProgress
+          userFraction: ${{ inputs.user_fraction }}

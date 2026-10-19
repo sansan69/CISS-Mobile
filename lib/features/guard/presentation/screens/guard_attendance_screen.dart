@@ -1,3 +1,5 @@
+import '../../../../../core/security/attendance_integrity.dart';
+import '../../../../../core/telemetry/app_telemetry.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -72,6 +74,11 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(
+        ref
+            .read(appTelemetryProvider)
+            .record('attendance_funnel', stage: 'open'),
+      );
       _initLocationCheck();
       _initStatusFromHistory();
     });
@@ -81,12 +88,25 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   /// If the most recent record is IN, default to OUT (guard is checking out).
   /// If the most recent record is OUT or no history, default to IN.
   Future<void> _initStatusFromHistory() async {
+    final startupPunchRevision = _attendance.punchRevision;
+    try {
+      final status =
+          await ref.read(mobileRepositoryProvider).fetchGuardTrackingStatus();
+      if (mounted) {
+        _attendance.applyTrackingStatus(
+          status,
+          expectedPunchRevision: startupPunchRevision,
+        );
+      }
+    } catch (_) {
+      /* Offline capture time still prevents cross-shift replay. */
+    }
     try {
       final records = await ref.read(recentAttendanceHistoryProvider.future);
       if (records.isEmpty) return;
 
       final latest = records.first;
-      if (!mounted) return;
+      if (!mounted || _attendance.punchRevision != startupPunchRevision) return;
 
       // If latest is IN, the guard probably wants to OUT now
       // If latest is OUT, the guard probably wants to IN now
@@ -402,18 +422,25 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
   Future<void> _toggleBreak() async {
     final action = _attendance.onBreak ? BreakAction.stop : BreakAction.start;
     final position = _position;
-    final body = <String, dynamic>{
-      'action': action.name,
-      'lat': position?.latitude,
-      'lng': position?.longitude,
-      'accuracy': position?.accuracy,
-      'capturedAt': DateTime.now().toUtc().toIso8601String(),
-    };
+    final capturedAt = DateTime.now().toUtc();
+    final requestId = _uuid.v4();
+    final body = buildBreakPayload(
+      action: action.name,
+      capturedAt: capturedAt,
+      clientRequestId: requestId,
+      sessionId: _attendance.sessionId,
+      lat: position?.latitude,
+      lng: position?.longitude,
+      accuracy: position?.accuracy,
+    );
     try {
       final res = await ref
           .read(mobileRepositoryProvider)
           .attendanceBreak(
             action: action.name,
+            capturedAt: capturedAt.toIso8601String(),
+            clientRequestId: requestId,
+            sessionId: _attendance.sessionId,
             lat: position?.latitude,
             lng: position?.longitude,
             accuracy: position?.accuracy,
@@ -436,7 +463,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           'breakSeconds': _attendance.totalBreakSeconds,
           'canCheckOut': action != BreakAction.start,
           if (action == BreakAction.start)
-            'breakStartedAt': DateTime.now().toUtc().toIso8601String(),
+            'breakStartedAt': capturedAt.toIso8601String(),
         };
         setState(() => _attendance.applyBreakResponse(optimistic));
         _syncBreakTicker();
@@ -463,6 +490,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       response['requiresReason'] == true;
 
   Future<void> _submitAttendance(GuardProfileModel profile) async {
+    final telemetry = ref.read(appTelemetryProvider);
     setState(() => _isSuccess = false);
     if (_site == null) {
       setState(() => _error = 'Please select a site.');
@@ -500,6 +528,8 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     });
 
     try {
+      unawaited(telemetry.record('attendance_funnel', stage: 'readiness'));
+      unawaited(telemetry.record('attendance_funnel', stage: 'attempt'));
       final file = File(_photoPath!);
       final bytes = await file.readAsBytes();
       final dataUrl = await ref
@@ -528,6 +558,12 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       final deviceIdentity = ref.read(deviceIdentityProvider);
       final deviceId = await deviceIdentity.id();
       final deviceChanged = await deviceIdentity.recordPunchDevice(deviceId);
+
+      // Stamp the punch once, on the handset. The server uses this to date the
+      // attendance session, and the tracking heartbeat stamps its samples from
+      // the same clock, so the session window and the breadcrumbs share one
+      // time domain instead of depending on handset and server clocks agreeing.
+      final punchCapturedAt = DateTime.now().toUtc().toIso8601String();
 
       final payload = <String, dynamic>{
         if (deviceId != null) 'deviceId': deviceId,
@@ -561,8 +597,12 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         'locationAccuracyMeters': _position!.accuracy,
         'geofenceRadiusAtTime': _site!.geofenceRadiusMeters,
         'sourceCollection': _site!.sourceCollection,
-        'photoCapturedAt': DateTime.now().toUtc().toIso8601String(),
-        'locationCapturedAt': DateTime.now().toUtc().toIso8601String(),
+        'reportedAtClient': punchCapturedAt,
+        'photoCapturedAt': punchCapturedAt,
+        'locationCapturedAt': punchCapturedAt,
+        ...await ref
+            .read(attendanceIntegrityProvider)
+            .evidence(_clientRequestId ??= _uuid.v4()),
         'attendanceAttemptId': _clientRequestId ??= _uuid.v4(),
         'deviceInfo': <String, dynamic>{'userAgent': 'flutter-mobile'},
         'clientRequestId': _clientRequestId ??= _uuid.v4(),
@@ -572,6 +612,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         },
       };
 
+      var durablePayload = payload;
       try {
         final uploadResult = await ref
             .read(mobileRepositoryProvider)
@@ -583,32 +624,47 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
               attemptId: _clientRequestId,
             );
 
+        durablePayload = {
+          ...payload,
+          'photoUrl': uploadResult['url'],
+          'photoStoragePath': uploadResult['path'],
+        };
         var submitResult = await ref
             .read(mobileRepositoryProvider)
-            .submitAttendance({
-              ...payload,
-              'photoUrl': uploadResult['url'],
-              'photoStoragePath': uploadResult['path'],
-            });
+            .submitAttendance(durablePayload);
 
         if (_status == 'Out' &&
             _requiresEarlyCheckoutReason(submitResult) &&
             mounted) {
           final reason = await showEarlyCheckoutReasonSheet(context);
-          if (reason != null && reason.isNotEmpty) {
-            _clientRequestId = _uuid.v4();
-            submitResult = await ref
-                .read(mobileRepositoryProvider)
-                .submitAttendance({
-                  ...payload,
-                  'photoUrl': uploadResult['url'],
-                  'photoStoragePath': uploadResult['path'],
-                  'clientRequestId': _clientRequestId,
-                  'earlyCheckOutReason': reason,
-                });
+          if (reason == null || reason.isEmpty) {
+            throw StateError('Early checkout reason is required.');
           }
+          _clientRequestId = _uuid.v4();
+          durablePayload = buildEarlyCheckoutRetryPayload(
+            originalPayload: payload,
+            photoUrl: uploadResult['url'] as String,
+            photoStoragePath: uploadResult['path'] as String,
+            clientRequestId: _clientRequestId!,
+            reason: reason,
+          );
+          submitResult = await ref
+              .read(mobileRepositoryProvider)
+              .submitAttendance(durablePayload);
         }
 
+        _attendance.applyPunch(
+          status: _status,
+          responseId: submitResult['id'] as String?,
+        );
+
+        unawaited(
+          telemetry.record(
+            'attendance_funnel',
+            stage: 'outcome',
+            reason: 'saved',
+          ),
+        );
         if (_status == 'In') {
           // Start the background tracking service (best-effort — a failure
           // here must never fail the check-in itself).
@@ -660,6 +716,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         }
 
         if (mounted) {
+          final submittedStatus = _status;
           Haptics.heavy();
           _notesController.clear();
           setState(() {
@@ -676,7 +733,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           unawaited(
             SuccessOverlay.show(
               context,
-              title: _status == 'In' ? 'Checked in' : 'Checked out',
+              title: submittedStatus == 'In' ? 'Checked in' : 'Checked out',
               message: 'Your attendance was recorded.',
             ),
           );
@@ -691,8 +748,18 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
               .enqueue(
                 path: '/api/attendance/submit',
                 method: 'POST',
-                body: {...payload, 'photoDataUrl': dataUrl},
+                body: buildAttendanceRetryQueuePayload(
+                  durablePayload: durablePayload,
+                  photoDataUrl: dataUrl,
+                ),
               );
+          unawaited(
+            telemetry.record(
+              'attendance_funnel',
+              stage: 'outcome',
+              reason: 'queued_offline',
+            ),
+          );
           if (_status == 'Out') {
             await BackgroundTrackingService.stop();
           }
@@ -715,6 +782,14 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         }
       }
     } catch (error) {
+      unawaited(
+        telemetry.record(
+          'attendance_funnel',
+          stage: 'outcome',
+          reason: 'punch_failed',
+          failed: true,
+        ),
+      );
       if (mounted) {
         setState(() {
           _error = CissError.parse(error);

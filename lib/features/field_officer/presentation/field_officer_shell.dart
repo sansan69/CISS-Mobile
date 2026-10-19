@@ -12,6 +12,8 @@ import '../../shared/device_readiness_screen.dart';
 import '../../shared/device_identity_row.dart';
 import '../../shared/readiness_banner.dart';
 import '../../shared/tracking_health_card.dart';
+import '../../shared/sync_health_card.dart';
+import '../../shared/policy_links_card.dart';
 import '../../auth/application/auth_controller.dart';
 import '../field_officer_tab_provider.dart';
 import '../../../shared/widgets/floating_nav_bar.dart';
@@ -96,7 +98,8 @@ class _FieldOfficerShellState extends ConsumerState<FieldOfficerShell> {
     final index = ref.watch(fieldOfficerTabIndexProvider);
     _visitedTabs.add(index);
     final strings = AppStrings.of(context);
-    final unread = ref.watch(NotificationService.unreadCountProvider).valueOrNull ?? 0;
+    final unread =
+        ref.watch(NotificationService.unreadCountProvider).valueOrNull ?? 0;
 
     // Keep all FO data providers alive so tab switching is instant.
     ref.watch(fieldOfficerDashboardProvider);
@@ -263,17 +266,20 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                         ref.watch(appLanguageControllerProvider).label,
                       ),
                       trailing: const Icon(Icons.chevron_right),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const LanguageScreen(),
-                        ),
-                      ),
+                      onTap:
+                          () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const LanguageScreen(),
+                            ),
+                          ),
                     ),
                   ),
                   const SizedBox(height: 12),
                   const ReadinessBanner(),
                   const SizedBox(height: 12),
                   const TrackingHealthCard(),
+                  const SyncHealthCard(),
+                  const PolicyLinksCard(),
                   const SizedBox(height: 12),
                   ModernCard(
                     padding: EdgeInsets.zero,
@@ -288,11 +294,12 @@ class FieldOfficerMoreScreen extends ConsumerWidget {
                       ),
                       subtitle: Text(strings.readinessSubtitle),
                       trailing: const Icon(Icons.chevron_right),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const DeviceReadinessScreen(),
-                        ),
-                      ),
+                      onTap:
+                          () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const DeviceReadinessScreen(),
+                            ),
+                          ),
                     ),
                   ),
                   const SizedBox(height: 12),

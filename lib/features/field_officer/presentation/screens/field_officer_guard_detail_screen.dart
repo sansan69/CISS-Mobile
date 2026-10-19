@@ -1,3 +1,4 @@
+import '../../../shared/sensitive_screen.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -148,355 +149,362 @@ class _FieldOfficerGuardDetailScreenState
     final initialCenter =
         mapPoints.isNotEmpty ? mapPoints.first : const LatLng(10.0, 76.0);
 
-    return Scaffold(
-      backgroundColor: tokens.canvas,
-      appBar: CissAppBar(title: widget.guardName, subtitle: 'Guard details'),
-      body: Column(
-        children: <Widget>[
-          // Map
-          Expanded(
-            flex: 3,
-            child: SizedBox(
-              width: double.infinity,
-              child: ClipRRect(
-                child: FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: initialCenter,
-                    initialZoom: mapPoints.length > 1 ? 14 : 17,
-                    onMapEvent: (event) {
-                      if (event.source != MapEventSource.mapController &&
-                          (event is MapEventMoveStart ||
-                              event is MapEventFlingAnimation)) {
-                        setState(() => _followGuard = false);
-                      }
-                    },
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'co.in.ciss.ciss_mobile',
-                      errorTileCallback: (tile, error, stackTrace) {
-                        if (!_tilesFailed) {
-                          setState(() => _tilesFailed = true);
+    return SensitiveScreen(
+      child: Scaffold(
+        backgroundColor: tokens.canvas,
+        appBar: CissAppBar(title: widget.guardName, subtitle: 'Guard details'),
+        body: Column(
+          children: <Widget>[
+            // Map
+            Expanded(
+              flex: 3,
+              child: SizedBox(
+                width: double.infinity,
+                child: ClipRRect(
+                  child: FlutterMap(
+                    mapController: _mapController,
+                    options: MapOptions(
+                      initialCenter: initialCenter,
+                      initialZoom: mapPoints.length > 1 ? 14 : 17,
+                      onMapEvent: (event) {
+                        if (event.source != MapEventSource.mapController &&
+                            (event is MapEventMoveStart ||
+                                event is MapEventFlingAnimation)) {
+                          setState(() => _followGuard = false);
                         }
                       },
                     ),
-                    // Guard marker
-                    if (hasLiveCoords)
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: LatLng(guardLat, guardLng),
-                            width: 60,
-                            height: 60,
-                            child: _GuardMarker(
-                              isOutOfZone: loc?.isOutOfZone ?? false,
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'co.in.ciss.ciss_mobile',
+                        errorTileCallback: (tile, error, stackTrace) {
+                          if (!_tilesFailed) {
+                            setState(() => _tilesFailed = true);
+                          }
+                        },
+                      ),
+                      // Guard marker
+                      if (hasLiveCoords)
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: LatLng(guardLat, guardLng),
+                              width: 60,
+                              height: 60,
+                              child: _GuardMarker(
+                                isOutOfZone: loc?.isOutOfZone ?? false,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    if (!hasLiveCoords && hasAttendanceCoords)
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: LatLng(attendanceLat!, attendanceLng!),
-                            width: 68,
-                            height: 68,
-                            child: _AttendanceMarker(
-                              isCheckedOut:
-                                  widget.attendanceEntry?.checkOut != null,
+                          ],
+                        ),
+                      if (!hasLiveCoords && hasAttendanceCoords)
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: LatLng(attendanceLat!, attendanceLng!),
+                              width: 68,
+                              height: 68,
+                              child: _AttendanceMarker(
+                                isCheckedOut:
+                                    widget.attendanceEntry?.checkOut != null,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                    if (hasLiveCoords && hasAttendanceCoords)
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: LatLng(attendanceLat!, attendanceLng!),
-                            width: 58,
-                            height: 58,
-                            child: _RecordedPointMarker(),
-                          ),
-                        ],
-                      ),
-                    if (_validCoordinates(siteLat, siteLng))
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: LatLng(siteLat!, siteLng!),
-                            width: 58,
-                            height: 58,
-                            child: _SiteMarker(),
-                          ),
-                        ],
-                      ),
-                    // Site geofence circle
-                    if (_validCoordinates(siteLat, siteLng) && radius > 0)
-                      CircleLayer(
-                        circles: [
-                          CircleMarker(
-                            point: LatLng(siteLat!, siteLng!),
-                            radius: radius,
-                            color: tokens.primary.withValues(alpha: 0.08),
-                            borderColor: tokens.primary.withValues(alpha: 0.35),
-                            borderStrokeWidth: 1.5,
-                          ),
-                        ],
-                      ),
-                    // Accuracy ring
-                    if (hasLiveCoords && (loc?.accuracy ?? 0) > 0)
-                      CircleLayer(
-                        circles: [
-                          CircleMarker(
-                            point: LatLng(guardLat, guardLng),
-                            radius: loc!.accuracy,
-                            color: (loc.isOutOfZone
-                                    ? tokens.danger
-                                    : tokens.success)
-                                .withValues(alpha: 0.06),
-                            borderColor: (loc.isOutOfZone
-                                    ? tokens.danger
-                                    : tokens.success)
-                                .withValues(alpha: 0.25),
-                            borderStrokeWidth: 1,
-                          ),
-                        ],
-                      ),
-                  ],
+                          ],
+                        ),
+                      if (hasLiveCoords && hasAttendanceCoords)
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: LatLng(attendanceLat!, attendanceLng!),
+                              width: 58,
+                              height: 58,
+                              child: _RecordedPointMarker(),
+                            ),
+                          ],
+                        ),
+                      if (_validCoordinates(siteLat, siteLng))
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: LatLng(siteLat!, siteLng!),
+                              width: 58,
+                              height: 58,
+                              child: _SiteMarker(),
+                            ),
+                          ],
+                        ),
+                      // Site geofence circle
+                      if (_validCoordinates(siteLat, siteLng) && radius > 0)
+                        CircleLayer(
+                          circles: [
+                            CircleMarker(
+                              point: LatLng(siteLat!, siteLng!),
+                              radius: radius,
+                              color: tokens.primary.withValues(alpha: 0.08),
+                              borderColor: tokens.primary.withValues(
+                                alpha: 0.35,
+                              ),
+                              borderStrokeWidth: 1.5,
+                            ),
+                          ],
+                        ),
+                      // Accuracy ring
+                      if (hasLiveCoords && (loc?.accuracy ?? 0) > 0)
+                        CircleLayer(
+                          circles: [
+                            CircleMarker(
+                              point: LatLng(guardLat, guardLng),
+                              radius: loc!.accuracy,
+                              color: (loc.isOutOfZone
+                                      ? tokens.danger
+                                      : tokens.success)
+                                  .withValues(alpha: 0.06),
+                              borderColor: (loc.isOutOfZone
+                                      ? tokens.danger
+                                      : tokens.success)
+                                  .withValues(alpha: 0.25),
+                              borderStrokeWidth: 1,
+                            ),
+                          ],
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          // Keep the map outside the scrollable detail panel. This prevents a
-          // vertical swipe over the map from scrolling the entire page.
-          Expanded(
-            flex: 2,
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: <Widget>[
-                // Tile error banner
-                if (_tilesFailed)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                    color: tokens.warningSoft,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.warning_amber_rounded,
-                          size: 18,
-                          color: tokens.warning,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Map tiles unavailable. Guard location still visible.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: tokens.warning,
+            // Keep the map outside the scrollable detail panel. This prevents a
+            // vertical swipe over the map from scrolling the entire page.
+            Expanded(
+              flex: 2,
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: <Widget>[
+                  // Tile error banner
+                  if (_tilesFailed)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      color: tokens.warningSoft,
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            size: 18,
+                            color: tokens.warning,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Map tiles unavailable. Guard location still visible.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: tokens.warning,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
 
-                // Info card
-                Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: ModernCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                widget.guardName,
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
-                                  color: tokens.ink,
+                  // Info card
+                  Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: ModernCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  widget.guardName,
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                    color: tokens.ink,
+                                  ),
                                 ),
                               ),
-                            ),
-                            // Status badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color:
-                                    isActive
-                                        ? tokens.successSoft
-                                        : tokens.dangerSoft,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                      color:
-                                          isActive
-                                              ? tokens.success
-                                              : tokens.danger,
-                                      shape: BoxShape.circle,
+                              // Status badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color:
+                                      isActive
+                                          ? tokens.successSoft
+                                          : tokens.dangerSoft,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(
+                                        color:
+                                            isActive
+                                                ? tokens.success
+                                                : tokens.danger,
+                                        shape: BoxShape.circle,
+                                      ),
                                     ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      isActive ? 'ON DUTY' : 'OFF DUTY',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 12,
+                                        color:
+                                            isActive
+                                                ? tokens.success
+                                                : tokens.danger,
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+
+                          _infoRow(tokens, 'Site', widget.siteName),
+                          if (loc != null) ...[
+                            _infoRow(tokens, 'Status', loc.status),
+                            _infoRow(
+                              tokens,
+                              'Last update',
+                              _formatSince(loc.updatedAt),
+                            ),
+                            if (hasLiveCoords &&
+                                siteLat != null &&
+                                siteLng != null) ...[
+                              _infoRow(
+                                tokens,
+                                'Distance from site',
+                                '${_calculateDistance(guardLat, guardLng, siteLat, siteLng).toStringAsFixed(0)} m',
+                              ),
+                            ],
+                            _DeviceStatusRow(location: loc),
+                          ] else
+                            _infoRow(tokens, 'Status', 'No location data'),
+
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder:
+                                            (_) => GuardDayTimelineScreen(
+                                              employeeDocId:
+                                                  loc?.employeeDocId ??
+                                                  widget.employeeId,
+                                              guardName: widget.guardName,
+                                              employeeId:
+                                                  loc?.employeeId ??
+                                                  widget.employeeId,
+                                            ),
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(
+                                    Icons.route_rounded,
+                                    size: 18,
                                   ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    isActive ? 'ON DUTY' : 'OFF DUTY',
+                                  label: Text(
+                                    'TIMELINE',
                                     style: TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 12,
-                                      color:
-                                          isActive
-                                              ? tokens.success
-                                              : tokens.danger,
+                                      fontWeight: FontWeight.w700,
                                       letterSpacing: 1,
                                     ),
                                   ),
-                                ],
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-
-                        _infoRow(tokens, 'Site', widget.siteName),
-                        if (loc != null) ...[
-                          _infoRow(tokens, 'Status', loc.status),
-                          _infoRow(
-                            tokens,
-                            'Last update',
-                            _formatSince(loc.updatedAt),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder:
+                                            (_) => GuardAttendanceLogsScreen(
+                                              employeeId:
+                                                  loc?.employeeId ??
+                                                  widget.employeeId,
+                                              guardId:
+                                                  loc?.employeeDocId ??
+                                                  widget.employeeId,
+                                              guardName: widget.guardName,
+                                            ),
+                                      ),
+                                    );
+                                  },
+                                  icon: const Icon(
+                                    Icons.history_rounded,
+                                    size: 18,
+                                  ),
+                                  label: Text(
+                                    'ATTENDANCE',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          if (hasLiveCoords &&
-                              siteLat != null &&
-                              siteLng != null) ...[
-                            _infoRow(
-                              tokens,
-                              'Distance from site',
-                              '${_calculateDistance(guardLat, guardLng, siteLat, siteLng).toStringAsFixed(0)} m',
-                            ),
-                          ],
-                          _DeviceStatusRow(location: loc),
-                        ] else
-                          _infoRow(tokens, 'Status', 'No location data'),
-
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute<void>(
-                                      builder:
-                                          (_) => GuardDayTimelineScreen(
-                                            employeeDocId:
-                                                loc?.employeeDocId ??
-                                                widget.employeeId,
-                                            guardName: widget.guardName,
-                                            employeeId:
-                                                loc?.employeeId ??
-                                                widget.employeeId,
-                                          ),
-                                    ),
-                                  );
-                                },
-                                icon: const Icon(Icons.route_rounded, size: 18),
-                                label: Text(
-                                  'TIMELINE',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute<void>(
-                                      builder:
-                                          (_) => GuardAttendanceLogsScreen(
-                                            employeeId:
-                                                loc?.employeeId ??
-                                                widget.employeeId,
-                                            guardId:
-                                                loc?.employeeDocId ??
-                                                widget.employeeId,
-                                            guardName: widget.guardName,
-                                          ),
-                                    ),
-                                  );
-                                },
-                                icon: const Icon(
-                                  Icons.history_rounded,
-                                  size: 18,
-                                ),
-                                label: Text(
-                                  'ATTENDANCE',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
 
-                if (widget.attendanceEntry != null)
-                  _AttendanceDetailsCard(
-                    entry: widget.attendanceEntry!,
-                    siteLatitude: siteLat,
-                    siteLongitude: siteLng,
-                  ),
+                  if (widget.attendanceEntry != null)
+                    _AttendanceDetailsCard(
+                      entry: widget.attendanceEntry!,
+                      siteLatitude: siteLat,
+                      siteLongitude: siteLng,
+                    ),
 
-                // Recenter button
-                if (!_followGuard && mapPoints.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          setState(() => _followGuard = true);
-                          _animateToMapPoints();
-                        },
-                        icon: const Icon(Icons.my_location_rounded, size: 18),
-                        label: Text(
-                          'RECENTER ON GUARD',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1,
+                  // Recenter button
+                  if (!_followGuard && mapPoints.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            setState(() => _followGuard = true);
+                            _animateToMapPoints();
+                          },
+                          icon: const Icon(Icons.my_location_rounded, size: 18),
+                          label: Text(
+                            'RECENTER ON GUARD',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -787,7 +795,10 @@ class _AttendanceDetailsCard extends StatelessWidget {
                 label: entry.dutyPointName,
                 compact: false,
               ),
-            ] else if (_validCoordinates(siteLatitude, siteLongitude)) ...<Widget>[
+            ] else if (_validCoordinates(
+              siteLatitude,
+              siteLongitude,
+            )) ...<Widget>[
               const SizedBox(height: 10),
               NavigateAction(
                 latitude: siteLatitude,
@@ -910,7 +921,9 @@ class _AttendanceDetailsCard extends StatelessWidget {
                         ResolvedAddressLine(
                           latitude: item.latitude,
                           longitude: item.longitude,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          style: Theme.of(
+                            context,
+                          ).textTheme.bodySmall?.copyWith(
                             color: CissThemeTokens.of(context).inkMuted,
                           ),
                         ),
@@ -924,7 +937,12 @@ class _AttendanceDetailsCard extends StatelessWidget {
 }
 
 class _AttendanceDetail {
-  const _AttendanceDetail(this.label, this.value, {this.latitude, this.longitude});
+  const _AttendanceDetail(
+    this.label,
+    this.value, {
+    this.latitude,
+    this.longitude,
+  });
 
   final String label;
   final String? value;

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
@@ -49,7 +50,14 @@ class WillingnessOperation {
     this.reason,
     this.serverVersion,
     this.serverResponse,
+    this.sequence = 0,
+    this.createdAt,
+    this.acknowledgedAt,
+    this.retryCount = 0,
+    this.nextAttemptAt,
   });
+  final int sequence, retryCount;
+  final DateTime? createdAt, acknowledgedAt, nextAttemptAt;
   final String id, ownerUid, apiBaseUrl, workOrderId, state;
   final WillingnessStatus response;
   final int expectedVersion;
@@ -72,25 +80,41 @@ class WillingnessOperation {
     'reason': reason,
     'serverVersion': serverVersion,
     'serverResponse': serverResponse?.name,
+    'sequence': sequence,
+    'createdAt': createdAt?.toIso8601String(),
+    'acknowledgedAt': acknowledgedAt?.toIso8601String(),
+    'retryCount': retryCount,
+    'nextAttemptAt': nextAttemptAt?.toIso8601String(),
+    'conflictPolicy': 'latest-local-choice-with-server-cas',
   };
-  factory WillingnessOperation.fromJson(Map<String, dynamic> json) =>
-      WillingnessOperation(
-        id: json['clientRequestId'] as String,
-        ownerUid: json['ownerUid'] as String,
-        apiBaseUrl: json['apiBaseUrl'] as String,
-        workOrderId: json['workOrderId'] as String,
-        response: WillingnessStatus.values.byName(json['response'] as String),
-        expectedVersion: json['expectedVersion'] as int,
-        state: json['state'] as String? ?? 'pending',
-        attempted: json['attempted'] == true,
-        reason: json['reason'] as String?,
-        serverVersion: json['serverVersion'] as int?,
-        serverResponse:
-            WillingnessStatus.values
-                .where((e) => e.name == json['serverResponse'])
-                .firstOrNull,
-      );
+  factory WillingnessOperation.fromJson(
+    Map<String, dynamic> json,
+  ) => WillingnessOperation(
+    sequence: json['sequence'] as int? ?? 0,
+    retryCount: json['retryCount'] as int? ?? 0,
+    createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? ''),
+    acknowledgedAt: DateTime.tryParse(json['acknowledgedAt']?.toString() ?? ''),
+    nextAttemptAt: DateTime.tryParse(json['nextAttemptAt']?.toString() ?? ''),
+    id: json['clientRequestId'] as String,
+    ownerUid: json['ownerUid'] as String,
+    apiBaseUrl: json['apiBaseUrl'] as String,
+    workOrderId: json['workOrderId'] as String,
+    response: WillingnessStatus.values.byName(json['response'] as String),
+    expectedVersion: json['expectedVersion'] as int,
+    state: json['state'] as String? ?? 'pending',
+    attempted: json['attempted'] == true,
+    reason: json['reason'] as String?,
+    serverVersion: json['serverVersion'] as int?,
+    serverResponse:
+        WillingnessStatus.values
+            .where((e) => e.name == json['serverResponse'])
+            .firstOrNull,
+  );
   WillingnessOperation copy({
+    int? sequence,
+    int? retryCount,
+    DateTime? acknowledgedAt,
+    DateTime? nextAttemptAt,
     int? expectedVersion,
     String? state,
     bool? attempted,
@@ -98,6 +122,11 @@ class WillingnessOperation {
     int? serverVersion,
     WillingnessStatus? serverResponse,
   }) => WillingnessOperation(
+    sequence: sequence ?? this.sequence,
+    createdAt: createdAt,
+    retryCount: retryCount ?? this.retryCount,
+    acknowledgedAt: acknowledgedAt ?? this.acknowledgedAt,
+    nextAttemptAt: nextAttemptAt ?? this.nextAttemptAt,
     id: id,
     ownerUid: ownerUid,
     apiBaseUrl: apiBaseUrl,
@@ -116,7 +145,15 @@ String willingnessOrigin(String value) =>
     value.replaceFirst(RegExp(r'/+$'), '');
 
 class WillingnessQueue extends ChangeNotifier {
-  WillingnessQueue(this.store);
+  WillingnessQueue(
+    this.store, {
+    DateTime Function()? now,
+    double Function()? jitter,
+  }) : _now = now ?? DateTime.now,
+       _jitter = jitter ?? math.Random().nextDouble;
+  final DateTime Function() _now;
+  final double Function() _jitter;
+  int _sequence = 0;
   final WillingnessStore store;
   final _rows = <WillingnessOperation>[];
   Future<void>? _loaded;
@@ -129,7 +166,14 @@ class WillingnessQueue extends ChangeNotifier {
     final rows = await store.read();
     for (final row in rows) {
       try {
-        _rows.add(WillingnessOperation.fromJson(row));
+        if (row['_kind'] == 'meta') {
+          _sequence = math.max(_sequence, row['sequence'] as int? ?? 0);
+          continue;
+        }
+        var op = WillingnessOperation.fromJson(row);
+        if (op.sequence == 0) op = op.copy(sequence: ++_sequence);
+        _sequence = math.max(_sequence, op.sequence);
+        _rows.add(op);
       } catch (_) {
         /* Unowned/invalid rows never run. */
       }
@@ -141,10 +185,15 @@ class WillingnessQueue extends ChangeNotifier {
     final next = _writes.then((_) async {
       // Roll back memory if the durable write fails; never claim pending saved.
       final before = List<WillingnessOperation>.of(_rows);
+      final beforeSequence = _sequence;
       action();
       try {
-        await store.write(_rows.map((e) => e.toJson()).toList());
+        await store.write([
+          ..._rows.map((e) => e.toJson()),
+          {'_kind': 'meta', 'sequence': _sequence},
+        ]);
       } catch (_) {
+        _sequence = beforeSequence;
         _rows
           ..clear()
           ..addAll(before);
@@ -184,8 +233,10 @@ class WillingnessQueue extends ChangeNotifier {
       workOrderId: workOrderId,
       response: response,
       expectedVersion: expectedVersion,
+      createdAt: _now(),
     );
     await _change(() {
+      op = op.copy(sequence: ++_sequence);
       final same =
           _rows
               .where(
@@ -240,6 +291,10 @@ class WillingnessQueue extends ChangeNotifier {
                 .toList();
         if (pending.isEmpty) break;
         var op = pending.first;
+        if (op.nextAttemptAt?.isAfter(_now()) ?? false) {
+          blocked.add(op.workOrderId);
+          continue;
+        }
         await _change(() {
           final i = _rows.indexWhere((e) => e.id == op.id);
           if (i >= 0) {
@@ -272,6 +327,7 @@ class WillingnessQueue extends ChangeNotifier {
             if (successors.isEmpty) {
               _rows[i] = op.copy(
                 state: 'saved',
+                acknowledgedAt: _now(),
                 serverVersion: receipt.version,
               );
               final saved = _rows.where((e) => e.state == 'saved').toList();
@@ -301,6 +357,7 @@ class WillingnessQueue extends ChangeNotifier {
               status >= 400 &&
               status < 500 &&
               status != 401 &&
+              status != 408 &&
               status != 429;
           final data = error is DioException ? error.response?.data : null;
           final current =
@@ -330,6 +387,22 @@ class WillingnessQueue extends ChangeNotifier {
                   row.state == 'pending') {
                 _rows[i] = row.copy(
                   state: terminal ? 'rejected' : 'pending',
+                  retryCount: row.retryCount + 1,
+                  nextAttemptAt: _now().add(
+                    Duration(
+                      milliseconds:
+                          (1000 *
+                                  math.min(
+                                    300,
+                                    math.pow(
+                                      2,
+                                      math.min(row.retryCount + 1, 9),
+                                    ),
+                                  ) *
+                                  (0.5 + _jitter().clamp(0, 1)))
+                              .round(),
+                    ),
+                  ),
                   reason: reason,
                   serverVersion: serverVersion,
                   serverResponse: serverResponse,
