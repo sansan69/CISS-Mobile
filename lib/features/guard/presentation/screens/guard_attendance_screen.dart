@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/haptics.dart';
+import '../../../../../core/offline/offline_queue.dart';
 import '../../../../../core/models/attendance_models.dart';
 import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/network/ciss_error.dart';
@@ -420,13 +421,20 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
       _syncBreakTicker();
     } catch (error) {
       if (CissError.isRetryableNetworkError(error)) {
-        await ref
-            .read(offlineQueueProvider)
-            .enqueue(
-              path: '/api/mobile/attendance/break',
-              method: 'POST',
-              body: body,
-            );
+        try {
+          await ref
+              .read(offlineQueueProvider)
+              .enqueue(
+                path: '/api/mobile/attendance/break',
+                method: 'POST',
+                body: body,
+              );
+        } on OfflineQueueError catch (queueError) {
+          if (mounted) {
+            setState(() => _error = queueError.message);
+          }
+          return;
+        }
         if (!mounted) return;
         final optimistic = <String, dynamic>{
           'onBreak': action == BreakAction.start,
@@ -550,6 +558,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         'locationAccuracyMeters': _position!.accuracy,
         'geofenceRadiusAtTime': _site!.geofenceRadiusMeters,
         'sourceCollection': _site!.sourceCollection,
+        'reportedAtClient': DateTime.now().toUtc().toIso8601String(),
         'photoCapturedAt': DateTime.now().toUtc().toIso8601String(),
         'locationCapturedAt': DateTime.now().toUtc().toIso8601String(),
         'attendanceAttemptId': _clientRequestId ??= _uuid.v4(),
@@ -651,6 +660,10 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
         if (mounted) {
           Haptics.heavy();
           _notesController.clear();
+          // This attempt is committed. The next punch must use a fresh
+          // idempotency key or the server returns the prior punch as a
+          // duplicate and never records the OUT.
+          _clientRequestId = null;
           setState(() {
             _photoPath = null;
             _isSuccess = true;
@@ -674,13 +687,25 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
           // If network failed, queue the request WITH the base64 photo data.
           // The backend /api/attendance/submit must be updated to handle
           // 'photoDataUrl' directly if 'photoUrl' is missing.
-          await ref
-              .read(offlineQueueProvider)
-              .enqueue(
-                path: '/api/attendance/submit',
-                method: 'POST',
-                body: {...payload, 'photoDataUrl': dataUrl},
-              );
+          try {
+            await ref
+                .read(offlineQueueProvider)
+                .enqueue(
+                  path: '/api/attendance/submit',
+                  method: 'POST',
+                  body: {...payload, 'photoDataUrl': dataUrl},
+                );
+          } on OfflineQueueError catch (queueError) {
+            if (mounted) {
+              setState(() {
+                _error = queueError.message;
+              });
+            }
+            return;
+          }
+          // The queued request owns this attempt id now; a later punch must
+          // not reuse it (the server would treat it as the same submission).
+          _clientRequestId = null;
           if (_status == 'Out') {
             await BackgroundTrackingService.stop();
           }

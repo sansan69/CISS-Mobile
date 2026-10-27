@@ -14,6 +14,7 @@ import '../../../core/models/attendance_models.dart';
 import '../../../core/network/providers.dart';
 import '../../../core/network/ciss_error.dart';
 import '../../../core/sync/providers.dart';
+import '../../../core/offline/offline_queue.dart';
 import '../../../core/utils/date_format.dart';
 import '../../../shared/widgets/camera_capture_screen.dart';
 import '../../../core/location/background_tracking_service.dart';
@@ -893,6 +894,9 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
 
       await repo.submitAttendance(payload);
 
+      // The attempt is committed; a later scan must use a new idempotency key.
+      _clientRequestId = null;
+
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -929,14 +933,25 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
       if (CissError.isRetryableNetworkError(e)) {
         // Offline: queue for sync
         try {
-          await ref
-              .read(offlineQueueProvider)
-              .enqueue(
-                path: '/api/attendance/submit',
-                method: 'POST',
-                body: {...?submissionPayload, 'photoDataUrl': _photoDataUrl},
-              );
+          try {
+            await ref
+                .read(offlineQueueProvider)
+                .enqueue(
+                  path: '/api/attendance/submit',
+                  method: 'POST',
+                  body: {...?submissionPayload, 'photoDataUrl': _photoDataUrl},
+                );
+          } on OfflineQueueError catch (queueError) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(queueError.message)),
+            );
+            setState(() => _loading = false);
+            return;
+          }
 
+          // The queue owns this attempt key now.
+          _clientRequestId = null;
           if (!mounted) return;
           if (_attendanceStatus == 'Out') {
             await BackgroundTrackingService.stop();
