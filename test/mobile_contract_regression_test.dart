@@ -174,15 +174,16 @@ void main() {
       },
     );
 
+    final parentPatrolRoute = File(
+      '../CISS/src/app/api/admin/patrol-activities/route.ts',
+    );
+
     test(
       'field-officer patrol route is shared with scoped backend authorization',
       () {
         final repository =
             File('lib/core/network/mobile_repository.dart').readAsStringSync();
-        final parentRoute =
-            File(
-              '../CISS/src/app/api/admin/patrol-activities/route.ts',
-            ).readAsStringSync();
+        final parentRoute = parentPatrolRoute.readAsStringSync();
 
         expect(repository, contains("'/api/admin/patrol-activities'"));
         expect(parentRoute, contains('requireActiveFieldOfficerProfile'));
@@ -190,6 +191,12 @@ void main() {
         expect(parentRoute, contains('getAssignedDistricts'));
         expect(parentRoute, isNot(contains('requireAdmin(request)')));
       },
+      // The assertion reads the CISS web/backend repo, which is only checked out
+      // beside this one on a developer machine — CI builds this repo alone.
+      skip:
+          parentPatrolRoute.existsSync()
+              ? false
+              : 'CISS web repo is not checked out beside this one',
     );
 
     test(
