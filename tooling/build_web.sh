@@ -19,6 +19,7 @@ flutter test
 flutter build web \
   --release \
   --base-href="$base_href" \
+  --no-web-resources-cdn \
   --dart-define=CISS_API_BASE_URL="${CISS_WEB_API_BASE_URL:-}"
 
 echo "Built web bundle in build/web (base href: $base_href)"
