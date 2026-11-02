@@ -10,6 +10,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/models/report_models.dart';
+import '../../../../../core/offline/offline_queue.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/sync/providers.dart';
@@ -1634,18 +1635,27 @@ class _NewReportSheetState extends ConsumerState<_NewReportSheet> {
         if (mounted) Navigator.of(context).pop();
       } catch (uploadOrSubmitError) {
         if (CissError.isRetryableNetworkError(uploadOrSubmitError)) {
-          await ref
-              .read(offlineQueueProvider)
-              .enqueue(
-                path: path,
-                method: 'POST',
-                body: {
-                  ...payload,
-                  'photoDataUrls': photoDataUrls,
-                  if (clientReportDataUrls.isNotEmpty)
-                    'clientReportDataUrls': clientReportDataUrls,
-                },
+          try {
+            await ref
+                .read(offlineQueueProvider)
+                .enqueue(
+                  path: path,
+                  method: 'POST',
+                  body: {
+                    ...payload,
+                    'photoDataUrls': photoDataUrls,
+                    if (clientReportDataUrls.isNotEmpty)
+                      'clientReportDataUrls': clientReportDataUrls,
+                  },
+                );
+          } on OfflineQueueError catch (queueError) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(queueError.message)),
               );
+            }
+            return;
+          }
           await ref.read(draftServiceProvider).clearDraft(_draftKey);
           widget.onSubmitted();
           if (mounted) Navigator.of(context).pop();

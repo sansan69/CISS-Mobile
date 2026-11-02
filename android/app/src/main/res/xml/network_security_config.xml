@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  F-08 / P-07: the production API, region-config and APK host must never be
+  reachable over cleartext. The previous `domain-config` re-enabled plaintext
+  for cisskerala.site and every subdomain, which reopened the app's most
+  sensitive origin to a downgrade. Cleartext is now denied for every domain,
+  including the production host; Android's default is stated explicitly so a
+  future edit cannot quietly re-open it.
+-->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">cisskerala.site</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
 </network-security-config>

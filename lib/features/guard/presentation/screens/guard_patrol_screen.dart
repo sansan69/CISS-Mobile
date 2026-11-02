@@ -1,10 +1,10 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
+import '../../../../../core/media/photo_store.dart';
 import '../../../../../core/models/patrol_models.dart';
+import '../../../../../core/offline/offline_queue.dart';
 import '../../../../../core/network/providers.dart';
 import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/sync/providers.dart';
@@ -91,8 +91,7 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
     try {
       String? photoUrl;
       if (_photoPath != null) {
-        final file = File(_photoPath!);
-        final bytes = await file.readAsBytes();
+        final bytes = await readPhotoBytes(_photoPath!);
         final dataUrl = await ref
             .read(mobileRepositoryProvider)
             .encodeFileToDataUrl(bytes, 'image/jpeg');
@@ -153,34 +152,41 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                 ? await ref
                     .read(mobileRepositoryProvider)
                     .encodeFileToDataUrl(
-                      await File(_photoPath!).readAsBytes(),
+                      await readPhotoBytes(_photoPath!),
                       'image/jpeg',
                     )
                 : null;
-        await ref
-            .read(offlineQueueProvider)
-            .enqueue(
-              path: '/api/guard/patrol',
-              method: 'POST',
-              body: <String, dynamic>{
-                'type': type,
-                'siteId': activeDuty.siteId,
-                // Required by the sync processor to re-upload a queued photo.
-                'employeeDocId':
-                    status.employeeDocId.isNotEmpty
-                        ? status.employeeDocId
-                        : status.employeeId,
-                if (activeDuty.dutyPointId != null)
-                  'dutyPointId': activeDuty.dutyPointId,
-                if (activeDuty.shiftCode != null)
-                  'shiftCode': activeDuty.shiftCode,
-                if (patrolPoint != null) 'patrolPointId': patrolPoint.id,
-                if (queuedPhoto != null) 'photoDataUrl': queuedPhoto,
-                if (_notesController.text.trim().isNotEmpty)
-                  'notes': _notesController.text.trim(),
-                'activityAt': DateTime.now().toUtc().toIso8601String(),
-              },
-            );
+        try {
+          await ref
+              .read(offlineQueueProvider)
+              .enqueue(
+                path: '/api/guard/patrol',
+                method: 'POST',
+                body: <String, dynamic>{
+                  'type': type,
+                  'siteId': activeDuty.siteId,
+                  // Required by the sync processor to re-upload a queued photo.
+                  'employeeDocId':
+                      status.employeeDocId.isNotEmpty
+                          ? status.employeeDocId
+                          : status.employeeId,
+                  if (activeDuty.dutyPointId != null)
+                    'dutyPointId': activeDuty.dutyPointId,
+                  if (activeDuty.shiftCode != null)
+                    'shiftCode': activeDuty.shiftCode,
+                  if (patrolPoint != null) 'patrolPointId': patrolPoint.id,
+                  if (queuedPhoto != null) 'photoDataUrl': queuedPhoto,
+                  if (_notesController.text.trim().isNotEmpty)
+                    'notes': _notesController.text.trim(),
+                  'activityAt': DateTime.now().toUtc().toIso8601String(),
+                },
+              );
+        } on OfflineQueueError catch (queueError) {
+          if (mounted) {
+            setState(() => _error = queueError.message);
+          }
+          return;
+        }
         setState(() => _error = 'Offline: Patrol activity queued for sync.');
         ref.invalidate(guardPatrolStatusProvider);
       } else {
@@ -449,8 +455,8 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                       const SizedBox(height: AppSpacing.sm),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(AppRadius.md),
-                        child: Image.file(
-                          File(_photoPath!),
+                        child: photoImage(
+                          _photoPath!,
                           height: 140,
                           width: double.infinity,
                           fit: BoxFit.cover,
@@ -593,8 +599,8 @@ class _GuardPatrolScreenState extends ConsumerState<GuardPatrolScreen> {
                       const SizedBox(height: AppSpacing.sm),
                       ClipRRect(
                         borderRadius: BorderRadius.circular(AppRadius.md),
-                        child: Image.file(
-                          File(_photoPath!),
+                        child: photoImage(
+                          _photoPath!,
                           height: 180,
                           width: double.infinity,
                           fit: BoxFit.cover,

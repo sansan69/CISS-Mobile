@@ -491,14 +491,14 @@ void main() {
       await tester.pump();
       await tester.tap(find.text('Create PIN'));
       await tester.pump();
-      expect(find.text('Enter a 4 to 6 digit PIN.'), findsOneWidget);
+      expect(find.text('Enter a 6-digit PIN.'), findsOneWidget);
       expect(setupCallCount, 0);
 
       await tester.enterText(find.byType(TextField).at(3), '12a4');
       await tester.enterText(find.byType(TextField).at(4), '12a4');
       await tester.tap(find.text('Create PIN'));
       await tester.pump();
-      expect(find.text('Enter a 4 to 6 digit PIN.'), findsOneWidget);
+      expect(find.text('Enter a 6-digit PIN.'), findsOneWidget);
     },
   );
 
@@ -527,8 +527,8 @@ void main() {
     expect(find.text('Select your date of birth.'), findsOneWidget);
 
     await selectGuardDateOfBirth(tester);
-    await tester.enterText(find.byType(TextField).at(3), '1234');
-    await tester.enterText(find.byType(TextField).at(4), '5678');
+    await tester.enterText(find.byType(TextField).at(3), '246810');
+    await tester.enterText(find.byType(TextField).at(4), '135790');
     await tester.drag(find.byType(ListView), const Offset(0, -400));
     await tester.pump();
     await tester.tap(find.text('Create PIN'));
@@ -595,8 +595,8 @@ void main() {
     );
     await tester.pump();
     await selectGuardDateOfBirth(tester);
-    await tester.enterText(find.byType(TextField).at(3), '1234');
-    await tester.enterText(find.byType(TextField).at(4), '1234');
+    await tester.enterText(find.byType(TextField).at(3), '246810');
+    await tester.enterText(find.byType(TextField).at(4), '246810');
     await tester.drag(find.byType(ListView), const Offset(0, -400));
     await tester.pump();
     await tester.tap(find.text('Create PIN'));

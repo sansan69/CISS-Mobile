@@ -1,302 +1,251 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
-import '../../../../../core/models/payslip_models.dart';
+import '../../../../../core/haptics.dart';
+import '../../../../../core/media/browser_download.dart';
+import '../../../../../core/models/payslip_document.dart';
+import '../../../../../core/network/ciss_error.dart';
 import '../../../../../core/network/providers.dart';
-import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/status_chip.dart';
 import '../widgets/guard_portal_widgets.dart';
 
-final FutureProvider<List<PayslipSummaryModel>> guardPayslipsProvider =
-    FutureProvider<List<PayslipSummaryModel>>((Ref ref) {
+/// Published salary slips for the signed-in guard.
+///
+/// Account-scoped: registered in `accountScopedProviders`, so sign-out and an
+/// A -> B account change drop the cached list instead of showing the previous
+/// guard's documents.
+final FutureProvider<List<PayslipDocumentModel>> guardPayslipsProvider =
+    FutureProvider<List<PayslipDocumentModel>>((Ref ref) {
       return ref.read(mobileRepositoryProvider).fetchPayslips();
     });
 
-class GuardPayslipsScreen extends ConsumerWidget {
+/// Writes the downloaded PDF into the app's temporary directory.
+typedef PayslipFileWriter =
+    Future<File> Function(PayslipDocumentModel payslip, Uint8List bytes);
+
+/// Hands a saved PDF to an external viewer. `false` means no app handled it.
+typedef PayslipFileOpener = Future<bool> Function(File file);
+
+/// Last-resort delivery through the platform share sheet.
+typedef PayslipFileSharer =
+    Future<void> Function(File file, PayslipDocumentModel payslip);
+
+/// Platform seams for slip delivery. Overridable in tests so the screen never
+/// touches a real plugin, and a stalled plugin channel cannot pin the spinner
+/// forever (each step is awaited with a timeout).
+final Provider<PayslipFileWriter> payslipFileWriterProvider =
+    Provider<PayslipFileWriter>((Ref ref) {
+      return (PayslipDocumentModel payslip, Uint8List bytes) async {
+        final directory = await getTemporaryDirectory();
+        final file = File('${directory.path}/${payslip.safeFileName}');
+        await file.writeAsBytes(bytes, flush: true);
+        return file;
+      };
+    });
+
+final Provider<PayslipFileOpener> payslipFileOpenerProvider =
+    Provider<PayslipFileOpener>((Ref ref) {
+      return (File file) async {
+        try {
+          return await launchUrl(
+            Uri.file(file.path),
+            mode: LaunchMode.externalApplication,
+          );
+        } catch (_) {
+          return false;
+        }
+      };
+    });
+
+final Provider<PayslipFileSharer> payslipFileSharerProvider =
+    Provider<PayslipFileSharer>((Ref ref) {
+      return (File file, PayslipDocumentModel payslip) async {
+        await Share.shareXFiles(
+          <XFile>[
+            XFile(
+              file.path,
+              mimeType: 'application/pdf',
+              name: payslip.safeFileName,
+            ),
+          ],
+          subject: 'Salary slip ${payslip.title}',
+        );
+      };
+    });
+
+class GuardPayslipsScreen extends ConsumerStatefulWidget {
   const GuardPayslipsScreen({super.key});
 
-  Future<void> _handlePdfAction({
-    required BuildContext context,
-    required WidgetRef ref,
-    required PayslipSummaryModel payslip,
-    bool forceShare = false,
-  }) async {
-    try {
-      final bytes = await ref
-          .read(mobileRepositoryProvider)
-          .downloadPayslipPdf(payslip.id);
-      if (bytes.isEmpty) {
-        throw Exception('Empty payslip response');
-      }
-      final dir = await getTemporaryDirectory();
-      final sanitizedPeriod = payslip.periodLabel.replaceAll(
-        RegExp(r'[^a-zA-Z0-9_-]'),
-        '_',
-      );
-      final file = File('${dir.path}/payslip-$sanitizedPeriod.pdf');
-      await file.writeAsBytes(bytes, flush: true);
+  @override
+  ConsumerState<GuardPayslipsScreen> createState() =>
+      _GuardPayslipsScreenState();
+}
 
-      if (forceShare) {
-        await Share.shareXFiles(
-          [
-            XFile(
-              file.path,
-              mimeType: 'application/pdf',
-              name: 'payslip-$sanitizedPeriod.pdf',
-            ),
-          ],
-          text: 'CISS Payslip - ${payslip.periodLabel}',
-        );
-        return;
-      }
-
-      final launchUri = Uri.file(file.path);
-      bool launched = false;
-      try {
-        launched = await launchUrl(
-          launchUri,
-          mode: LaunchMode.externalApplication,
-        );
-      } catch (_) {
-        launched = false;
-      }
-
-      if (!launched) {
-        // Graceful fallback to share sheet if no PDF viewer handles the intent
-        await Share.shareXFiles(
-          [
-            XFile(
-              file.path,
-              mimeType: 'application/pdf',
-              name: 'payslip-$sanitizedPeriod.pdf',
-            ),
-          ],
-          text: 'CISS Payslip - ${payslip.periodLabel}',
-        );
-      }
-    } catch (error) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open payslip: $error')),
-      );
-    }
-  }
-
-  void _showDetailSheet(
-    BuildContext context,
-    WidgetRef ref,
-    PayslipSummaryModel payslip,
-  ) {
-    final tokens = CissThemeTokens.of(context);
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: tokens.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder:
-          (sheetCtx) => SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: tokens.borderStrong,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            payslip.periodLabel,
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              color: tokens.ink,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Monthly Salary Statement',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: tokens.inkMuted,
-                            ),
-                          ),
-                        ],
-                      ),
-                      StatusChip(
-                        label: 'Verified',
-                        tone: StatusChipTone.success,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  ModernCard(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Net Payable',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: tokens.inkMuted,
-                          ),
-                        ),
-                        Text(
-                          payslip.netPayLabel,
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                            color: tokens.success,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            Navigator.of(sheetCtx).pop();
-                            _handlePdfAction(
-                              context: context,
-                              ref: ref,
-                              payslip: payslip,
-                              forceShare: true,
-                            );
-                          },
-                          icon: const Icon(Icons.share_rounded, size: 18),
-                          label: const Text('Share PDF'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: () {
-                            Navigator.of(sheetCtx).pop();
-                            _handlePdfAction(
-                              context: context,
-                              ref: ref,
-                              payslip: payslip,
-                              forceShare: false,
-                            );
-                          },
-                          icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                          label: const Text('Open PDF'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-    );
-  }
+class _GuardPayslipsScreenState extends ConsumerState<GuardPayslipsScreen> {
+  /// Id of the slip currently downloading, so only that row shows progress.
+  String? _busyId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final tokens = CissThemeTokens.of(context);
     final payslipsAsync = ref.watch(guardPayslipsProvider);
+
     return payslipsAsync.when(
-      loading: () => const GuardLoadingScaffold(label: 'Loading payslips...'),
+      loading:
+          () => const GuardLoadingScaffold(label: 'Loading salary slips...'),
       error:
           (Object error, StackTrace stackTrace) => GuardErrorScaffold(
-            title: 'Could not load payslips',
+            title: 'Could not load salary slips',
             error: error,
             onRetry: () => ref.invalidate(guardPayslipsProvider),
           ),
-      data: (payslips) {
+      data: (List<PayslipDocumentModel> payslips) {
         return ScreenScaffold(
-          title: 'Payslips',
-          subtitle: 'Monthly payroll slips',
+          title: 'Salary Slips',
+          subtitle: 'PDF payslips published by your employer',
           onRefresh: () async => ref.invalidate(guardPayslipsProvider),
           actions: <Widget>[
             IconButton(
+              tooltip: 'Refresh',
               onPressed: () => ref.invalidate(guardPayslipsProvider),
               icon: const Icon(Icons.refresh_rounded),
             ),
           ],
           children: <Widget>[
             GuardHeroPanel(
-              eyebrow: 'Payslips',
-              title:
-                  '${payslips.length} payslip${payslips.length == 1 ? '' : 's'}',
+              eyebrow: 'Salary',
+              title: '${payslips.length} slip${payslips.length == 1 ? '' : 's'}',
               subtitle:
                   payslips.isEmpty
-                      ? 'Published monthly payslips will appear here.'
-                      : 'Tap any period to view details or download PDF.',
-              icon: Icons.account_balance_wallet_rounded,
-              accentColor: tokens.warning,
+                      ? 'Your payslips will appear here once payroll publishes them.'
+                      : 'Tap a slip to download and open the PDF.',
+              icon: Icons.receipt_long_rounded,
+              accentColor: tokens.primary,
             ),
-            const SizedBox(height: AppSpacing.lg),
-            GuardMetricStrip(
-              items: <GuardMetricItem>[
-                GuardMetricItem(
-                  label: 'Records',
-                  value: '${payslips.length}',
-                  icon: Icons.receipt_long_rounded,
-                  color: tokens.primary,
-                ),
-                GuardMetricItem(
-                  label: 'Format',
-                  value: 'PDF',
-                  icon: Icons.picture_as_pdf_rounded,
-                  color: tokens.danger,
-                ),
-                GuardMetricItem(
-                  label: 'Action',
-                  value: 'Open',
-                  icon: Icons.open_in_new_rounded,
-                  color: tokens.accent,
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
             if (payslips.isEmpty)
               const StateBlock(
                 icon: Icons.receipt_long_rounded,
-                title: 'No payslips published',
+                title: 'No salary slips yet',
                 message:
-                    'Monthly payslips will appear here after payroll is processed.',
+                    'Payslips uploaded by the office will show up here. '
+                    'Pull down to refresh.',
+              )
+            else
+              ...payslips.map(
+                (payslip) => _PayslipRow(
+                  payslip: payslip,
+                  busy: _busyId == payslip.id,
+                  onTap: () => _openPayslip(payslip),
+                ),
               ),
-            ...payslips.map(
-              (payslip) => GuardRecordCard(
-                title: payslip.periodLabel,
-                subtitle: payslip.netPayLabel,
-                icon: Icons.payments_rounded,
-                chip: const StatusChip(label: 'PDF', tone: StatusChipTone.info),
-                onTap: () => _showDetailSheet(context, ref, payslip),
-              ),
-            ),
           ],
         );
       },
+    );
+  }
+
+  /// Download -> temp file -> open. Falls back to the share sheet when no PDF
+  /// viewer handles the file, which is the normal path on some devices.
+  Future<void> _openPayslip(PayslipDocumentModel payslip) async {
+    if (_busyId != null) return;
+    setState(() => _busyId = payslip.id);
+    unawaited(Haptics.selection());
+    try {
+      final bytes = await ref
+          .read(mobileRepositoryProvider)
+          .downloadPayslipPdf(payslip.id)
+          .timeout(const Duration(seconds: 60));
+      if (bytes.isEmpty) {
+        throw Exception('The salary slip PDF was empty.');
+      }
+      if (kIsWeb) {
+        // Browsers have no temp directory: hand the bytes to the download
+        // manager instead of writing a file the viewer could open.
+        downloadBytes(
+          bytes,
+          fileName: payslip.safeFileName,
+          mimeType: 'application/pdf',
+        );
+        unawaited(Haptics.success());
+        return;
+      }
+      final file = await ref
+          .read(payslipFileWriterProvider)(payslip, bytes)
+          .timeout(const Duration(seconds: 15));
+      final opened = await ref.read(payslipFileOpenerProvider)(file);
+      if (!opened) {
+        await ref.read(payslipFileSharerProvider)(file, payslip);
+      }
+      unawaited(Haptics.success());
+    } catch (error) {
+      if (!mounted) return;
+      // CissError.parse maps 401/403/404 and transport failures to plain text
+      // and never echoes bytes, URLs or stack frames.
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(CissError.parse(error))));
+    } finally {
+      if (mounted) setState(() => _busyId = null);
+    }
+  }
+}
+
+class _PayslipRow extends StatelessWidget {
+  const _PayslipRow({
+    required this.payslip,
+    required this.onTap,
+    this.busy = false,
+  });
+
+  final PayslipDocumentModel payslip;
+  final VoidCallback onTap;
+
+  /// True while this slip is downloading. The row shows progress and ignores
+  /// taps until the download settles.
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    final createdAt = payslip.createdAt;
+    final size = payslip.sizeLabel;
+    final uploaded =
+        createdAt == null
+            ? null
+            : 'Uploaded ${DateFormat('d MMM yyyy').format(createdAt)}';
+    final subtitle =
+        <String>[
+          if (size.isNotEmpty) size,
+          if (uploaded != null) uploaded,
+        ].join(' • ');
+
+    return GuardRecordCard(
+      title: payslip.title,
+      subtitle: subtitle.isEmpty ? 'PDF salary slip' : subtitle,
+      icon: Icons.picture_as_pdf_rounded,
+      chip:
+          busy
+              ? null
+              : const StatusChip(label: 'PDF', tone: StatusChipTone.info),
+      trailing:
+          busy
+              ? const SizedBox(
+                height: 20,
+                width: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+              : null,
+      onTap: busy ? null : onTap,
     );
   }
 }

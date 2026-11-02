@@ -24,9 +24,7 @@ import '../features/guard/presentation/screens/guard_attendance_screen.dart';
 import '../features/guard/presentation/screens/guard_dashboard_screen.dart';
 import '../features/guard/presentation/screens/guard_evaluations_screen.dart';
 import '../features/guard/presentation/screens/guard_incidents_screen.dart';
-import '../features/guard/presentation/screens/guard_leave_screen.dart';
 import '../features/guard/presentation/screens/guard_patrol_screen.dart';
-import '../features/guard/presentation/screens/guard_payslips_screen.dart';
 import '../features/guard/presentation/screens/guard_profile_screen.dart';
 import '../features/guard/presentation/screens/guard_training_screen.dart';
 import 'mock_data.dart';
@@ -74,12 +72,10 @@ List<Override> _guardOverrides() => <Override>[
   guardProfileProvider.overrideWith((ref) async => mockGuardProfile),
   attendanceSitesProvider.overrideWith((ref) async => mockAttendanceSites),
   attendanceHistoryProvider.overrideWith((ref) async => mockAttendanceHistory),
-  guardPayslipsProvider.overrideWith((ref) async => mockPayslips),
   guardIncidentsProvider.overrideWith((ref) async => mockIncidents),
   guardEvaluationsProvider.overrideWith((ref) async => mockEvaluations),
   guardTrainingProvider.overrideWith((ref) async => mockTrainingAssignments),
   guardPatrolStatusProvider.overrideWith((ref) async => mockPatrolStatus),
-  guardLeaveProvider.overrideWith((ref) async => mockLeaveOverview),
   guardTabIndexProvider.overrideWith((ref) => 0),
 ];
 
@@ -153,14 +149,7 @@ class PreviewHarnessScreen extends StatelessWidget {
       GuardProfileScreen.new,
       _guardOverrides(),
     ),
-    _PreviewEntry('Guard', 'Leave', GuardLeaveScreen.new, _guardOverrides()),
     _PreviewEntry('Guard', 'Patrol', GuardPatrolScreen.new, _guardOverrides()),
-    _PreviewEntry(
-      'Guard',
-      'Payslips',
-      GuardPayslipsScreen.new,
-      _guardOverrides(),
-    ),
     _PreviewEntry(
       'Guard',
       'Incidents',

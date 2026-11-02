@@ -8,6 +8,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'app/app.dart';
+import 'core/cache/hive_read_cache_store.dart';
 import 'core/fcm/providers.dart';
 import 'core/auth/legacy_biometric_credential_cleanup.dart';
 import 'core/location/background_tracking_service.dart';
@@ -49,13 +50,41 @@ Future<void> main() async {
       .read(legacyBiometricCredentialCleanupProvider)
       .purgeLegacyCredentials();
   final queue = container.read(offlineQueueProvider);
-  final cipher = await queue.getEncryptionCipher();
+  HiveAesCipher? cipher;
+  try {
+    cipher = await queue.getEncryptionCipher();
+  } catch (error) {
+    // Fail closed: without the secure-storage key the queue must stay closed
+    // instead of being opened unencrypted. Enqueue then throws a typed error.
+    debugPrint(
+      'Offline queue disabled: encryption key unavailable '
+      '(${error.runtimeType})',
+    );
+  }
 
   await Hive.initFlutter();
-  await Hive.openBox<Map>(OfflineQueue.boxName, encryptionCipher: cipher);
-  await Hive.openBox<Map>(
-    DraftService.boxName,
-  ); // Non-encrypted for high-frequency drafts
+  if (cipher != null) {
+    try {
+      await Hive.openBox<Map>(OfflineQueue.boxName, encryptionCipher: cipher);
+    } catch (error) {
+      debugPrint(
+        'Offline queue unavailable (${error.runtimeType}); offline '
+        'submissions will fail closed',
+      );
+    }
+    await _openEncryptedReadCache(cipher);
+    try {
+      await DraftService.openEncrypted(cipher);
+    } catch (error) {
+      // Drafts are a convenience; never fall back to plaintext.
+      debugPrint(
+        'Draft storage unavailable (${error.runtimeType}); '
+        'drafts disabled for this run',
+      );
+    }
+  } else {
+    debugPrint('Secure storage unavailable; drafts disabled for this run');
+  }
   await container.read(appSettingsControllerProvider.notifier).init(cipher);
   // These new stores must never fail-closed: a corrupt or cipher-mismatched
   // box would otherwise throw before runApp and blank the screen. Each init is
@@ -81,9 +110,12 @@ Future<void> main() async {
       final savedRegion =
           await container.read(regionServiceProvider).getSavedRegion();
       if (savedRegion != null && savedRegion != 'KL') {
+        // Prefer the live HQ config; fall back to the persisted config for the
+        // same region so a non-Kerala user can cold-start offline. A missing,
+        // corrupt or mismatched config still fails closed below.
         final config = await container
             .read(regionServiceProvider)
-            .fetchRegionConfig(savedRegion);
+            .resolveRegionConfig(savedRegion);
         if (config == null) {
           throw StateError('Saved regional configuration is unavailable.');
         }
@@ -99,10 +131,12 @@ Future<void> main() async {
     // is not granted. Skip background service initialization here on Android — it
     // is initialized from permission_onboarding_screen.dart after the user grants
     // the permission. On subsequent launches (permission already granted) we init
-    // here normally. On iOS there is no such restriction.
+    // here normally. On iOS there is no such restriction. The web build has no
+    // background service at all, so its bootstrap must not attempt one.
     final bool canInitTracking =
-        defaultTargetPlatform != TargetPlatform.android ||
-        await Permission.notification.isGranted;
+        !kIsWeb &&
+        (defaultTargetPlatform != TargetPlatform.android ||
+            await Permission.notification.isGranted);
 
     if (canInitTracking) {
       await BackgroundTrackingService.initialize();
@@ -127,4 +161,46 @@ Future<void> main() async {
       child: const CissMobileApp(),
     ),
   );
+}
+
+/// Opens the disposable read cache with the offline queue's AES cipher.
+///
+/// Upgrading from a build that wrote the cache unencrypted leaves a box that
+/// cannot be read with the cipher; because cached payloads are disposable it is
+/// deleted and recreated encrypted. Every failure degrades to no persistent
+/// cache (the in-memory cache keeps working for the session).
+Future<void> _openEncryptedReadCache(HiveAesCipher cipher) async {
+  const boxName = HiveReadCacheStore.defaultBoxName;
+  try {
+    final box = await Hive.openBox<dynamic>(
+      boxName,
+      encryptionCipher: cipher,
+    );
+    // A legacy plaintext box can open but throw when its frames are read.
+    box.toMap();
+    return;
+  } catch (error) {
+    debugPrint(
+      'Read cache needs recreation (${error.runtimeType}); '
+      'cached payloads are disposable',
+    );
+  }
+  try {
+    if (Hive.isBoxOpen(boxName)) {
+      await Hive.box<dynamic>(boxName).close();
+    }
+  } catch (_) {
+    // Ignore: deleteBoxFromDisk below reports real failures.
+  }
+  try {
+    await Hive.deleteBoxFromDisk(boxName);
+  } catch (_) {
+    // A missing box is fine.
+  }
+  try {
+    final box = await Hive.openBox<dynamic>(boxName, encryptionCipher: cipher);
+    box.toMap();
+  } catch (error) {
+    debugPrint('Read cache disabled (${error.runtimeType})');
+  }
 }

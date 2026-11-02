@@ -10,6 +10,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:http/http.dart' as http;
 
 import '../../firebase_options.dart';
+import '../network/api_config.dart';
 
 class RegionInfo {
   const RegionInfo({
@@ -128,7 +129,10 @@ class RegionService
     implements RegionActivationService, RegionConfigurationService {
   static const String _savedRegionKey = 'ciss_selected_region';
   static const String _savedRegionConfigKey = 'ciss_selected_region_config';
-  static const String _baseUrl = 'https://cisskerala.site';
+
+  /// HQ control-plane base URL. On web this is the page origin, so the control
+  /// plane and the app share an origin and no CORS exception is required.
+  static String get _baseUrl => ApiConfig.baseUrl;
 
   final FlutterSecureStorage _secureStorage;
   String? _selectedRegionCode;
@@ -137,6 +141,12 @@ class RegionService
 
   static final RegionService instance = RegionService._();
   RegionService._() : _secureStorage = const FlutterSecureStorage();
+
+  /// Test seam: allows an in-memory secure store and a scripted config fetcher
+  /// (by overriding [fetchRegionConfig]).
+  @visibleForTesting
+  RegionService.test({FlutterSecureStorage? secureStorage})
+    : _secureStorage = secureStorage ?? const FlutterSecureStorage();
 
   /// Fetch the list of available regions from the HQ control plane.
   Future<List<RegionInfo>> fetchAvailableRegions() async {
@@ -208,6 +218,56 @@ class RegionService
     _selectedRegionCode = null;
     _activeRegionCode = null;
     _activeRegion = null;
+  }
+
+  /// Reads the full region configuration persisted by [saveRegionPreference].
+  ///
+  /// Returns `null` when nothing was saved, the payload is malformed, or it
+  /// does not contain a usable code + API URL. This is the offline cold-start
+  /// fallback for a selected non-Kerala region: without it, a guard cannot open
+  /// the app when `/api/public/region-config/:code` is unreachable.
+  Future<RegionInfo?> getSavedRegionConfig() async {
+    try {
+      final raw = await _secureStorage.read(key: _savedRegionConfigKey);
+      if (raw == null || raw.trim().isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final config = RegionInfo.fromJson(Map<String, dynamic>.from(decoded));
+      if (config.code.trim().isEmpty || config.apiUrl.trim().isEmpty) {
+        return null;
+      }
+      return config;
+    } catch (error) {
+      // Never log the payload: it embeds Firebase keys.
+      debugPrint(
+        'RegionService: saved region config unreadable '
+        '(${error.runtimeType})',
+      );
+      return null;
+    }
+  }
+
+  /// Region configuration to activate at startup for [regionCode].
+  ///
+  /// Prefers the live HQ response (so rotated Firebase keys are picked up) and
+  /// falls back to the persisted config only when the fetch failed *and* the
+  /// cached payload is for the same region. Anything else returns `null`, which
+  /// keeps the existing fail-closed startup behaviour.
+  Future<RegionInfo?> resolveRegionConfig(String regionCode) async {
+    final code = regionCode.trim();
+    if (code.isEmpty) return null;
+    final fetched = await fetchRegionConfig(code);
+    if (fetched != null &&
+        (fetched.code.trim().isEmpty || fetched.code.trim() == code)) {
+      return fetched;
+    }
+    final cached = await getSavedRegionConfig();
+    if (cached == null || cached.code.trim() != code) return null;
+    debugPrint(
+      'RegionService: using persisted region config for $code '
+      '(remote config unavailable)',
+    );
+    return cached;
   }
 
   /// Get the full region config including Firebase options from HQ.

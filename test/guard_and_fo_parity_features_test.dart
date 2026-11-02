@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ciss_mobile/app/theme/app_tokens.dart';
 import 'package:ciss_mobile/shared/widgets/time_counter_chip.dart';
 import 'package:ciss_mobile/shared/widgets/compliance_tag.dart';
-import 'package:ciss_mobile/core/models/leave_models.dart';
 import 'package:ciss_mobile/core/models/incident_models.dart';
 
 Widget createTestApp(Widget child) {
@@ -105,8 +104,6 @@ void main() {
         "'/api/guard/dashboard'",
         "'/api/guard/training'",
         "'/api/guard/evaluations'",
-        "'/api/guard/payslips'",
-        "'/api/guard/leave'",
         "'/api/guard/incidents'",
         "'/api/guard/leaderboard'",
         "'/api/field-officer/dashboard'",
@@ -125,31 +122,6 @@ void main() {
   });
 
   group('Guard & FO Parity Models', () {
-    test('LeaveRequestModel parses attachmentUrl and documentUrl fallback', () {
-      final modelWithAttachment = LeaveRequestModel.fromJson({
-        'id': 'leave-1',
-        'type': 'sick',
-        'fromDate': '2026-09-01',
-        'toDate': '2026-09-02',
-        'days': 2,
-        'reason': 'High fever',
-        'status': 'pending',
-        'attachmentUrl': 'https://ciss.app/uploads/med-cert.jpg',
-      });
-      expect(modelWithAttachment.attachmentUrl, 'https://ciss.app/uploads/med-cert.jpg');
-
-      final modelWithDocFallback = LeaveRequestModel.fromJson({
-        'id': 'leave-2',
-        'type': 'casual',
-        'fromDate': '2026-09-05',
-        'toDate': '2026-09-05',
-        'days': 1,
-        'reason': 'Personal work',
-        'status': 'approved',
-        'documentUrl': 'https://ciss.app/uploads/doc.pdf',
-      });
-      expect(modelWithDocFallback.attachmentUrl, 'https://ciss.app/uploads/doc.pdf');
-    });
 
     test('IncidentModel parses district, locationText, and photo arrays', () {
       final incident = IncidentModel.fromJson({

@@ -5,7 +5,6 @@ import 'module_flags.dart';
 const Map<String, String> kRouteModules = <String, String>{
   '/qr-attendance': 'qrAttendance',
   '/attendance': 'attendance',
-  '/guard/leave': 'leave',
   '/guard/patrol': 'patrol',
   '/guard/documents': 'documents',
   '/guard/payslips': 'payslips',

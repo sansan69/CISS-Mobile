@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -8,11 +7,17 @@ import '../../../core/auth/biometric_service.dart';
 import '../../../core/auth/firebase_auth_state_source.dart';
 import '../../../core/auth/legacy_biometric_credential_cleanup.dart';
 import '../../../core/auth/saved_accounts_service.dart';
+import '../../../core/auth/session_snapshot_store.dart';
+import '../../../core/cache/account_scoped_providers.dart';
 import '../../../core/fcm/providers.dart';
 import '../../../core/location/background_tracking_service.dart';
 import '../../../core/models/app_role.dart';
 import '../../../core/models/auth_session.dart';
+import '../../../core/network/authoritative_session_error.dart';
 import '../../../core/network/providers.dart';
+import '../../../core/offline/draft_service.dart';
+import '../../../core/privacy/local_data_purger.dart';
+import '../../../core/sync/providers.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Session notifier — owns the logged-in session state.
@@ -32,6 +37,27 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
   bool _identityVerificationInProgress = false;
   bool _logoutInProgress = false;
   int _authEventGeneration = 0;
+
+  /// Last uid whose account-scoped local stores were adopted. Used to purge
+  /// local data when the active identity changes (A -> B without a sign-out).
+  String? _localDataOwnerUid;
+
+  /// Identity the cached account-scoped screen providers belong to. Tracked
+  /// separately from [_localDataOwnerUid] because that field trails the
+  /// asynchronous store adoption, while the provider cache must be dropped
+  /// synchronously — before the next account's session can publish.
+  String? _accountScopedUid;
+  bool _accountScopedUidKnown = false;
+
+  /// Serialises owner adoption so overlapping auth events cannot interleave
+  /// store updates (e.g. a sign-out purge racing a sign-in adoption).
+  Future<void> _ownerApplyChain = Future<void>.value();
+
+  /// Incremented on every requested identity transition. Cleanup work queued
+  /// for an older transition is skipped if a newer identity has already been
+  /// requested, so a late purge can never erase the next account's work.
+  int _identityEpoch = 0;
+  String? _requestedOwnerUid;
 
   @override
   Future<AuthSession?> build() async {
@@ -53,6 +79,7 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
     _authSubscription = authState.idTokenUidChanges.listen(_onAuthUidChanged);
 
     final uid = authState.currentUid;
+    _syncLocalDataOwner(uid);
     if (uid == null) {
       _cachedSession = null;
       return null;
@@ -70,6 +97,10 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
         _logoutInProgress) {
       return;
     }
+    // Adopt the account's local-data namespace as soon as the Firebase identity
+    // is known, before the backend round-trip, so a foreign queue entry can
+    // never be replayed under this account.
+    _syncLocalDataOwner(uid);
     unawaited(_resolveAndPublish(uid));
   }
 
@@ -81,6 +112,7 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
     final generation = ++_authEventGeneration;
     if (uid == null) {
       _cachedSession = null;
+      _syncLocalDataOwner(null);
       if (publishToState && !_disposed) state = const AsyncData(null);
       return null;
     }
@@ -106,14 +138,70 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
         return null;
       }
       _cachedSession = session;
+      _syncLocalDataOwner(session?.uid);
       if (publishToState) state = AsyncData(session);
+      // Persist the last authoritative resolution so a later cold start with
+      // no network can restore a bounded, uid-bound offline session. Fire and
+      // forget: a secure-storage hiccup must never delay or fail the publish.
+      unawaited(_saveSessionSnapshot(session));
       return session;
-    } catch (_) {
+    } catch (error) {
       if (_disposed || generation != _authEventGeneration) return null;
       if (ref.read(firebaseAuthStateSourceProvider).currentUid == uid) {
+        // Only a true transport failure (no HTTP response) earns the offline
+        // grace window. 401/403, malformed payloads and identity mismatches
+        // stay fail-closed.
+        if (error is AuthoritativeSessionTransportError) {
+          final restored = await _restoreOfflineSession(uid);
+          if (restored != null) {
+            if (_disposed || generation != _authEventGeneration) return null;
+            if (ref.read(firebaseAuthStateSourceProvider).currentUid != uid) {
+              return null;
+            }
+            _cachedSession = restored;
+            _syncLocalDataOwner(restored.uid);
+            if (publishToState && !_disposed) state = AsyncData(restored);
+            return restored;
+          }
+        }
         await _failClosed(uid);
       }
       return null;
+    }
+  }
+
+  Future<void> _saveSessionSnapshot(AuthSession? session) async {
+    if (session == null || _disposed) return;
+    try {
+      await ref.read(sessionSnapshotStoreProvider).save(session);
+    } catch (_) {
+      // The snapshot is a grace feature; it must never block or fail a
+      // successful authoritative resolution.
+    }
+  }
+
+  /// Restores the last authoritative session for [uid] marked `offline`.
+  ///
+  /// `null` means no usable snapshot exists (missing, expired, corrupt or
+  /// bound to another account) and the caller must fail closed.
+  Future<AuthSession?> _restoreOfflineSession(String uid) async {
+    try {
+      final snapshot = await ref
+          .read(sessionSnapshotStoreProvider)
+          .load(uid);
+      if (snapshot == null || snapshot.session.uid != uid) return null;
+      return snapshot.session.copyWith(offline: true);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _clearSessionSnapshot() async {
+    try {
+      await ref.read(sessionSnapshotStoreProvider).clear();
+    } catch (_) {
+      // Best-effort: never let cleanup failure keep a snapshot alive in the
+      // normal path; the store itself also deletes corrupt/expired entries.
     }
   }
 
@@ -125,11 +213,19 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
     }
     _cachedSession = null;
     state = const AsyncData(null);
+    // An authoritative denial invalidates the offline grace snapshot too.
+    unawaited(_clearSessionSnapshot());
+    // Stop replay of the previous account's local data immediately, then purge.
+    _syncLocalDataOwner(null);
     try {
       await ref.read(authRepositoryProvider).signOut();
     } catch (_) {
       // UI/cache state remains cleared even if Firebase refuses sign-out.
     }
+    // Fail-closed exit: the same best-effort cleanup as a normal sign-out, so
+    // notifications/tracking cannot keep running and local PII does not outlive
+    // an unauthorized session.
+    unawaited(enqueueIdentityCleanup(_runFailClosedCleanup));
   }
 
   /// Prevent Firebase events raised during a controller-owned sign-in from
@@ -158,7 +254,11 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
     _controllerSignInInProgress = false;
     _logoutInProgress = false;
     _cachedSession = session;
+    _syncLocalDataOwner(session.uid);
     state = AsyncData(session);
+    // A controller-owned sign-in resolved a real backend session; keep it as
+    // the offline grace snapshot so a later cold start in a dead zone works.
+    unawaited(_saveSessionSnapshot(session));
     return true;
   }
 
@@ -210,6 +310,7 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
   void clearSession() {
     if (_disposed) return;
     _cachedSession = null;
+    _syncLocalDataOwner(null);
     state = const AsyncData(null);
   }
 
@@ -224,12 +325,144 @@ class AuthSessionNotifier extends AsyncNotifier<AuthSession?> {
     _authEventGeneration += 1;
     clearSession();
   }
+
+  /// Adopts [uid] as the owner of the account-scoped local stores (offline
+  /// queue, drafts, tracking spool) and of the account-scoped provider cache.
+  /// A->B transitions purge first so no account's queued/drafted data can be
+  /// adopted by the next.
+  void _syncLocalDataOwner(String? uid) {
+    if (_disposed) return;
+    if (_requestedOwnerUid != uid) {
+      _requestedOwnerUid = uid;
+      _identityEpoch += 1;
+    }
+    _invalidateAccountScopedProvidersFor(uid);
+    final previous = _localDataOwnerUid;
+    if (previous != null && uid != previous) {
+      // Close the replay window synchronously: a connectivity-triggered flush
+      // must not be able to submit the previous account's data while the
+      // asynchronous purge below is still running.
+      try {
+        ref.read(offlineQueueProvider).detachOwner();
+      } catch (_) {
+        // Store unavailable: its reads already fail closed.
+      }
+      try {
+        ref.read(trackingBufferProvider).detachOwner();
+      } catch (_) {
+        // Buffer unavailable: its reads already fail closed.
+      }
+    }
+    _ownerApplyChain = _ownerApplyChain
+        .then((_) => _applyLocalDataOwner(uid))
+        .catchError((Object _) {});
+  }
+
+  /// Runs cleanup on the same serial chain as owner adoption.
+  ///
+  /// The task is skipped when a newer identity transition was requested after
+  /// it was queued: the next account's adoption purges the previous account's
+  /// data itself, and the stale purge must not run after that adoption.
+  ///
+  /// Public so [AuthController] can queue sign-out cleanup on the same barrier.
+  Future<void> enqueueIdentityCleanup(Future<void> Function() task) {
+    final epoch = _identityEpoch;
+    final next = _ownerApplyChain
+        .then((_) async {
+          if (_disposed || epoch != _identityEpoch) return;
+          await task();
+        })
+        .catchError((Object _) {});
+    _ownerApplyChain = next;
+    return next;
+  }
+
+  /// Drops every cached account-scoped provider value when the identity
+  /// changes (sign-out, and A -> B without a sign-out).
+  ///
+  /// Runs synchronously from [_syncLocalDataOwner], i.e. before the new
+  /// session is published and before any purge awaits, so the incoming
+  /// account's first frame can never be served the previous account's cached
+  /// dashboard/profile future (NEW-02). The first observation of an identity
+  /// is skipped: nothing can be cached for it yet.
+  void _invalidateAccountScopedProvidersFor(String? uid) {
+    final known = _accountScopedUidKnown;
+    final previous = _accountScopedUid;
+    if (known && previous == uid) return;
+    _accountScopedUidKnown = true;
+    _accountScopedUid = uid;
+    if (!known) return;
+    invalidateAccountScopedProviders(ref);
+  }
+
+  Future<void> _applyLocalDataOwner(String? uid) async {
+    if (_disposed) return;
+    final previous = _localDataOwnerUid;
+    if (previous == uid) return;
+    if (previous != null && uid != null && uid != previous) {
+      await _purgeLocalAccountData();
+      if (_disposed) return;
+    }
+    _localDataOwnerUid = uid;
+    try {
+      await ref.read(offlineQueueProvider).setOwner(uid);
+    } catch (_) {
+      // Offline storage unavailable: enqueue fails closed on its own.
+    }
+    try {
+      await ref.read(draftServiceProvider).setOwner(uid);
+    } catch (_) {
+      // Drafts degrade to non-persistent when the box is unavailable.
+    }
+    try {
+      await ref.read(trackingBufferProvider).setOwner(uid);
+    } catch (_) {
+      // Spool owner binding is re-applied on the next session event.
+    }
+  }
+
+  Future<void> _purgeLocalAccountData() async {
+    if (_disposed) return;
+    try {
+      await ref.read(localDataPurgerProvider).purge();
+    } catch (_) {
+      // Purge is best-effort; each step reports/logs its own failure.
+    }
+  }
+
+  Future<void> _runFailClosedCleanup() async {
+    await _runBestEffortCleanup(authNotificationCleanupProvider);
+    await _runBestEffortCleanup(authTrackingCleanupProvider);
+    await _purgeLocalAccountData();
+  }
+
+  Future<void> _runBestEffortCleanup(
+    ProviderListenable<Future<void> Function()> provider,
+  ) async {
+    if (_disposed) return;
+    try {
+      await ref.read(provider)().timeout(const Duration(seconds: 3));
+    } catch (_) {
+      // Cleanup must neither delay the fail-closed exit nor revive auth.
+    }
+  }
 }
 
 final authSessionProvider =
     AsyncNotifierProvider<AuthSessionNotifier, AuthSession?>(
       AuthSessionNotifier.new,
     );
+
+/// `true` while the exposed session was restored from the offline snapshot
+/// (transport failure, not re-verified). Lightweight and never throws so the
+/// sync badge can show the offline indicator on any screen.
+final Provider<bool> sessionOfflineProvider = Provider<bool>((Ref ref) {
+  try {
+    return ref.watch(authSessionProvider).valueOrNull?.offline ?? false;
+  } catch (_) {
+    return false;
+  }
+});
 
 typedef FieldOfficerPasswordResetSender = Future<void> Function(String email);
 
@@ -281,6 +514,13 @@ final Provider<Future<void> Function()> authNotificationCleanupProvider =
 final Provider<Future<void> Function()> authTrackingCleanupProvider =
     Provider<Future<void> Function()>(
       (Ref ref) => () => BackgroundTrackingService.stop(),
+    );
+
+/// Clears account-scoped local data (read cache, queue, drafts, tracking spool,
+/// FCM token and temporary account data) as part of sign-out.
+final Provider<Future<void> Function()> authLocalDataPurgeProvider =
+    Provider<Future<void> Function()>(
+      (Ref ref) => () => ref.read(localDataPurgerProvider).purge(),
     );
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -483,11 +723,26 @@ class AuthController {
     // out immediately. The notifier suppresses token events so a pending
     // resolver cannot republish this account during logout.
     _ref.read(authSessionProvider.notifier).beginSignOut();
+    // The offline grace snapshot must not outlive an explicit sign-out.
+    unawaited(_clearSnapshot());
     try {
       await _ref.read(authRepositoryProvider).signOut();
     } finally {
-      unawaited(_runBestEffortCleanup(authNotificationCleanupProvider));
-      unawaited(_runBestEffortCleanup(authTrackingCleanupProvider));
+      unawaited(
+        _ref.read(authSessionProvider.notifier).enqueueIdentityCleanup(() async {
+          await _runBestEffortCleanup(authNotificationCleanupProvider);
+          await _runBestEffortCleanup(authTrackingCleanupProvider);
+          await _runBestEffortCleanup(authLocalDataPurgeProvider);
+        }),
+      );
+    }
+  }
+
+  Future<void> _clearSnapshot() async {
+    try {
+      await _ref.read(sessionSnapshotStoreProvider).clear();
+    } catch (_) {
+      // Best-effort: local-data purge also clears it.
     }
   }
 

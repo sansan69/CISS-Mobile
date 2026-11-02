@@ -1,10 +1,8 @@
 import '../core/models/attendance_models.dart';
 import '../core/models/guard_profile.dart';
 import '../core/models/incident_models.dart';
-import '../core/models/leave_models.dart';
 import '../core/models/mobile_dashboard_models.dart';
 import '../core/models/patrol_models.dart';
-import '../core/models/payslip_models.dart';
 import '../core/models/report_models.dart';
 import '../core/models/training_models.dart';
 
@@ -23,7 +21,6 @@ final GuardDashboardSnapshot mockGuardDashboard = GuardDashboardSnapshot(
   presentDays: 18,
   absentDays: 2,
   workingDays: 22,
-  leaveBalance: const LeaveBalanceModel(entitled: 12, taken: 3, balance: 9),
   latestEvalScore: 86,
   latestEvalPeriod: 'June 2026',
   nextShiftLabel: 'On Duty',
@@ -181,11 +178,6 @@ final List<AttendanceRecordModel> mockAttendanceHistory =
       ),
     ];
 
-final List<PayslipSummaryModel> mockPayslips = const <PayslipSummaryModel>[
-  PayslipSummaryModel(id: 'p_001', periodLabel: 'June 2026', netPayLabel: '₹18,240'),
-  PayslipSummaryModel(id: 'p_002', periodLabel: 'May 2026', netPayLabel: '₹18,240'),
-  PayslipSummaryModel(id: 'p_003', periodLabel: 'April 2026', netPayLabel: '₹17,890'),
-];
 
 final List<IncidentModel> mockIncidents = <IncidentModel>[
   IncidentModel(
@@ -249,34 +241,6 @@ final List<TrainingAssignmentModel> mockTrainingAssignments =
         contentFileName: 'customer-interaction.mp4',
       ),
     ];
-
-final Map<String, dynamic> mockLeaveOverview = <String, dynamic>{
-  'balance': <String, dynamic>{
-    'casual': <String, dynamic>{'entitled': 12, 'taken': 3, 'balance': 9},
-    'sick': <String, dynamic>{'entitled': 10, 'taken': 1, 'balance': 9},
-    'earned': <String, dynamic>{'entitled': 15, 'taken': 4, 'balance': 11},
-  },
-  'requests': <Map<String, dynamic>>[
-    <String, dynamic>{
-      'id': 'lv_001',
-      'type': 'casual',
-      'fromDate': '10 Aug 2026',
-      'toDate': '11 Aug 2026',
-      'days': 2,
-      'reason': 'Family function at home.',
-      'status': 'Pending',
-    },
-    <String, dynamic>{
-      'id': 'lv_002',
-      'type': 'sick',
-      'fromDate': '01 Jun 2026',
-      'toDate': '01 Jun 2026',
-      'days': 1,
-      'reason': 'Fever',
-      'status': 'Approved',
-    },
-  ],
-};
 
 final GuardPatrolStatusModel mockPatrolStatus = GuardPatrolStatusModel(
   enabled: true,

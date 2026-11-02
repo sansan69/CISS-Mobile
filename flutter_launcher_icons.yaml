@@ -1,5 +1,10 @@
 flutter_launcher_icons:
   android: true
+  web:
+    generate: true
+    image_path: "assets/ciss-logo.png"
+    background_color: "#014c85"
+    theme_color: "#014c85"
   image_path: "assets/ciss-logo.png"
   adaptive_icon_background: "#014c85"
   adaptive_icon_foreground: "assets/ciss-logo-adaptive.png"

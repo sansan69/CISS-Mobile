@@ -10,10 +10,6 @@ import '../application/auth_controller.dart';
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/models/app_role.dart';
 import '../../../core/models/auth_session.dart';
-import '../../../core/auth/saved_accounts_service.dart';
-import '../../../core/auth/biometric_service.dart';
-import '../../../core/auth/app_lock_lifecycle.dart';
-import '../../../core/auth/app_lock_preferences.dart';
 import '../../../core/brand.dart';
 import '../../../core/location/background_tracking_service.dart';
 import '../../../core/network/providers.dart';
@@ -23,6 +19,14 @@ import '../../field_officer/presentation/field_officer_shell.dart';
 import '../../guard/presentation/guard_shell.dart';
 import 'login_hub_screen.dart';
 
+/// Session → workspace routing for the `/` route.
+///
+/// The biometric app lock deliberately lives outside this widget: it is an
+/// app-level overlay rendered above the navigator (`AppLockOverlay` in
+/// `lib/core/auth/app_lock_overlay.dart`), because a lock rendered from inside
+/// one route is covered by every pushed route. This widget only decides which
+/// authenticated surface to show, plus the one-time permission onboarding and
+/// region redirects.
 class AuthGateScreen extends ConsumerStatefulWidget {
   const AuthGateScreen({super.key});
 
@@ -30,172 +34,16 @@ class AuthGateScreen extends ConsumerStatefulWidget {
   ConsumerState<AuthGateScreen> createState() => _AuthGateScreenState();
 }
 
-class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
-    with WidgetsBindingObserver {
-  bool _authenticated = false;
-  bool _isAuthenticating = false;
+class _AuthGateScreenState extends ConsumerState<AuthGateScreen> {
   bool _permissionsChecked = false;
-  bool _bioTriggered = false;
   bool _regionChecked = false;
-  String? _bioMessage;
   String? _trackingReconciledUid;
   AuthSession? _lastSession;
-  String? _biometricSessionKey;
-  bool? _requiresBiometricAppLock;
-  final AppLockLifecycle _appLockLifecycle = AppLockLifecycle();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    _appLockLifecycle.didChangeAppLifecycleState(
-      state,
-      appLockEnabled: _requiresBiometricAppLock == true,
-      biometricPromptActive: _isAuthenticating,
-    );
-    if (!_appLockLifecycle.consumeLockOnResume(
-      state: state,
-      appLockEnabled: _requiresBiometricAppLock == true,
-      biometricPromptActive: _isAuthenticating,
-    )) {
-      return;
-    }
-    setState(() {
-      _authenticated = false;
-      _bioTriggered = false;
-      _bioMessage = null;
-    });
-  }
-
-  Future<void> _checkBiometrics() async {
-    if (_requiresBiometricAppLock != true ||
-        _authenticated ||
-        _isAuthenticating) {
-      return;
-    }
-    if (!mounted) return;
-
-    setState(() {
-      _isAuthenticating = true;
-      _bioMessage = null;
-    });
-    try {
-      final biometricService = ref.read(biometricServiceProvider);
-      final outcome = await biometricService.authenticateFingerprint(
-        localizedReason: 'Verify to access your duty workspace',
-      );
-
-      if (!mounted) return;
-      switch (outcome) {
-        case BiometricAuthOutcome.success:
-          setState(() {
-            _authenticated = true;
-            _isAuthenticating = false;
-          });
-        case BiometricAuthOutcome.notAvailable:
-        case BiometricAuthOutcome.notEnrolled:
-          // The stored binding no longer matches this device — never brick
-          // the user; fall back to a fresh PIN/password sign-in.
-          setState(() {
-            _isAuthenticating = false;
-            _bioMessage =
-                'Biometric app lock is not available right now. '
-                'Sign in with your PIN or password to continue.';
-          });
-        case BiometricAuthOutcome.permanentlyLockedOut:
-          setState(() {
-            _isAuthenticating = false;
-            _bioMessage =
-                'Biometric app lock was permanently locked on this device. '
-                'Sign in with your PIN or password to continue.';
-          });
-        case BiometricAuthOutcome.lockedOut:
-          setState(() {
-            _isAuthenticating = false;
-            _bioMessage =
-                'Biometric app lock is temporarily locked. Unlock your phone '
-                'with its PIN or pattern, then retry.';
-          });
-        case BiometricAuthOutcome.failed:
-        case BiometricAuthOutcome.error:
-          setState(() {
-            _isAuthenticating = false;
-            _bioMessage = 'Could not verify with biometrics. Try again.';
-          });
-      }
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _isAuthenticating = false;
-        _bioMessage = 'Could not verify with biometrics. Please try again.';
-      });
-    }
-  }
-
-  Future<void> _loadBiometricAppLock(AuthSession session) async {
-    try {
-      final enabled = await ref
-          .read(savedAccountsServiceProvider)
-          .isBiometricAppLockEnabledFor(session);
-      if (!mounted || _biometricSessionKey != _sessionKey(session)) return;
-      ref.read(appLockPreferencesProvider.notifier).setFor(session, enabled);
-    } catch (_) {
-      // We cannot determine whether this UID is locally locked. Do not leave
-      // AuthGate indefinitely loading or expose the workspace without that
-      // decision; sign out to recover through credentials instead.
-      if (mounted && _biometricSessionKey == _sessionKey(session)) {
-        unawaited(ref.read(authControllerProvider).signOut());
-      }
-    }
-  }
-
-  String _sessionKey(AuthSession session) =>
-      '${session.role.name}:${session.uid}';
-
-  /// Trigger biometric check once, after the first frame with a valid session.
-  void _maybeTriggerBiometrics() {
-    if (_bioTriggered) return;
-    _bioTriggered = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _checkBiometrics();
-      }
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     final sessionAsync = ref.watch(authSessionProvider);
-    final appLockPreferences = ref.watch(appLockPreferencesProvider);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    ref.listen<Map<String, bool>>(appLockPreferencesProvider, (previous, next) {
-      final sessionKey = _biometricSessionKey;
-      if (sessionKey == null ||
-          previous?[sessionKey] == true ||
-          next[sessionKey] != true) {
-        return;
-      }
-      _requiresBiometricAppLock = true;
-      _appLockLifecycle.reset();
-      if (mounted) {
-        setState(() {
-          _authenticated = false;
-          _bioTriggered = false;
-          _bioMessage = null;
-        });
-      }
-    });
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value:
@@ -258,12 +106,7 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
           if (_lastSession?.uid != session?.uid ||
               _lastSession?.role != session?.role) {
             _permissionsChecked = false;
-            _bioTriggered = false;
-            _authenticated = false;
             _trackingReconciledUid = null;
-            _biometricSessionKey = null;
-            _requiresBiometricAppLock = null;
-            _appLockLifecycle.reset();
           }
           _lastSession = session;
 
@@ -282,45 +125,6 @@ class _AuthGateScreenState extends ConsumerState<AuthGateScreen>
               });
             }
             return const LoginHubScreen();
-          }
-
-          final sessionKey = _sessionKey(session);
-          if (_biometricSessionKey != sessionKey) {
-            _biometricSessionKey = sessionKey;
-            _requiresBiometricAppLock = null;
-            if (!appLockPreferences.containsKey(sessionKey)) {
-              unawaited(_loadBiometricAppLock(session));
-            }
-          }
-
-          final appLockEnabled = appLockPreferences[sessionKey];
-          if (appLockEnabled != null) {
-            _requiresBiometricAppLock = appLockEnabled;
-          }
-
-          // Do not reveal the session workspace before its account-scoped
-          // strong-biometric preference has been read.
-          if (_requiresBiometricAppLock == null) {
-            return const _AppLoadingScreen();
-          }
-
-          // Biometric Gate — triggered once via post-frame callback,
-          // NOT called directly in build to avoid infinite prompt loops.
-          if (_requiresBiometricAppLock! && !_authenticated) {
-            _maybeTriggerBiometrics();
-            return _BiometricLockScreen(
-              onRetry:
-                  () => setState(() {
-                    _isAuthenticating = false;
-                    _bioTriggered = false;
-                    _bioMessage = null;
-                  }),
-              onUsePassword: () {
-                ref.read(authControllerProvider).signOut();
-              },
-              isAuthenticating: _isAuthenticating,
-              message: _bioMessage,
-            );
           }
 
           // Non-blocking permission check for guard — show shell immediately,
@@ -425,115 +229,6 @@ class _AppLoadingScreen extends StatelessWidget {
                   ),
                 ),
               ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BiometricLockScreen extends StatelessWidget {
-  const _BiometricLockScreen({
-    required this.onRetry,
-    required this.onUsePassword,
-    required this.isAuthenticating,
-    this.message,
-  });
-
-  final VoidCallback onRetry;
-  final VoidCallback onUsePassword;
-  final bool isAuthenticating;
-  final String? message;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = CissThemeTokens.of(context);
-
-    return Scaffold(
-      body: SecurityGridBackground(
-        child: SafeArea(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Lock icon on solid background
-                  Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: tokens.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.fingerprint_rounded,
-                      size: 48,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  Text(
-                    'App Locked',
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      color: tokens.ink,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    message ??
-                        'Verify with your device biometrics to continue '
-                            'accessing your workspace',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: message == null ? tokens.inkMuted : tokens.warning,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 40),
-                  if (isAuthenticating)
-                    SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 3,
-                        color: tokens.primary,
-                      ),
-                    )
-                  else ...[
-                    SizedBox(
-                      width: double.infinity,
-                      height: 52,
-                      child: FilledButton.icon(
-                        onPressed: onRetry,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: tokens.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        icon: const Icon(Icons.fingerprint_rounded, size: 20),
-                        label: const Text('Try biometrics again'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: onUsePassword,
-                      child: const Text('Sign in with PIN or password'),
-                    ),
-                  ],
-                ],
-              ),
             ),
           ),
         ),

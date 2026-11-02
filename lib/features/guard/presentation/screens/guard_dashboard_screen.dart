@@ -10,8 +10,9 @@ import '../../../../../shared/widgets/modern_hero.dart';
 import '../../../../../shared/widgets/brand_banner.dart';
 import '../../../../../shared/widgets/metric_card.dart';
 import '../../../../../shared/widgets/modern_card.dart';
-import '../../../../../shared/widgets/surface_card.dart';
-import '../../../../../shared/widgets/time_counter_chip.dart';
+import '../../../../../shared/widgets/section_header.dart';
+import '../../../../../shared/widgets/primary_action.dart';
+import '../../../../../shared/widgets/action_row.dart';
 import '../../../../../shared/widgets/state_block.dart';
 import '../../../../../shared/widgets/sync_status_badge.dart';
 import '../../../../../core/fcm/notification_service.dart';
@@ -20,7 +21,7 @@ import '../../guard_tab_provider.dart';
 import 'guard_incidents_screen.dart';
 import 'guard_patrol_screen.dart';
 import 'guard_payslips_screen.dart';
-import 'guard_leave_screen.dart';
+import 'guard_duties_screen.dart';
 import 'guard_training_leaderboard_screen.dart';
 
 final FutureProvider<GuardDashboardSnapshot> guardDashboardProvider =
@@ -78,6 +79,12 @@ class GuardDashboardScreen extends ConsumerWidget {
   }
 }
 
+Widget _hPad(Widget child) =>
+    Padding(padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md), child: child);
+
+void _push(BuildContext context, Widget screen) =>
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => screen));
+
 class _DashboardBody extends ConsumerWidget {
   const _DashboardBody({required this.data});
 
@@ -114,6 +121,40 @@ class _DashboardBody extends ConsumerWidget {
             ? data.employeeId.substring(0, 2).toUpperCase()
             : 'GU';
 
+    void openAttendance() =>
+        ref.read(guardTabIndexProvider.notifier).state = 1;
+
+    final moreActions = <Widget>[
+      ActionRow(
+        icon: Icons.event_note_outlined,
+        label: 'Upcoming duties',
+        onTap: () => _push(context, const GuardDutiesScreen()),
+      ),
+      if (moduleEnabled(ref, 'payslips'))
+        ActionRow(
+          icon: Icons.receipt_long_rounded,
+          label: 'Salary slips',
+          onTap: () => _push(context, const GuardPayslipsScreen()),
+        ),
+      ActionRow(
+        icon: Icons.route_rounded,
+        label: 'Patrol',
+        onTap: () => _push(context, const GuardPatrolScreen()),
+      ),
+      if (moduleEnabled(ref, 'incidents'))
+        ActionRow(
+          icon: Icons.shield_outlined,
+          label: 'Incidents',
+          onTap: () => _push(context, const GuardIncidentsScreen()),
+        ),
+      if (moduleEnabled(ref, 'training'))
+        ActionRow(
+          icon: Icons.menu_book_rounded,
+          label: 'Training',
+          onTap: () => _push(context, const GuardTrainingLeaderboardScreen()),
+        ),
+    ];
+
     return Scaffold(
       backgroundColor: tokens.canvas,
       body: SafeArea(
@@ -122,7 +163,7 @@ class _DashboardBody extends ConsumerWidget {
           child: ListView(
             padding: EdgeInsets.only(
               bottom:
-                  AppSpacing.xxl + MediaQuery.of(context).padding.bottom + 140,
+                  AppSpacing.xxl + MediaQuery.of(context).padding.bottom + 24,
             ),
             children: <Widget>[
               ModernHero(
@@ -146,10 +187,48 @@ class _DashboardBody extends ConsumerWidget {
 
               const SizedBox(height: AppSpacing.xl),
 
-              // Attendance this month — 3-column grid, no horizontal scroll
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: Row(
+              _hPad(
+                PrimaryAction(
+                  icon:
+                      isOnDuty
+                          ? Icons.logout_rounded
+                          : Icons.how_to_reg_rounded,
+                  label: isOnDuty ? 'Check out' : 'Mark attendance',
+                  sublabel:
+                      hasShift
+                          ? data.nextShiftSiteName
+                          : 'Scan the duty QR at your post',
+                  onTap: openAttendance,
+                ),
+              ),
+
+              const SizedBox(height: AppSpacing.md),
+
+              _hPad(
+                _DutyCard(
+                  data: data,
+                  tokens: tokens,
+                  onOpen: openAttendance,
+                ),
+              ),
+
+              const SizedBox(height: AppSpacing.xl),
+
+              _hPad(const SectionHeader(label: 'MORE')),
+              const SizedBox(height: AppSpacing.xs),
+              _hPad(
+                ModernCard(
+                  padding: EdgeInsets.zero,
+                  child: _ActionRows(children: moreActions),
+                ),
+              ),
+
+              const SizedBox(height: AppSpacing.xl),
+
+              _hPad(const SectionHeader(label: 'THIS MONTH')),
+              const SizedBox(height: AppSpacing.sm),
+              _hPad(
+                Row(
                   children: <Widget>[
                     Expanded(
                       child: MetricCard(
@@ -180,661 +259,189 @@ class _DashboardBody extends ConsumerWidget {
                   ],
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.md,
-                  AppSpacing.xs,
-                  AppSpacing.md,
-                  0,
-                ),
-                child: Text(
-                  'This month',
-                  style: AppTypography.micro(
-                    context,
-                  ).copyWith(color: tokens.inkMuted),
-                ),
-              ),
 
               const SizedBox(height: AppSpacing.xl),
 
-              // 2026 Bento Grid: Current Post & Tactile QR Clock In/Out Tile
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    // Current Post Bento Card
-                    Expanded(
-                      flex: 5,
-                      child: SurfaceCard(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        onTap: hasShift
-                            ? () => ref.read(guardTabIndexProvider.notifier).state = 1
-                            : null,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: isOnDuty ? tokens.glowEmerald : tokens.glowAmber,
-                                    boxShadow: AppShadows.glow(
-                                      isOnDuty ? tokens.glowEmerald : tokens.glowAmber,
-                                      blur: 8,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    isOnDuty ? 'CURRENT POST' : 'NEXT ASSIGNMENT',
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.8,
-                                      color: tokens.inkMuted,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              hasShift ? data.nextShiftSiteName! : 'Attendance Post',
-                              style: AppTypography.cardTitle(context).copyWith(
-                                fontWeight: FontWeight.w700,
-                                height: 1.2,
-                              ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              hasShift && data.nextShiftDate != null
-                                  ? '${data.nextShiftDate} • ${data.nextShiftLabel ?? 'Shift'}'
-                                  : 'No shift assigned',
-                              style: AppTypography.micro(context).copyWith(
-                                color: tokens.inkMuted,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    // Tactile QR Clock In/Out Tile
-                    Expanded(
-                      flex: 5,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(AppRadius.card),
-                          boxShadow: AppShadows.glow(
-                            isOnDuty ? tokens.glowCyan : tokens.glowEmerald,
-                            opacity: 0.22,
-                            blur: 16,
-                          ),
-                        ),
-                        child: Material(
-                          color: tokens.surface,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.card),
-                            side: BorderSide(
-                              color: isOnDuty ? tokens.glowCyan : tokens.glowEmerald,
-                              width: 1.5,
-                            ),
-                          ),
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(AppRadius.card),
-                            onTap: () {
-                              ref.read(guardTabIndexProvider.notifier).state = 1;
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 16,
-                              ),
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.qr_code_scanner_rounded,
-                                    color: isOnDuty ? tokens.glowCyan : tokens.glowEmerald,
-                                    size: 34,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    isOnDuty ? 'SCAN QR / CLOCK OUT' : 'SCAN QR / CLOCK IN',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.4,
-                                      color: isOnDuty ? tokens.glowCyan : tokens.glowEmerald,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+              _hPad(
+                SectionHeader(
+                  label: 'RECENT ACTIVITY',
+                  actionLabel: 'View all',
+                  onActionTap: openAttendance,
                 ),
               ),
-
-              const SizedBox(height: AppSpacing.md),
-
-              // Night Patrol Checkpoints Bento Card
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: SurfaceCard(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const GuardPatrolScreen(),
-                    ),
-                  ),
-                  child: Row(
-                    children: <Widget>[
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: tokens.accent.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(
-                          Icons.route_rounded,
-                          color: tokens.accent,
-                          size: 24,
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text(
-                              'Night Patrol Checkpoints',
-                              style: AppTypography.cardTitle(context),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              'Next perimeter check due soon',
-                              style: AppTypography.micro(context).copyWith(
-                                color: tokens.inkMuted,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      TimeCounterChip(
-                        targetTime: DateTime.now().add(const Duration(minutes: 14)),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: AppSpacing.xl),
-
-              // Eval Score + Payslip Card
-              if (data.latestEvalScore != null) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                  ),
-                  child: ModernCard(
-                    child: Row(
-                      children: <Widget>[
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: tokens.warningSoft,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.stars_rounded,
-                            color: tokens.accent,
-                            size: 26,
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                'Latest Evaluation',
-                                style: AppTypography.cardTitle(context),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                data.latestEvalPeriod ?? 'Current period',
-                                style: AppTypography.micro(
-                                  context,
-                                ).copyWith(color: tokens.inkMuted),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: tokens.warningSoft,
-                            borderRadius: BorderRadius.circular(AppRadius.pill),
-                          ),
-                          child: Text(
-                            '${data.latestEvalScore!.toStringAsFixed(0)}%',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: tokens.accent,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-              ],
-
-              if (data.leaveBalance != null) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                  ),
-                  child: ModernCard(
-                    child: Row(
-                      children: <Widget>[
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: tokens.primarySoft,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.event_available_rounded,
-                            color: tokens.primary,
-                            size: 26,
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              Text(
-                                'Leave Balance',
-                                style: AppTypography.cardTitle(context),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${data.leaveBalance!.balance} remaining · ${data.leaveBalance!.entitled} entitled · ${data.leaveBalance!.taken} taken',
-                                style: AppTypography.micro(
-                                  context,
-                                ).copyWith(color: tokens.inkMuted),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(
-                          Icons.chevron_right_rounded,
-                          color: tokens.inkMuted,
-                          size: 20,
-                        ),
-                      ],
-                    ),
-                    onTap:
-                        () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const GuardLeaveScreen(),
-                          ),
-                        ),
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-              ],
-
-              // Quick Actions
-              // Quick Actions — 2026 Bento Action Pills
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text('Quick Actions', style: AppTypography.title(context)),
-                    const SizedBox(height: AppSpacing.sm),
-                    Row(
-                      children: <Widget>[
-                        if (moduleEnabled(ref, 'leave'))
-                        Expanded(
-                          child: SurfaceCard(
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                            radius: AppRadius.pill,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const GuardLeaveScreen(),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.calendar_today_rounded,
-                                  color: tokens.accent,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'LEAVE',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.6,
-                                    color: tokens.ink,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        if (moduleEnabled(ref, 'incidents'))
-                        Expanded(
-                          child: SurfaceCard(
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                            radius: AppRadius.pill,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const GuardIncidentsScreen(),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.shield_outlined,
-                                  color: tokens.accent,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'INCIDENTS',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.6,
-                                    color: tokens.ink,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Row(
-                      children: <Widget>[
-                        if (moduleEnabled(ref, 'training'))
-                        Expanded(
-                          child: SurfaceCard(
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                            radius: AppRadius.pill,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const GuardTrainingLeaderboardScreen(),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.menu_book_rounded,
-                                  color: tokens.accent,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'TRAINING',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.6,
-                                    color: tokens.ink,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        if (moduleEnabled(ref, 'payslips'))
-                        Expanded(
-                          child: SurfaceCard(
-                            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                            radius: AppRadius.pill,
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const GuardPayslipsScreen(),
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.payments_outlined,
-                                  color: tokens.accent,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'PAYSLIPS',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.6,
-                                    color: tokens.ink,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // ── Training Leaderboard ──────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: ModernCard(
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => const GuardTrainingLeaderboardScreen(),
-                      ),
-                    );
-                  },
-                  child: Row(
-                    children: <Widget>[
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: tokens.accent.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          Icons.emoji_events_rounded,
-                          color: tokens.accent,
-                          size: 26,
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            Text(
-                              'Training Leaderboard',
-                              style: AppTypography.cardTitle(context),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'See how you rank against guards in your district',
-                              style: AppTypography.micro(
-                                context,
-                              ).copyWith(color: tokens.inkMuted),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(
-                        Icons.chevron_right_rounded,
-                        color: tokens.inkMuted,
-                        size: 20,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: AppSpacing.xl),
-
-              // Recent Activity
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: <Widget>[
-                        Text(
-                          'Recent Activity',
-                          style: AppTypography.title(context),
-                        ),
-                        TextButton(
-                          onPressed:
-                              () =>
-                                  ref
-                                      .read(guardTabIndexProvider.notifier)
-                                      .state = 1,
-                          child: const Text('View all'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    if (data.recentAttendance.isEmpty)
-                      ModernCard(
-                        child: Row(
-                          children: <Widget>[
-                            Icon(
-                              Icons.history_toggle_off_rounded,
-                              color: tokens.inkMuted,
-                              size: 24,
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            Expanded(
-                              child: Text(
-                                'Your check-in and check-out activity will appear here.',
-                                style: AppTypography.body(
-                                  context,
-                                ).copyWith(color: tokens.inkMuted),
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      ...data.recentAttendance.take(5).map((item) {
-                        final isIn = item.status == 'In';
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                          child: ModernCard(
-                            padding: const EdgeInsets.all(AppSpacing.md),
-                            onTap:
-                                () =>
-                                    ref
-                                        .read(guardTabIndexProvider.notifier)
-                                        .state = 1,
-                            child: Row(
-                              children: <Widget>[
-                                Icon(
-                                  isIn
-                                      ? Icons.login_rounded
-                                      : Icons.logout_rounded,
-                                  color: isIn ? tokens.success : tokens.warning,
-                                  size: 22,
-                                ),
-                                const SizedBox(width: AppSpacing.sm),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: <Widget>[
-                                      Text(
-                                        item.siteName,
-                                        style: AppTypography.bodyStrong(
-                                          context,
-                                        ),
-                                      ),
-                                      Text(
-                                        '${item.dateLabel} • ${item.time}',
-                                        style: AppTypography.micro(
-                                          context,
-                                        ).copyWith(color: tokens.inkMuted),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Icon(
-                                  isIn
-                                      ? Icons.login_rounded
-                                      : Icons.logout_rounded,
-                                  color: tokens.inkMuted,
-                                  size: 16,
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      }),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: AppSpacing.xxl),
+              const SizedBox(height: AppSpacing.sm),
+              _hPad(_RecentActivity(data: data, onOpen: openAttendance)),
             ],
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => ref.read(guardTabIndexProvider.notifier).state = 1,
-        backgroundColor: isOnDuty ? tokens.primary : tokens.success,
-        foregroundColor: tokens.surface,
-        icon: Icon(isOnDuty ? Icons.logout_rounded : Icons.login_rounded),
-        label: Text(isOnDuty ? 'Check Out' : 'Check In'),
+    );
+  }
+}
+
+class _ActionRows extends StatelessWidget {
+  const _ActionRows({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+    if (children.isEmpty) return const SizedBox.shrink();
+
+    final rows = <Widget>[];
+    for (var i = 0; i < children.length; i++) {
+      rows.add(children[i]);
+      if (i != children.length - 1) {
+        rows.add(Divider(height: 1, thickness: 1, color: tokens.border));
+      }
+    }
+    return Column(children: rows);
+  }
+}
+
+class _DutyCard extends StatelessWidget {
+  const _DutyCard({
+    required this.data,
+    required this.tokens,
+    required this.onOpen,
+  });
+
+  final GuardDashboardSnapshot data;
+  final CissThemeTokens tokens;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasShift = data.nextShiftSiteName != null;
+    final detail = <String>[
+      if (data.nextShiftDate != null) data.nextShiftDate!,
+      if (data.nextShiftLabel != null) data.nextShiftLabel!,
+    ].join(' • ');
+
+    return ModernCard(
+      onTap: hasShift ? onOpen : null,
+      child: Row(
+        children: <Widget>[
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: tokens.primarySoft,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.assignment_turned_in_outlined,
+              color: tokens.primary,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('Your duty', style: AppTypography.cardTitle(context)),
+                const SizedBox(height: 3),
+                Text(
+                  hasShift
+                      ? '${data.nextShiftSiteName}${detail.isEmpty ? '' : ' • $detail'}'
+                      : 'No duty assigned yet',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.micro(
+                    context,
+                  ).copyWith(color: tokens.inkMuted),
+                ),
+              ],
+            ),
+          ),
+          if (hasShift)
+            Icon(
+              Icons.chevron_right_rounded,
+              color: tokens.inkMuted,
+              size: 20,
+            ),
+        ],
       ),
+    );
+  }
+}
+
+class _RecentActivity extends StatelessWidget {
+  const _RecentActivity({required this.data, required this.onOpen});
+
+  final GuardDashboardSnapshot data;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = CissThemeTokens.of(context);
+
+    if (data.recentAttendance.isEmpty) {
+      return ModernCard(
+        child: Row(
+          children: <Widget>[
+            Icon(
+              Icons.history_toggle_off_rounded,
+              color: tokens.inkMuted,
+              size: 24,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                'Your check-in and check-out activity will appear here.',
+                style: AppTypography.body(
+                  context,
+                ).copyWith(color: tokens.inkMuted),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children:
+          data.recentAttendance.take(3).map((item) {
+            final isIn = item.status == 'In';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: ModernCard(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                onTap: onOpen,
+                child: Row(
+                  children: <Widget>[
+                    Icon(
+                      isIn ? Icons.login_rounded : Icons.logout_rounded,
+                      color: isIn ? tokens.success : tokens.warning,
+                      size: 22,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            item.siteName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTypography.bodyStrong(context),
+                          ),
+                          Text(
+                            '${item.dateLabel} • ${item.time}',
+                            style: AppTypography.micro(
+                              context,
+                            ).copyWith(color: tokens.inkMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
     );
   }
 }

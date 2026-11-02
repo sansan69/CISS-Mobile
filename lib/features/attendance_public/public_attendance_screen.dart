@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -8,10 +8,12 @@ import 'package:uuid/uuid.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/haptics.dart';
+import '../../../core/media/photo_store.dart';
 import '../../../core/models/attendance_models.dart';
 import '../../../core/network/providers.dart';
 import '../../../core/network/ciss_error.dart';
 import '../../../core/sync/providers.dart';
+import '../../../core/offline/offline_queue.dart';
 import '../../../shared/widgets/camera_capture_screen.dart';
 import '../../../shared/widgets/state_block.dart';
 
@@ -130,9 +132,9 @@ class _PublicAttendanceScreenState
   }
 
   Future<void> _takePhoto() async {
-    final file = await CameraCaptureScreen.capture();
-    if (file != null && mounted) {
-      setState(() => _photoPath = file.path);
+    final path = await CameraCaptureScreen.capture();
+    if (path != null && mounted) {
+      setState(() => _photoPath = path);
     }
   }
 
@@ -154,8 +156,7 @@ class _PublicAttendanceScreenState
     Map<String, dynamic>? queuedPayload;
     try {
       final repo = ref.read(mobileRepositoryProvider);
-      final photoFile = File(_photoPath!);
-      final bytes = await photoFile.readAsBytes();
+      final bytes = await readPhotoBytes(_photoPath!);
       final mimeType = 'image/jpeg';
       final dataUrl = await repo.encodeFileToDataUrl(bytes.toList(), mimeType);
       final attemptId = _clientRequestId ??= _uuid.v4();
@@ -235,13 +236,22 @@ class _PublicAttendanceScreenState
       });
     } on DioException catch (e) {
       if (CissError.isRetryableNetworkError(e)) {
-        await ref
-            .read(offlineQueueProvider)
-            .enqueue(
-              path: '/api/attendance/submit',
-              method: 'POST',
-              body: queuedPayload ?? <String, dynamic>{},
-            );
+        try {
+          await ref
+              .read(offlineQueueProvider)
+              .enqueue(
+                path: '/api/attendance/submit',
+                method: 'POST',
+                body: queuedPayload ?? <String, dynamic>{},
+              );
+        } on OfflineQueueError catch (queueError) {
+          if (!mounted) return;
+          setState(() {
+            _submitError = queueError.message;
+            _isSubmitting = false;
+          });
+          return;
+        }
         if (!mounted) return;
         Haptics.success();
         setState(() {
@@ -498,8 +508,8 @@ class _PublicAttendanceScreenState
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.file(
-                  File(_photoPath!),
+                child: photoImage(
+                  _photoPath!,
                   height: 200,
                   width: double.infinity,
                   fit: BoxFit.cover,

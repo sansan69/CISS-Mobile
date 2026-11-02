@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -80,6 +79,12 @@ class NotificationService {
       });
 
   Future<void> init() async {
+    if (kIsWeb) {
+      // The browser build has no FCM/local-notification plugin. The in-app
+      // notification inbox still polls the API through the repository, so this
+      // only disables push delivery, not notification content.
+      return;
+    }
     _ensureSessionRetryLoop();
 
     // ── Local notification setup ───────────────────────────────────────
@@ -257,9 +262,6 @@ class NotificationService {
       case 'duty_assigned':
       case 'attendance_marked':
         _navigateGuard(1);
-        break;
-      case 'leave_status':
-        _navigateGuard(2);
         break;
       case 'new_training':
       case 'training_assigned':

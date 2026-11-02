@@ -11,17 +11,18 @@ import '../attendance/attendance_validation.dart';
 import '../models/app_role.dart';
 import '../models/attendance_models.dart';
 import '../models/auth_session.dart';
+import '../models/duty_models.dart';
 import '../models/guard_profile.dart';
 import '../models/incident_models.dart';
-import '../models/leave_models.dart';
 import '../models/mobile_dashboard_models.dart';
 import '../models/patrol_models.dart';
-import '../models/payslip_models.dart';
+import '../models/payslip_document.dart';
 import '../models/report_models.dart';
 import '../models/training_models.dart';
 import '../auth/guard_login_identifier.dart';
 import '../cache/hive_read_cache_store.dart';
 import '../cache/read_cache.dart';
+import '../privacy/privacy_log.dart';
 import 'api_client.dart';
 import 'authenticated_identity_mismatch_error.dart';
 import 'authoritative_session_error.dart';
@@ -37,26 +38,37 @@ class MobileRepository implements AuthRepository {
     this._regionService, {
     GuardPinVerificationAdapter? guardPinVerificationAdapter,
     ReadCache? readCache,
+    void Function(String message)? log,
   }) : _guardPinVerificationAdapter =
            guardPinVerificationAdapter ?? GuardPinVerificationAdapter(),
-       _readCache =
-           readCache ??
-           ReadCache(store: HiveReadCacheStore());
+       _readCache = readCache ?? sharedReadCache,
+       _log = log ?? debugPrint;
 
   final ApiClient _apiClient;
   final FirebaseAuth _auth;
   final RegionService _regionService;
   final GuardPinVerificationAdapter _guardPinVerificationAdapter;
   final ReadCache _readCache;
+  final void Function(String message) _log;
 
   ApiClient get apiClient => _apiClient;
   User? get currentUser => _auth.currentUser;
+
+  /// The read-through cache used for offline fallbacks. Exposed so the
+  /// local-data purger can clear both its memory view and its encrypted box.
+  ReadCache get readCache => _readCache;
+
+  /// Emits a diagnostic line with common PII patterns scrubbed. Session
+  /// payloads, raw response bodies, Firebase uids and coordinates must never be
+  /// passed to `debugPrint` directly (release builds do not strip it).
+  void _emitLog(String message) => _log(PrivacyLog.redactForLog(message));
 
   static const String _mobileNotificationsPath = '/api/mobile/notifications';
   static const String _mobileTokenPath = '/api/mobile/token';
   static const String _remoteConfigPath = '/api/mobile/settings';
   static const String _attendanceBreakPath = '/api/mobile/attendance/break';
   static const String _attendanceValidatePath = '/api/attendance/validate';
+  static const String _guardPayslipsPath = '/api/guard/payslips';
 
   /// Read endpoints eligible for the Hive-backed read-through cache. The
   /// allowlist is deliberately narrow so identity/authorization responses
@@ -66,8 +78,6 @@ class MobileRepository implements AuthRepository {
     '/api/guard/dashboard',
     '/api/guard/training',
     '/api/guard/evaluations',
-    '/api/guard/payslips',
-    '/api/guard/leave',
     '/api/guard/incidents',
     '/api/guard/leaderboard',
     '/api/field-officer/dashboard',
@@ -88,12 +98,13 @@ class MobileRepository implements AuthRepository {
       await _postJson(_mobileTokenPath, <String, String>{'fcmToken': token});
     } catch (error) {
       if (await _saveFcmTokenDirectly(token)) {
-        debugPrint(
-          'Saved FCM token directly because $_mobileTokenPath is unavailable: $error',
+        _emitLog(
+          'Saved FCM token directly because $_mobileTokenPath is unavailable '
+          '(${error.runtimeType})',
         );
         return;
       }
-      debugPrint('Error updating FCM token: $error');
+      _emitLog('Error updating FCM token (${error.runtimeType})');
     }
   }
 
@@ -168,12 +179,22 @@ class MobileRepository implements AuthRepository {
     });
   }
 
-  String _readCacheKey(String path, Map<String, dynamic>? queryParameters) {
+  /// Cache key for an authenticated read payload.
+  ///
+  /// The account identity is part of the key so one guard/field officer can
+  /// never be served another account's cached payload. Unauthenticated reads
+  /// share the explicit `anonymous` namespace.
+  @visibleForTesting
+  static String buildReadCacheKey({
+    required String region,
+    required String? uid,
+    required String path,
+    Map<String, dynamic>? queryParameters,
+  }) {
     final sorted = (queryParameters ?? <String, dynamic>{}).entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
     final qs = sorted.map((e) => '${e.key}=${e.value}').join('&');
-    final region = _regionService.activeRegion?.code ?? 'KL';
-    return '$region|$path|$qs';
+    return '$region|${uid ?? 'anonymous'}|$path|$qs';
   }
 
   Future<Map<String, dynamic>> _getJson(
@@ -182,8 +203,15 @@ class MobileRepository implements AuthRepository {
     bool authenticated = true,
   }) async {
     final cacheable = _cacheableReadPaths.contains(path);
-    final cacheKey =
-        cacheable ? _readCacheKey(path, queryParameters) : null;
+    final requestedUid = authenticated ? _auth.currentUser?.uid : null;
+    final cacheKey = cacheable
+        ? buildReadCacheKey(
+            region: _regionService.activeRegion?.code ?? 'KL',
+            uid: requestedUid,
+            path: path,
+            queryParameters: queryParameters,
+          )
+        : null;
     try {
       final response = await _apiClient.dio.get<dynamic>(
         path,
@@ -198,20 +226,50 @@ class MobileRepository implements AuthRepository {
         throw Exception('Unexpected response format from server');
       }
       final result = Map<String, dynamic>.from(data);
+      if (authenticated && _auth.currentUser?.uid != requestedUid) {
+        // The bearer token belonged to A; never hand A's payload (or cache
+        // namespace) to the B that signed in while the request was in flight.
+        throw AuthenticatedIdentityMismatchError(
+          firebaseUid: _auth.currentUser?.uid ?? '',
+          backendUid: requestedUid ?? '',
+        );
+      }
       if (cacheable && cacheKey != null) {
         _readCache.setJson(cacheKey, result);
       }
       return result;
     } catch (error) {
-      // Offline/stale fallback: serve the last-known-good payload for cached
-      // read endpoints so dashboards render from cache instead of erroring.
-      if (cacheable && cacheKey != null) {
-        final cached = await _readCache.readJson(cacheKey);
+      // Offline fallback only for genuine transport failures of the *same*
+      // account. Authorization failures (401/403), "Not authenticated", and
+      // server-side rejections must stay visible instead of being shadowed by
+      // a stale payload.
+      final sameIdentity =
+          !authenticated || _auth.currentUser?.uid == requestedUid;
+      if (cacheable &&
+          cacheKey != null &&
+          sameIdentity &&
+          _isCacheFallbackEligible(error)) {
+        final cached = await _readCache.readJson(
+          cacheKey,
+          maxAge: ReadCache.maxFallbackAge,
+        );
         if (cached != null) return cached;
       }
       if (_isOfflineDioError(error)) rethrow;
       throw Exception(_extractApiError(error));
     }
+  }
+
+  /// Whether [error] is a transport/offline failure for which serving the
+  /// last-known-good payload of the same account is safe.
+  ///
+  /// Deliberately excludes any HTTP response (401/403/4xx/5xx), certificate
+  /// failures, cancelled requests and `StateError('Not authenticated')`.
+  bool _isCacheFallbackEligible(Object error) {
+    if (error is StateError) return false;
+    if (error is! DioException) return false;
+    if (error.response != null) return false;
+    return CissError.isRetryableNetworkError(error);
   }
 
   Future<Map<String, dynamic>> getJson(
@@ -283,7 +341,7 @@ class MobileRepository implements AuthRepository {
 
     // badCertificate = connection compromised, not simply offline
     if (error.type == DioExceptionType.badCertificate) {
-      debugPrint('Connection compromised: bad certificate detected');
+      _emitLog('Connection compromised: bad certificate detected');
       return false;
     }
 
@@ -311,6 +369,7 @@ class MobileRepository implements AuthRepository {
   Future<AuthSession?> resolveCurrentSession() async {
     final user = _auth.currentUser;
     if (user == null) return null;
+    final resolvingUid = user.uid;
 
     try {
       final backendSession = await _resolveSessionFromBackend();
@@ -320,25 +379,41 @@ class MobileRepository implements AuthRepository {
         );
       }
       return backendSession;
-    } catch (error, st) {
-      debugPrint('resolveCurrentSession caught error: $error\n$st');
-      // Firebase authentication alone is not a CISS Mobile authorization
-      // grant. Any missing, denied, malformed, unavailable, or UID-mismatched
-      // authoritative response invalidates this Firebase identity too.
-      await _signOutAfterAuthoritativeFailure(error);
+    } catch (error) {
+      // Keep the failure class only: exception messages can embed response
+      // bodies (display names, employee ids) and stack traces add no signal.
+      _emitLog('resolveCurrentSession failed (${error.runtimeType})');
+      // A transport failure is not an authorization decision: do not destroy
+      // the Firebase session, so the caller can restore a bounded offline
+      // snapshot for the same uid. Every non-transport failure (401/403,
+      // 4xx/5xx, malformed payload, UID mismatch, invalid role) is fail-closed.
+      if (error is! AuthoritativeSessionTransportError &&
+          _auth.currentUser?.uid == resolvingUid) {
+        // Firebase authentication alone is not a CISS Mobile authorization
+        // grant. Any missing, denied, malformed, unavailable, or UID-mismatched
+        // authoritative response invalidates this Firebase identity too — but
+        // only if it is still the identity this resolution started for. A
+        // delayed denial for A must not sign out the B that replaced it.
+        await _signOutAfterAuthoritativeFailure(error, resolvingUid);
+      }
       rethrow;
     }
   }
 
-  Future<void> _signOutAfterAuthoritativeFailure(Object error) async {
+  Future<void> _signOutAfterAuthoritativeFailure(
+    Object error,
+    String expectedUid,
+  ) async {
+    // Re-check at the point of no return.
+    if (_auth.currentUser?.uid != expectedUid) return;
     try {
       await _auth.signOut();
     } catch (signOutError) {
       // The caller still clears all UI state. Firebase sign-out failures must
       // not preserve an unauthorized application session.
-      debugPrint(
+      _emitLog(
         'Could not clear Firebase after authoritative session failure '
-        '($error): $signOutError',
+        '(${error.runtimeType}, ${signOutError.runtimeType})',
       );
     }
   }
@@ -349,15 +424,14 @@ class MobileRepository implements AuthRepository {
   Future<AuthSession?> _resolveSessionFromBackend() async {
     final user = _auth.currentUser;
     if (user == null) {
-      debugPrint('_resolveSessionFromBackend: _auth.currentUser is null');
+      _emitLog('_resolveSessionFromBackend: _auth.currentUser is null');
       return null;
     }
 
     final data = await _getAuthoritativeSessionJson();
-    debugPrint('_resolveSessionFromBackend: received data=$data, user.uid=${user.uid}');
     final role = _roleFromWire(data['role']);
     if (role == null) {
-      debugPrint('_resolveSessionFromBackend: _roleFromWire returned null for role=${data['role']}');
+      _emitLog('_resolveSessionFromBackend: session role is missing or invalid');
       return null;
     }
 
@@ -407,9 +481,20 @@ class MobileRepository implements AuthRepository {
       if (status == 401 || status == 403) {
         throw AuthoritativeSessionDeniedError(status!);
       }
+      // No HTTP response at all (connection refused/reset, DNS, timeout) is a
+      // transport failure, not an authorization decision. Only then may the
+      // caller fall back to a bounded offline session snapshot.
+      if (status == null &&
+          error.type != DioExceptionType.badCertificate &&
+          error.type != DioExceptionType.cancel) {
+        throw const AuthoritativeSessionTransportError();
+      }
       throw AuthoritativeSessionResolutionError(
-        'Could not resolve the authoritative mobile session.',
+        'Could not resolve the authoritative mobile session'
+        '${status == null ? '' : ' (HTTP $status)'}.',
       );
+    } on AuthoritativeSessionTransportError {
+      rethrow;
     } on AuthoritativeSessionResolutionError {
       rethrow;
     } catch (_) {
@@ -481,7 +566,7 @@ class MobileRepository implements AuthRepository {
           }, SetOptions(merge: true));
       return true;
     } catch (e) {
-      debugPrint('Repository fallback failed: $e');
+      _emitLog('Repository fallback failed (${e.runtimeType})');
       return false;
     }
   }
@@ -538,7 +623,7 @@ class MobileRepository implements AuthRepository {
       });
       return true;
     } catch (e) {
-      debugPrint('Repository fallback failed: $e');
+      _emitLog('Repository fallback failed (${e.runtimeType})');
       return false;
     }
   }
@@ -573,7 +658,7 @@ class MobileRepository implements AuthRepository {
       await batch.commit();
       return true;
     } catch (e) {
-      debugPrint('Repository fallback failed: $e');
+      _emitLog('Repository fallback failed (${e.runtimeType})');
       return false;
     }
   }
@@ -935,12 +1020,6 @@ class MobileRepository implements AuthRepository {
         data['attendanceStats'] is Map
             ? Map<String, dynamic>.from(data['attendanceStats'] as Map)
             : const <String, dynamic>{};
-    final leaveBalance =
-        data['leaveBalance'] is Map<String, dynamic>
-            ? _parseLeaveBalance(
-              Map<String, dynamic>.from(data['leaveBalance'] as Map),
-            )
-            : null;
     final recentAttendance =
         (data['recentAttendance'] as List<dynamic>? ?? const <dynamic>[])
             .whereType<Map<String, dynamic>>()
@@ -961,7 +1040,6 @@ class MobileRepository implements AuthRepository {
       presentDays: (attendanceStats['presentDays'] as num?)?.toInt() ?? 0,
       absentDays: (attendanceStats['absentDays'] as num?)?.toInt() ?? 0,
       workingDays: (attendanceStats['workingDays'] as num?)?.toInt() ?? 0,
-      leaveBalance: leaveBalance,
       latestEvalScore: data['latestEvalScore'] as num?,
       latestEvalPeriod: data['latestEvalPeriod'] as String?,
       nextShiftLabel: nextShift?['shiftLabel'] as String?,
@@ -1005,7 +1083,7 @@ class MobileRepository implements AuthRepository {
         return employeeDocId.trim();
       }
     } catch (error) {
-      debugPrint('Could not resolve guard employeeDocId from claims: $error');
+      _emitLog('Could not resolve guard employeeDocId from claims (${error.runtimeType})');
     }
     return null;
   }
@@ -1045,10 +1123,13 @@ class MobileRepository implements AuthRepository {
         'value': phoneNumber,
       } else ...<String, dynamic>{'method': 'resourceId', 'value': resourceId},
     };
+    // Assisted marking: when this phone is signed in, send the guard's token so
+    // the server records who marked the colleague and binds the proof to them.
+    // A signed-out phone may still scan a QR badge (kiosk mode).
     final data = await _postJson(
       '/api/public/attendance/identify',
       body,
-      authenticated: false,
+      authenticated: currentUser != null,
     );
     return _parsePublicAttendanceEmployee(data);
   }
@@ -1059,7 +1140,7 @@ class MobileRepository implements AuthRepository {
     final data = await _postJson(
       '/api/public/attendance/identify',
       <String, dynamic>{'method': 'qr', 'value': qrValue},
-      authenticated: false,
+      authenticated: currentUser != null,
     );
     return _parsePublicAttendanceEmployee(data);
   }
@@ -1204,12 +1285,13 @@ class MobileRepository implements AuthRepository {
   Future<Map<String, dynamic>> submitAttendance(
     Map<String, dynamic> payload,
   ) async {
-    final verificationToken = payload['attendanceVerificationToken'];
+    // Always prefer an authenticated submission when the phone has a session:
+    // the server attributes assisted marking to this guard and only accepts a
+    // signed QR badge for genuinely signed-out devices.
     return _postJson(
       '/api/attendance/submit',
       payload,
-      authenticated:
-          !(verificationToken is String && verificationToken.trim().isNotEmpty),
+      authenticated: currentUser != null,
     );
   }
 
@@ -1362,26 +1444,78 @@ class MobileRepository implements AuthRepository {
         .toList();
   }
 
-  Future<List<PayslipSummaryModel>> fetchPayslips() async {
-    final data = await _getJson('/api/guard/payslips');
-    final payslips = data['payslips'] as List<dynamic>? ?? const <dynamic>[];
-    return payslips
-        .whereType<Map<String, dynamic>>()
-        .map(PayslipSummaryModel.fromJson)
-        .toList();
-  }
-
-  Future<List<int>> downloadPayslipPdf(String payslipId) async {
-    final response = await _apiClient.dio.get<List<int>>(
-      '/api/guard/payslips/${Uri.encodeComponent(payslipId)}/payslip',
-      options: Options(responseType: ResponseType.bytes),
-    );
-    return response.data ?? const <int>[];
-  }
-
   Future<GuardPatrolStatusModel> fetchGuardPatrolStatus() async {
     final data = await _getJson('/api/guard/patrol');
     return GuardPatrolStatusModel.fromJson(data);
+  }
+
+  /// Salary slips (uploaded PDFs) published for the signed-in guard.
+  ///
+  /// Deliberately **not** in [_cacheableReadPaths]: a cached list could offer a
+  /// document that was replaced or withdrawn, and payroll files must never be
+  /// served from disk while offline.
+  Future<List<PayslipDocumentModel>> fetchPayslips() async {
+    final data = await _getJson(_guardPayslipsPath);
+    final payslips = data['payslips'] as List<dynamic>? ?? const <dynamic>[];
+    return payslips
+        .whereType<Map>()
+        .map(
+          (item) => PayslipDocumentModel.fromJson(
+            Map<String, dynamic>.from(item),
+          ),
+        )
+        .where((payslip) => payslip.id.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  /// Downloads one salary slip as PDF bytes.
+  ///
+  /// The bearer token is the guard's own; a request that started under one
+  /// account never hands its bytes to another. `DioException`s are rethrown so
+  /// `CissError.parse` can turn 401/403/404 into human messages. Neither the
+  /// bytes nor the request URL are ever logged.
+  Future<Uint8List> downloadPayslipPdf(String payslipId) async {
+    final trimmedId = payslipId.trim();
+    if (trimmedId.isEmpty) {
+      throw Exception('Missing salary slip id.');
+    }
+    final requestedUid = _auth.currentUser?.uid;
+    if (requestedUid == null) {
+      throw StateError('Not authenticated');
+    }
+    final path =
+        '$_guardPayslipsPath/${Uri.encodeComponent(trimmedId)}/payslip';
+    try {
+      final response = await _apiClient.dio.get<List<int>>(
+        path,
+        options: Options(
+          headers: await _authHeaders(),
+          responseType: ResponseType.bytes,
+        ),
+      );
+      if (_auth.currentUser?.uid != requestedUid) {
+        throw AuthenticatedIdentityMismatchError(
+          firebaseUid: _auth.currentUser?.uid ?? '',
+          backendUid: requestedUid,
+        );
+      }
+      final data = response.data;
+      if (data == null || data.isEmpty) {
+        throw Exception('The salary slip download returned no data.');
+      }
+      return data is Uint8List ? data : Uint8List.fromList(data);
+    } on AuthenticatedIdentityMismatchError {
+      rethrow;
+    } on DioException catch (error) {
+      _emitLog(
+        'Salary slip download failed '
+        '(DioException ${error.response?.statusCode ?? error.type.name})',
+      );
+      rethrow;
+    } catch (error) {
+      _emitLog('Salary slip download failed (${error.runtimeType})');
+      throw Exception(_extractApiError(error));
+    }
   }
 
   Future<Map<String, dynamic>> submitGuardPatrolActivity(
@@ -1399,22 +1533,6 @@ class MobileRepository implements AuthRepository {
     return _getJson('/api/admin/patrol-activities');
   }
 
-  Future<Map<String, dynamic>> fetchLeaveOverview() async {
-    return _getJson('/api/guard/leave');
-  }
-
-  Future<Map<String, dynamic>> createLeaveRequest(
-    Map<String, dynamic> payload,
-  ) async {
-    return _postJson('/api/guard/leave', payload);
-  }
-
-  Future<Map<String, dynamic>> cancelLeaveRequest(String requestId) async {
-    return _patchJson('/api/guard/leave', <String, dynamic>{
-      'requestId': requestId,
-    });
-  }
-
   Future<List<IncidentModel>> fetchGuardIncidents() async {
     final data = await _getJson('/api/guard/incidents');
     final incidents = data['incidents'] as List<dynamic>? ?? const <dynamic>[];
@@ -1428,6 +1546,28 @@ class MobileRepository implements AuthRepository {
     Map<String, dynamic> payload,
   ) async {
     return _postJson('/api/guard/incidents', payload);
+  }
+
+  /// Upcoming duties for the signed-in guard: FO-assigned shifts and open
+  /// adhoc exam duties. Assignment is informational and never gates
+  /// attendance.
+  Future<List<GuardDuty>> fetchGuardDuties() async {
+    final data = await _getJson('/api/guard/duties');
+    return (data['duties'] as List<dynamic>? ?? const <dynamic>[])
+        .whereType<Map<String, dynamic>>()
+        .map(GuardDuty.fromJson)
+        .toList();
+  }
+
+  /// Records the guard's willingness for an adhoc exam duty. This informs the
+  /// field officer; it does not reserve a slot or gate any action.
+  Future<void> respondDutyWillingness(
+    String dutyId,
+    WillingnessStatus status,
+  ) async {
+    await _postJson('/api/guard/duties/$dutyId/willingness', <String, dynamic>{
+      'response': status.name,
+    });
   }
 
   Future<List<IncidentModel>> fetchFieldOfficerIncidents() async {
@@ -1719,24 +1859,6 @@ class MobileRepository implements AuthRepository {
     };
   }
 
-  LeaveBalanceModel _parseLeaveBalance(Map<String, dynamic> json) {
-    final casual =
-        json['casual'] is Map<String, dynamic>
-            ? Map<String, dynamic>.from(json['casual'] as Map)
-            : const <String, dynamic>{};
-    // We only need one summary card in the mobile shell right now.
-    final balance =
-        (casual['balance'] as num?)?.toInt() ??
-        (json['earned'] is Map<String, dynamic>
-            ? ((json['earned'] as Map)['balance'] as num?)?.toInt() ?? 0
-            : 0);
-    return LeaveBalanceModel(
-      entitled: (casual['entitled'] as num?)?.toInt() ?? 0,
-      taken: (casual['taken'] as num?)?.toInt() ?? 0,
-      balance: balance,
-    );
-  }
-
   Future<String> encodeFileToDataUrl(List<int> bytes, String mimeType) async {
     return 'data:$mimeType;base64,${base64Encode(bytes)}';
   }
@@ -1798,6 +1920,15 @@ class MobileRepository implements AuthRepository {
     String field,
     DocumentUploadFile file,
   ) async {
+    // Web picks arrive as bytes (there is no file path); native picks stream
+    // from disk so the 5 MB document never has to sit in memory twice.
+    final bytes = file.bytes;
+    if (bytes != null) {
+      return MultipartFile.fromBytes(bytes, filename: file.name);
+    }
+    if (file.path.isEmpty) {
+      throw Exception('The selected document could not be read.');
+    }
     return MultipartFile.fromFile(file.path, filename: file.name);
   }
 

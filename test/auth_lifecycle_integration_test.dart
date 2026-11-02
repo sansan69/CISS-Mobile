@@ -18,7 +18,7 @@ import 'package:ciss_mobile/core/network/mobile_repository.dart';
 import 'package:ciss_mobile/core/network/providers.dart';
 import 'package:ciss_mobile/features/auth/application/auth_controller.dart';
 import 'package:ciss_mobile/features/auth/application/biometric_setup_controller.dart';
-import 'package:ciss_mobile/features/auth/presentation/auth_gate_screen.dart';
+import 'package:ciss_mobile/core/auth/app_lock_overlay.dart';
 import 'package:ciss_mobile/shared/widgets/biometric_setup_sheet.dart';
 
 class _FakeAuthStateSource implements FirebaseAuthStateSource {
@@ -258,6 +258,17 @@ ProviderContainer _container({
   );
 }
 
+/// Placeholder workspace: the app lock must cover this content, not the route
+/// that owns it.
+class _WorkspaceMarker extends StatelessWidget {
+  const _WorkspaceMarker();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(body: Center(child: Text('Duty workspace marker')));
+  }
+}
+
 Future<void> _flush() async {
   await Future<void>.delayed(Duration.zero);
   await Future<void>.delayed(Duration.zero);
@@ -265,6 +276,40 @@ Future<void> _flush() async {
 
 void main() {
   group('controller-managed auth lifecycle', () {
+    test('skips cleanup queued for an identity that already changed', () async {
+      final authState = _FakeAuthStateSource();
+      final session = _session();
+      authState.currentUid = session.uid;
+      final repository = _FakeAuthRepository(guardSession: session);
+      repository.sessionForCurrentUser = () => session;
+      final container = _container(
+        authState: authState,
+        repository: repository,
+        accounts: _FakeSavedAccountsService(),
+      );
+      addTearDown(container.dispose);
+      addTearDown(authState.dispose);
+
+      await container.read(authSessionProvider.future);
+      final notifier = container.read(authSessionProvider.notifier);
+      final order = <String>[];
+
+      final cleanup = notifier.enqueueIdentityCleanup(() async {
+        order.add('cleanup');
+      });
+      // A new identity is requested before the queued cleanup runs.
+      notifier.clearSession();
+      await cleanup;
+      expect(order, isEmpty);
+
+      // Cleanup queued for the current identity still runs.
+      final current = notifier.enqueueIdentityCleanup(() async {
+        order.add('current');
+      });
+      await current;
+      expect(order, <String>['current']);
+    });
+
     test(
       'does not publish a Firebase sign-in event before metadata persists',
       () async {
@@ -722,45 +767,60 @@ void main() {
     },
   );
 
-  testWidgets('AuthGate holds a uid-bound account behind its app lock', (
-    WidgetTester tester,
-  ) async {
-    final session = _session();
-    final pendingFingerprint = Completer<BiometricAuthOutcome>();
-    final accounts =
-        _FakeSavedAccountsService()
-          ..saved.add(
-            SavedAccount(
-              role: session.role.name,
-              loginId: session.primaryId,
-              displayName: session.displayName,
-              lastLoginAt: DateTime.now(),
-              uid: session.uid,
-              biometricEnabled: true,
+  testWidgets(
+    'the app lock holds a uid-bound account behind its lock surface',
+    (WidgetTester tester) async {
+      final session = _session();
+      final pendingFingerprint = Completer<BiometricAuthOutcome>();
+      final accounts =
+          _FakeSavedAccountsService()
+            ..saved.add(
+              SavedAccount(
+                role: session.role.name,
+                loginId: session.primaryId,
+                displayName: session.displayName,
+                lastLoginAt: DateTime.now(),
+                uid: session.uid,
+                biometricEnabled: true,
+              ),
+            );
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: <Override>[
+            authSessionProvider.overrideWith(
+              () => _FixedSessionNotifier(session),
             ),
-          );
-
-    await tester.pumpWidget(
-      ProviderScope(
-        overrides: <Override>[
-          authSessionProvider.overrideWith(
-            () => _FixedSessionNotifier(session),
+            savedAccountsServiceProvider.overrideWithValue(accounts),
+            biometricServiceProvider.overrideWithValue(
+              _FakeBiometricService(pendingAuthentication: pendingFingerprint),
+            ),
+          ],
+          // The lock is an app-level overlay above the navigator; the route
+          // itself is only session -> workspace routing now.
+          child: MaterialApp(
+            builder:
+                (BuildContext context, Widget? child) =>
+                    AppLockOverlay(child: child ?? const SizedBox.shrink()),
+            home: const _WorkspaceMarker(),
           ),
-          savedAccountsServiceProvider.overrideWithValue(accounts),
-          biometricServiceProvider.overrideWithValue(
-            _FakeBiometricService(pendingAuthentication: pendingFingerprint),
-          ),
-        ],
-        child: const MaterialApp(home: AuthGateScreen()),
-      ),
-    );
-    await tester.pump();
-    await tester.pump();
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
 
-    expect(find.text('App Locked'), findsOneWidget);
-    expect(find.text('Sign in with PIN or password'), findsOneWidget);
-    pendingFingerprint.complete(BiometricAuthOutcome.failed);
-  });
+      expect(find.text('App Locked'), findsOneWidget);
+      expect(find.text('Duty workspace marker').hitTestable(), findsNothing);
+
+      // Cancelling the prompt keeps the lock up and offers credential recovery.
+      pendingFingerprint.complete(BiometricAuthOutcome.failed);
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('App Locked'), findsOneWidget);
+      expect(find.text('Sign in with PIN or password'), findsOneWidget);
+      expect(find.text('Duty workspace marker').hitTestable(), findsNothing);
+    },
+  );
 
   testWidgets(
     'enabling the app lock relocks the active gate after background and resume',
@@ -787,7 +847,12 @@ void main() {
       await tester.pumpWidget(
         UncontrolledProviderScope(
           container: container,
-          child: const MaterialApp(home: AuthGateScreen()),
+          child: MaterialApp(
+            builder:
+                (BuildContext context, Widget? child) =>
+                    AppLockOverlay(child: child ?? const SizedBox.shrink()),
+            home: const _WorkspaceMarker(),
+          ),
         ),
       );
       await tester.pump();
@@ -806,7 +871,6 @@ void main() {
       expect(find.text('App Locked'), findsNothing);
 
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
-      await tester.pump();
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pump();
       await tester.pump();

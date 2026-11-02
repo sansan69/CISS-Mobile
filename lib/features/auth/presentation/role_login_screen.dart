@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/auth/biometric_service.dart';
 import '../../../core/auth/guard_login_identifier.dart';
+import '../../../core/auth/pin_attempt_guard.dart';
 import '../../../core/auth/saved_accounts_service.dart';
 import '../../../core/haptics.dart';
 import '../../../core/models/auth_session.dart';
@@ -25,7 +26,7 @@ class RoleLoginScreen extends ConsumerStatefulWidget {
       usernameLabel = 'Employee ID or phone',
       usernameHint = 'CISS/2026/001',
       passwordLabel = 'Duty PIN',
-      passwordHint = '••••',
+      passwordHint = '••••••',
       buttonLabel = 'Sign in';
 
   const RoleLoginScreen.fieldOfficer({super.key})
@@ -159,19 +160,39 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
             pin: pin,
             saveForBiometric: _enableBiometric,
           );
+      await ref.read(pinAttemptGuardProvider).reset(loginId);
       if (!mounted) return;
       _onLoginSuccess(session);
     } catch (error) {
       if (!mounted) return;
       Haptics.error();
+      var cooldown = Duration.zero;
+      // Network failures are not credential failures and must not consume the
+      // local attempt budget. A server-side 429 is already the authoritative
+      // cooldown.
+      if (!CissError.isRetryableNetworkError(error) &&
+          !_isRateLimited(error)) {
+        cooldown = await ref
+            .read(pinAttemptGuardProvider)
+            .recordFailure(loginId);
+      }
+      if (!mounted) return;
       setState(() {
         _loading = false;
         _error =
-            'Unable to sign in with those details. Check your ID and PIN, '
-            'or set up a PIN if this is your first sign-in.';
+            cooldown > Duration.zero
+                ? 'Too many incorrect attempts. Try again in '
+                    '${PinAttemptGuard.formatCooldown(cooldown)}.'
+                : 'Unable to sign in with those details. Check your ID and '
+                    'PIN, or set up a PIN if this is your first sign-in.';
       });
       _loadSavedAccounts();
     }
+  }
+
+  bool _isRateLimited(Object error) {
+    final text = error.toString().toLowerCase();
+    return text.contains('429') || text.contains('too many');
   }
 
   Future<void> _doSignInFieldOfficer(String email, String password) async {
@@ -298,6 +319,22 @@ class _RoleLoginScreenState extends ConsumerState<RoleLoginScreen>
         _passwordResetMessage = null;
       });
       return;
+    }
+
+    if (widget.role == LoginRole.guard) {
+      final cooldown = await ref
+          .read(pinAttemptGuardProvider)
+          .remainingCooldown(loginId);
+      if (!mounted) return;
+      if (cooldown > Duration.zero) {
+        setState(() {
+          _error =
+              'Too many incorrect attempts. Try again in '
+              '${PinAttemptGuard.formatCooldown(cooldown)}.';
+          _passwordResetMessage = null;
+        });
+        return;
+      }
     }
 
     setState(() {

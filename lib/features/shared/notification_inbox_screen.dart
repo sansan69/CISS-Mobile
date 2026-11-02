@@ -9,9 +9,7 @@ import '../../../core/fcm/notification_service.dart';
 import '../auth/application/auth_controller.dart';
 import '../../../core/models/app_role.dart';
 import '../guard/guard_tab_provider.dart';
-import '../guard/presentation/screens/guard_leave_screen.dart';
 import '../guard/presentation/screens/guard_training_screen.dart';
-import '../guard/presentation/screens/guard_payslips_screen.dart';
 import '../field_officer/field_officer_tab_provider.dart';
 import '../field_officer/presentation/screens/field_officer_duties_screen.dart';
 import '../field_officer/presentation/screens/field_officer_training_assignments_screen.dart';
@@ -30,15 +28,6 @@ class NotificationInboxScreen extends ConsumerWidget {
     final isGuard = session?.role == AppRole.guard;
 
     switch (type) {
-      case 'leave_approved':
-      case 'leave_rejected':
-      case 'leave_request':
-        if (isGuard) {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(builder: (_) => const GuardLeaveScreen()),
-          );
-        }
-        break;
       case 'training_assigned':
         if (isGuard) {
           Navigator.of(context).push(
@@ -50,15 +39,6 @@ class NotificationInboxScreen extends ConsumerWidget {
           Navigator.of(context).push(
             MaterialPageRoute<void>(
               builder: (_) => const FieldOfficerTrainingAssignmentsScreen(),
-            ),
-          );
-        }
-        break;
-      case 'payslip':
-        if (isGuard) {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => const GuardPayslipsScreen(),
             ),
           );
         }
@@ -230,7 +210,6 @@ class NotificationInboxScreen extends ConsumerWidget {
     return switch (type) {
       'work_order' => tokens.accent,
       'attendance_marked' => tokens.success,
-      'leave_approved' => tokens.primary,
       'training_assigned' => tokens.warning,
       'broadcast' => tokens.primary,
       'report_review' => tokens.accent,
@@ -242,7 +221,6 @@ class NotificationInboxScreen extends ConsumerWidget {
     return switch (type) {
       'work_order' => Icons.assignment_rounded,
       'attendance_marked' => Icons.fact_check_rounded,
-      'leave_approved' => Icons.event_available_rounded,
       'training_assigned' => Icons.school_rounded,
       'broadcast' => Icons.campaign_rounded,
       'report_review' => Icons.edit_note_rounded,

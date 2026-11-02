@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+		Push notification environment. `$(APS_ENVIRONMENT)` is expanded from the
+		Runner target build settings: `development` for Debug, `production` for
+		Release/Profile so App Store builds carry the production APNs
+		entitlement. See ios/Runner.xcodeproj/project.pbxproj.
+
+		The APNs / Push Notifications capability and the matching App ID must
+		still be enabled in the Apple Developer portal and in Xcode
+		(Signing & Capabilities) before an archive can be exported.
+	-->
+	<key>aps-environment</key>
+	<string>$(APS_ENVIRONMENT)</string>
+</dict>
+</plist>

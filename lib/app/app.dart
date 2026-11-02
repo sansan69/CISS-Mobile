@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'router/app_router.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_mode_controller.dart';
+import '../core/auth/app_lock_overlay.dart';
 import '../core/update/app_update_gate.dart';
 
 class CissMobileApp extends ConsumerWidget {
@@ -22,9 +23,12 @@ class CissMobileApp extends ConsumerWidget {
       darkTheme: buildCissTheme(Brightness.dark),
       themeMode: themeMode,
       routerConfig: router,
+      // The app lock sits above the navigator (and above the update gate) so it
+      // covers every pushed route, not just the `/` gate route.
       builder:
-          (context, child) =>
-              AppUpdateGate(child: child ?? const SizedBox.shrink()),
+          (context, child) => AppLockOverlay(
+            child: AppUpdateGate(child: child ?? const SizedBox.shrink()),
+          ),
     );
   }
 }

@@ -41,7 +41,8 @@ android {
     defaultConfig {
         applicationId = "co.in.ciss.ciss_mobile"
         minSdk = 24
-        targetSdk = 34
+        // Google Play requires API 36 for submissions after 2026-08-31 (F-13).
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }

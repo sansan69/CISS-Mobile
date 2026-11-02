@@ -1,12 +1,13 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dio/dio.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'apk_downloader.dart';
-import 'app_update_service.dart';
 import '../settings/remote_config.dart';
 import '../settings/remote_config_provider.dart';
+import 'apk_downloader.dart';
+import 'app_update_service.dart';
+import 'update_url_policy.dart';
 
 /// Whether an available update must be installed before the app is usable.
 ///
@@ -16,6 +17,24 @@ import '../settings/remote_config_provider.dart';
 bool updateIsMandatory(AppUpdateCheckResult result, RemoteConfig config) =>
     result.isMandatory || config.app.forceUpdate;
 
+/// Server-driven maintenance and forced-update gate.
+///
+/// F-25: the gate used to run exactly once from `didChangeDependencies`, with
+/// a `ref.read` snapshot of the remote config. Two consequences:
+///
+/// * a `maintenance` flag that arrived after the first frame (or during the
+///   session) was ignored, so the kill switch could not contain a bad release;
+/// * routine flags read at first frame were usually cached/default values.
+///
+/// The gate now watches the remote config, re-checks on
+/// [AppLifecycleState.resumed], and stays mounted so the blocking UI can be
+/// torn down reactively.
+///
+/// Note: [AppUpdateGate] is installed through `MaterialApp.builder`, which is
+/// *above* the application [Navigator]. Route-based `showDialog` calls from
+/// this position fail with "Navigator operation requested with a context that
+/// does not include a Navigator", so the gate renders its blocking UI as an
+/// in-tree overlay instead of pushing dialog routes.
 class AppUpdateGate extends ConsumerStatefulWidget {
   const AppUpdateGate({required this.child, super.key});
 
@@ -25,116 +44,197 @@ class AppUpdateGate extends ConsumerStatefulWidget {
   ConsumerState<AppUpdateGate> createState() => _AppUpdateGateState();
 }
 
-enum _UpdatePhase { idle, downloading, verifying, installing, done }
+enum _UpdatePhase {
+  idle,
+  downloading,
+  verifying,
+  installing,
+  installPermission,
+  done,
+}
 
-class _AppUpdateGateState extends ConsumerState<AppUpdateGate> {
-  bool _checked = false;
-  bool _dialogOpen = false;
+class _AppUpdateGateState extends ConsumerState<AppUpdateGate>
+    with WidgetsBindingObserver {
+  bool _startupScheduled = false;
+  bool _checkInFlight = false;
+  AppUpdateCheckResult? _pendingUpdate;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_checked) return;
-    _checked = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkForUpdate());
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    _refreshAndRecheck();
+  }
+
+  /// Pull a fresh config snapshot, then re-run the update check.
+  ///
+  /// Runs on resume so a maintenance window or a pulled release reaches
+  /// already-open sessions instead of waiting for the next cold start.
+  Future<void> _refreshAndRecheck() async {
+    try {
+      await ref.read(remoteConfigProvider.notifier).refresh(force: true);
+    } catch (error) {
+      debugPrint('AppUpdateGate: remote config refresh failed: $error');
+    }
+    if (!mounted) return;
+    if (ref.read(remoteConfigProvider).app.maintenance) {
+      // The maintenance overlay already blocks the app.
+      return;
+    }
+    await _checkForUpdate();
   }
 
   Future<void> _checkForUpdate() async {
-    if (!mounted || _dialogOpen) return;
+    if (!mounted || _checkInFlight) return;
+    if (ref.read(remoteConfigProvider).app.maintenance) return;
 
-    // Server-driven maintenance gate (spec §2). Blocking, but only reached
-    // post-frame so it never destabilizes startup.
-    final config = ref.read(remoteConfigProvider);
-    if (config.app.maintenance) {
-      _dialogOpen = true;
-      await showDialog<void>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => const _MaintenanceDialog(),
-      );
-      _dialogOpen = false;
-      return;
+    _checkInFlight = true;
+    try {
+      final result =
+          await ref.read(appUpdateServiceProvider).checkForAndroidUpdate();
+      if (!mounted) return;
+      if (result == null || !result.hasUpdate || result.update == null) {
+        if (_pendingUpdate != null) {
+          setState(() => _pendingUpdate = null);
+        }
+        return;
+      }
+      setState(() => _pendingUpdate = result);
+    } catch (error) {
+      debugPrint('AppUpdateGate: update check failed: $error');
+    } finally {
+      _checkInFlight = false;
     }
+  }
 
-    final result =
-        await ref.read(appUpdateServiceProvider).checkForAndroidUpdate();
-    if (!mounted || result == null || !result.hasUpdate || result.update == null) {
-      return;
-    }
-
-    final mandatory = updateIsMandatory(result, config);
-    _dialogOpen = true;
-    await showDialog<void>(
-      context: context,
-      barrierDismissible: !mandatory,
-      builder: (ctx) => _UpdateDialog(
-        result: result,
-        mandatory: mandatory,
-        onLater: () {
-          if (ctx.mounted) Navigator.of(ctx).pop();
-        },
-        onBrowserFallback: (update) => _browserFallback(update),
-      ),
-    );
-    _dialogOpen = false;
+  void _dismissUpdate() {
+    if (!mounted || _pendingUpdate == null) return;
+    setState(() => _pendingUpdate = null);
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) {
+    final maintenance = ref.watch(
+      remoteConfigProvider.select((config) => config.app.maintenance),
+    );
 
-  Future<void> _browserFallback(AndroidUpdateInfo update) async {
-    final uri = Uri.tryParse(update.apkUrl);
-    if (uri == null || !mounted) return;
-    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!opened && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open the APK download link.')),
-      );
+    // Reactive kill switch: a flag flip tears the update overlay down and a
+    // cleared flag re-runs the update check once maintenance is over.
+    ref.listen<bool>(
+      remoteConfigProvider.select((config) => config.app.maintenance),
+      (previous, next) {
+        if (!next && (previous ?? false)) {
+          _checkForUpdate();
+        }
+      },
+    );
+    // A forced update that arrives after the check must still block; the
+    // overlay reads forceUpdate itself, so only a fresh check is needed when
+    // no update dialog is pending.
+    ref.listen<bool>(
+      remoteConfigProvider.select((config) => config.app.forceUpdate),
+      (previous, next) {
+        if (next && _pendingUpdate == null) {
+          _checkForUpdate();
+        }
+      },
+    );
+
+    if (!_startupScheduled) {
+      _startupScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (ref.read(remoteConfigProvider).app.maintenance) return;
+        _checkForUpdate();
+      });
     }
+
+    final pending = _pendingUpdate;
+    return Stack(
+      children: [
+        widget.child,
+        if (maintenance) const _MaintenanceOverlay(),
+        if (!maintenance && pending != null && pending.update != null)
+          _UpdateOverlay(result: pending, onDismiss: _dismissUpdate),
+      ],
+    );
   }
+}
+
+/// Blocking card chrome shared by the maintenance and update overlays.
+Widget _blockingOverlay(Widget card) {
+  return Material(
+    type: MaterialType.transparency,
+    // Expand so the scrim covers the whole screen instead of shrink-wrapping
+    // the card (the parent Stack hands out loose constraints).
+    child: Stack(
+      fit: StackFit.expand,
+      children: [
+        // Full-screen, non-dismissible scrim: absorbs taps aimed at the app
+        // beneath the gate.
+        const Positioned.fill(
+          child: AbsorbPointer(child: ColoredBox(color: Colors.black54)),
+        ),
+        SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              child: card,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 /// Blocking gate shown while the server reports `app.maintenance` (spec §2).
-class _MaintenanceDialog extends StatelessWidget {
-  const _MaintenanceDialog();
+class _MaintenanceOverlay extends StatelessWidget {
+  const _MaintenanceOverlay();
 
   @override
-  Widget build(BuildContext context) => PopScope(
-        canPop: false,
-        child: AlertDialog(
-          icon: const Icon(Icons.build_rounded, size: 32),
-          title: const Text('Under maintenance'),
-          content: const Text(
-            'CISS Workforce is temporarily unavailable for scheduled '
-            'maintenance. Please try again shortly.',
-          ),
+  Widget build(BuildContext context) {
+    return _blockingOverlay(
+      const AlertDialog(
+        icon: Icon(Icons.build_rounded, size: 32),
+        title: Text('Under maintenance'),
+        content: Text(
+          'CISS Workforce is temporarily unavailable for scheduled '
+          'maintenance. Please try again shortly.',
         ),
-      );
+      ),
+    );
+  }
 }
 
-/// The initial update-available dialog.
-class _UpdateDialog extends ConsumerStatefulWidget {
-  const _UpdateDialog({
-    required this.result,
-    required this.mandatory,
-    required this.onLater,
-    required this.onBrowserFallback,
-  });
+/// The update-available card (download, verify, install).
+class _UpdateOverlay extends ConsumerStatefulWidget {
+  const _UpdateOverlay({required this.result, required this.onDismiss});
 
   final AppUpdateCheckResult result;
-  final bool mandatory;
-  final VoidCallback onLater;
-  final void Function(AndroidUpdateInfo) onBrowserFallback;
+  final VoidCallback onDismiss;
 
   @override
-  ConsumerState<_UpdateDialog> createState() => _UpdateDialogState();
+  ConsumerState<_UpdateOverlay> createState() => _UpdateOverlayState();
 }
 
-class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
+class _UpdateOverlayState extends ConsumerState<_UpdateOverlay> {
   _UpdatePhase _phase = _UpdatePhase.idle;
   int _received = 0;
   int _total = 0;
   String? _errorMessage;
+  String? _downloadedPath;
   CancelToken? _cancelToken;
 
   @override
@@ -145,16 +245,23 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // Watching `forceUpdate` (rather than snapshotting it) makes a server flip
+    // while the card is already open immediately remove the "Later" escape
+    // hatch and re-title the dialog.
+    final mandatory = updateIsMandatory(
+      widget.result,
+      ref.watch(remoteConfigProvider),
+    );
     final update = widget.result.update!;
-    final sizeMb = update.sizeBytes > 0
-        ? (update.sizeBytes / (1024 * 1024)).toStringAsFixed(1)
-        : null;
+    final sizeMb =
+        update.sizeBytes > 0
+            ? (update.sizeBytes / (1024 * 1024)).toStringAsFixed(1)
+            : null;
 
-    return PopScope(
-      canPop: !widget.mandatory && _phase == _UpdatePhase.idle,
-      child: AlertDialog(
+    return _blockingOverlay(
+      AlertDialog(
         icon: _phaseIcon(),
-        title: Text(_phaseTitle()),
+        title: Text(_phaseTitle(mandatory)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -177,11 +284,16 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
                 child: Row(
                   children: [
                     SizedBox(
-                      width: 16, height: 16,
+                      width: 16,
+                      height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                     SizedBox(width: 8),
-                    Text('Verifying download integrity...'),
+                    Expanded(
+                      child: Text(
+                        'Verifying download integrity and signature...',
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -191,7 +303,8 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
                 child: Row(
                   children: [
                     SizedBox(
-                      width: 16, height: 16,
+                      width: 16,
+                      height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                     SizedBox(width: 8),
@@ -203,8 +316,8 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
               const Padding(
                 padding: EdgeInsets.only(top: 12),
                 child: Text(
-                  'Update downloaded. The system Package Installer will now '
-                  'open to complete the installation.',
+                  'Update downloaded and verified. The system Package Installer '
+                  'will now open to complete the installation.',
                 ),
               ),
             if (_errorMessage != null) ...[
@@ -218,20 +331,22 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
             ],
           ],
         ),
-        actions: _actions(context, update),
+        actions: _actions(context, update, mandatory),
       ),
     );
   }
 
-  List<Widget> _actions(BuildContext context, AndroidUpdateInfo update) {
+  List<Widget> _actions(
+    BuildContext context,
+    AndroidUpdateInfo update,
+    bool mandatory,
+  ) {
+    final canLeave = !mandatory;
     switch (_phase) {
       case _UpdatePhase.idle:
         return [
-          if (!widget.mandatory)
-            TextButton(
-              onPressed: widget.onLater,
-              child: const Text('Later'),
-            ),
+          if (canLeave)
+            TextButton(onPressed: widget.onDismiss, child: const Text('Later')),
           FilledButton.icon(
             icon: const Icon(Icons.download_rounded),
             onPressed: _startDownload,
@@ -240,37 +355,54 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
         ];
       case _UpdatePhase.downloading:
         return [
-          TextButton(
-            onPressed: () => _cancelDownload(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton.icon(
-            icon: const Icon(Icons.download_rounded),
-            onPressed: null, // Disabled while downloading
-            label: const Text('Downloading...'),
-          ),
+          TextButton(onPressed: _cancelDownload, child: const Text('Cancel')),
+          FilledButton(onPressed: null, child: const Text('Downloading...')),
         ];
       case _UpdatePhase.verifying:
       case _UpdatePhase.installing:
-        return [const SizedBox()]; // No actions during verify/install
+        return const [SizedBox.shrink()];
+      case _UpdatePhase.installPermission:
+        return [
+          if (canLeave)
+            TextButton(onPressed: _cancelInstall, child: const Text('Cancel')),
+          TextButton(
+            onPressed: _openBrowserFallback,
+            child: const Text('Download in browser'),
+          ),
+          FilledButton(
+            onPressed: _openInstallPermissionSettings,
+            child: const Text('Open settings'),
+          ),
+        ];
       case _UpdatePhase.done:
         return [
-          if (!widget.mandatory)
-            TextButton(
-              onPressed: widget.onLater,
-              child: const Text('Later'),
-            ),
+          if (canLeave)
+            TextButton(onPressed: widget.onDismiss, child: const Text('Later')),
         ];
     }
   }
 
   Future<void> _startDownload() async {
+    final update = widget.result.update!;
+
+    // Never fetch bytes from a URL the update policy rejects (F-08 / P-04).
+    final policy = UpdateUrlPolicy.check(update.apkUrl);
+    if (!policy.isAllowed) {
+      setState(() {
+        _errorMessage =
+            'This update link is not a trusted CISS download URL, '
+            'so nothing was downloaded. Please contact support.';
+      });
+      return;
+    }
+
     setState(() {
       _phase = _UpdatePhase.downloading;
       _errorMessage = null;
+      _received = 0;
+      _total = update.sizeBytes;
     });
 
-    final update = widget.result.update!;
     final service = ref.read(appUpdateServiceProvider);
     final downloader = ApkDownloader();
     final cancelToken = CancelToken();
@@ -285,39 +417,40 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
         cancelToken: cancelToken,
         onProgress: (received, total) {
           if (!mounted) return;
-          setState(() { _received = received; _total = total; });
+          setState(() {
+            _received = received;
+            _total = total;
+          });
         },
       );
+    } on ApkManifestError catch (error) {
+      _failDownload(error.message);
+      return;
     } on ApkHashMismatchError {
-      if (!mounted) return;
-      setState(() {
-        _phase = _UpdatePhase.idle;
-        _errorMessage = 'Download integrity check failed. This may indicate '
-            'a corrupted download. Please try again or use the browser download.';
-      });
+      _failDownload(
+        'Download integrity check failed. This may indicate a corrupted '
+        'download. Please try again.',
+      );
       return;
-    } on ApkDiskFullError catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _phase = _UpdatePhase.idle;
-        _errorMessage = e.message;
-      });
+    } on ApkSizeExceededError catch (error) {
+      _failDownload(error.message);
       return;
-    } on ApkNetworkError catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _phase = _UpdatePhase.idle;
-        _errorMessage = cancelToken.isCancelled
+    } on ApkDiskFullError catch (error) {
+      _failDownload(error.message);
+      return;
+    } on ApkNetworkError catch (error) {
+      _failDownload(
+        cancelToken.isCancelled
             ? 'Download cancelled.'
-            : 'Network error: ${e.message}. Check your connection and try again.';
-      });
+            : 'Network error: ${error.message}. Check your connection and try '
+                'again.',
+      );
       return;
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _phase = _UpdatePhase.idle;
-        _errorMessage = 'Download failed: $e';
-      });
+    } on ApkStorageError catch (error) {
+      _failDownload(error.message);
+      return;
+    } catch (error) {
+      _failDownload('Download failed: $error');
       return;
     } finally {
       if (identical(_cancelToken, cancelToken)) {
@@ -325,80 +458,109 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
       }
     }
 
-    // SHA256 passed — now install
     if (!mounted) return;
-
+    _downloadedPath = localPath;
     setState(() => _phase = _UpdatePhase.verifying);
-    await Future.delayed(const Duration(milliseconds: 300)); // Brief UX pause
+    await Future<void>.delayed(const Duration(milliseconds: 300)); // UX pause
     if (!mounted) return;
 
-    setState(() => _phase = _UpdatePhase.installing);
-
-    // Check install permission
     final canInstall = await service.canInstallApk();
     if (!mounted) return;
-
     if (!canInstall) {
-      // Guide user to the Install unknown apps settings
-      final shouldOpen = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Permission required'),
-          content: const Text(
-            'To install this update, CISS Workforce needs permission to '
-            'install apps from unknown sources. Open system settings to '
-            'grant this?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Open settings'),
-            ),
-          ],
-        ),
-      );
-
-      if (shouldOpen == true) {
-        await service.openInstallSettings();
-        // After returning from settings, try again
-        final retryCanInstall = await service.canInstallApk();
-        if (!retryCanInstall) {
-          if (!mounted) return;
-          widget.onBrowserFallback(update);
-          Navigator.of(context).pop();
-          return;
-        }
-      } else {
-        // User declined — fall back to browser
-        widget.onBrowserFallback(update);
-        if (!mounted) return;
-        Navigator.of(context).pop();
-        return;
-      }
+      setState(() => _phase = _UpdatePhase.installPermission);
+      return;
     }
+    await _install(localPath);
+  }
 
-    // Proceed with install
-    final result = await service.installUpdate(localPath);
+  Future<void> _install(String localPath) async {
+    setState(() {
+      _phase = _UpdatePhase.installing;
+      _errorMessage = null;
+    });
+
+    // [AppUpdateService.installUpdate] verifies the package name and signer
+    // certificate natively before it hands anything to the installer.
+    final result = await ref
+        .read(appUpdateServiceProvider)
+        .installUpdate(localPath);
     if (!mounted) return;
 
     switch (result) {
       case InstallSuccess():
         setState(() => _phase = _UpdatePhase.done);
-      case InstallNeedsPermission():
-        // Should not reach here after the canInstall check above, but handle it
-        widget.onBrowserFallback(update);
-        Navigator.of(context).pop();
-      case InstallFailed(message: final msg):
+      case InstallSignatureRejected(reason: final reason):
+        // Security refusal: keep the blocking card, never fall back.
         setState(() {
           _phase = _UpdatePhase.idle;
-          _errorMessage = 'Installation failed: $msg';
+          _errorMessage =
+              'The downloaded update could not be verified as a '
+              'genuine CISS Workforce build, so installation was blocked. '
+              '($reason)';
+        });
+      case InstallNeedsPermission():
+        setState(() => _phase = _UpdatePhase.installPermission);
+      case InstallFailed(message: final message):
+        setState(() {
+          _phase = _UpdatePhase.idle;
+          _errorMessage = 'Installation failed: $message';
         });
     }
+  }
+
+  Future<void> _openInstallPermissionSettings() async {
+    final service = ref.read(appUpdateServiceProvider);
+    await service.openInstallSettings();
+    if (!mounted) return;
+    final canInstall = await service.canInstallApk();
+    if (!mounted) return;
+    if (canInstall && _downloadedPath != null) {
+      await _install(_downloadedPath!);
+    } else {
+      setState(() {
+        _errorMessage =
+            'Install permission is still disabled. Grant '
+            '"Install unknown apps" for CISS Workforce and try again.';
+      });
+    }
+  }
+
+  void _cancelInstall() {
+    setState(() {
+      _phase = _UpdatePhase.idle;
+      _errorMessage = null;
+    });
+  }
+
+  Future<void> _openBrowserFallback() async {
+    final update = widget.result.update!;
+    // The browser fallback is a launch sink too, so it gets the same policy.
+    final target = UpdateUrlPolicy.check(update.apkUrl);
+    if (!target.isAllowed) {
+      setState(() {
+        _errorMessage =
+            'This update link is not a trusted CISS download URL '
+            'and was not opened.';
+      });
+      return;
+    }
+    final opened = await launchUrl(
+      target.uri!,
+      mode: LaunchMode.externalApplication,
+    );
+    if (!opened && mounted) {
+      setState(() {
+        _errorMessage = 'Could not open the APK download link.';
+      });
+    }
+  }
+
+  void _failDownload(String message) {
+    if (!mounted) return;
+    setState(() {
+      _phase = _UpdatePhase.idle;
+      _errorMessage = message;
+    });
   }
 
   void _cancelDownload() {
@@ -419,23 +581,29 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
         return const Icon(Icons.verified_rounded, size: 32);
       case _UpdatePhase.installing:
         return const Icon(Icons.system_update_rounded, size: 32);
+      case _UpdatePhase.installPermission:
+        return const Icon(Icons.admin_panel_settings_rounded, size: 32);
       case _UpdatePhase.done:
-        return Icon(Icons.check_circle_rounded,
-            size: 32, color: Colors.green);
+        return const Icon(
+          Icons.check_circle_rounded,
+          size: 32,
+          color: Colors.green,
+        );
     }
   }
 
-  String _phaseTitle() {
+  String _phaseTitle(bool mandatory) {
     switch (_phase) {
       case _UpdatePhase.idle:
-        if (widget.mandatory) return 'Update required';
-        return 'Update available';
+        return mandatory ? 'Update required' : 'Update available';
       case _UpdatePhase.downloading:
         return 'Downloading update...';
       case _UpdatePhase.verifying:
         return 'Verifying download...';
       case _UpdatePhase.installing:
         return 'Installing update...';
+      case _UpdatePhase.installPermission:
+        return 'Permission required';
       case _UpdatePhase.done:
         return 'Update ready';
     }
@@ -457,25 +625,27 @@ class _UpdateDialogState extends ConsumerState<_UpdateDialog> {
           ],
           if (update.releaseNotes.isNotEmpty) ...[
             const SizedBox(height: 16),
-            Text(
-              'What changed',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
+            Text('What changed', style: Theme.of(context).textTheme.titleSmall),
             const SizedBox(height: 8),
             ...update.releaseNotes
                 .take(4)
-                .map((note) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('• '),
-                          Expanded(child: Text(note)),
-                        ],
-                      ),
-                    )),
+                .map(
+                  (note) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [const Text('• '), Expanded(child: Text(note))],
+                    ),
+                  ),
+                ),
           ],
         ],
+      );
+    }
+    if (_phase == _UpdatePhase.installPermission) {
+      return const Text(
+        'To install this update, CISS Workforce needs permission to install '
+        'apps from unknown sources. Open system settings to grant it?',
       );
     }
     return const SizedBox.shrink();

@@ -10,7 +10,6 @@ import '../../features/field_officer/presentation/screens/field_officer_work_ord
 import '../../features/guard/presentation/screens/guard_attendance_screen.dart';
 import '../../features/guard/presentation/screens/guard_dashboard_screen.dart';
 import '../../features/guard/presentation/screens/guard_incidents_screen.dart';
-import '../../features/guard/presentation/screens/guard_leave_screen.dart';
 import '../../features/guard/presentation/screens/guard_profile_screen.dart';
 import '../settings/remote_config_provider.dart';
 
@@ -47,7 +46,6 @@ class RefreshController {
     _ref.invalidate(attendanceSitesProvider);
     _ref.invalidate(guardProfileProvider);
     _ref.invalidate(guardIncidentsProvider);
-    _ref.invalidate(guardLeaveProvider);
 
     // Field Officer Portal
     _ref.invalidate(fieldOfficerDashboardProvider);

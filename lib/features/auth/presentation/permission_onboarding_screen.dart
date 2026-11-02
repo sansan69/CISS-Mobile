@@ -6,7 +6,6 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/location/background_tracking_service.dart';
 import '../../../core/location/device_compat_service.dart';
-import '../../../shared/widgets/brand_banner.dart';
 import '../../../shared/widgets/screen_scaffold.dart';
 import '../../../shared/widgets/state_block.dart';
 import '../../../shared/widgets/status_chip.dart';

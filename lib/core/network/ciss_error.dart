@@ -74,11 +74,45 @@ class CissError {
     if (str.contains('camera')) {
       return 'Camera access is required. Please check your permissions.';
     }
-    if (error is StateError) return error.message.toString();
-    if (error is FormatException) {
+    if (error is StateError) {
+      if (str.contains('not authenticated') ||
+          str.contains('session expired') ||
+          str.contains('no user')) {
+        return 'Session expired. Please login again.';
+      }
+      return _fallbackMessage;
+    }
+    if (error is FormatException || error is TypeError) {
       return 'The server returned an invalid response.';
     }
+    if (error is Exception) {
+      final message = error.toString().replaceFirst('Exception: ', '').trim();
+      // Preserve short, human-readable backend messages, but never echo Dart
+      // internals, Firebase codes or stack-frame-shaped text to the user.
+      if (message.isNotEmpty &&
+          message.length <= 180 &&
+          !_looksLikeInternalError(message)) {
+        return message;
+      }
+    }
 
-    return error.toString().replaceFirst('Exception: ', '').trim();
+    return _fallbackMessage;
+  }
+
+  static const String _fallbackMessage =
+      'Something went wrong. Please try again.';
+
+  static bool _looksLikeInternalError(String message) {
+    final text = message.toLowerCase();
+    return text.contains('type ') ||
+        text.contains('is not a subtype') ||
+        text.contains('null is not') ||
+        text.contains('dart:') ||
+        text.contains('stateerror') ||
+        text.contains('formatexception') ||
+        text.contains('[firebase') ||
+        text.contains('stack trace') ||
+        text.contains('#0 ') ||
+        text.contains('exception:');
   }
 }

@@ -84,8 +84,30 @@ jobs:
 
       - name: Build signed release artifacts
         run: |
-          flutter build appbundle --release
-          flutter build apk --release
+          # Split debug info so Dart stack traces can be symbolised later
+          # (F-18 / P-09). The symbol files are archived below, never published
+          # as release assets.
+          flutter build appbundle --release --split-debug-info=build/symbols/dart
+          flutter build apk --release --split-debug-info=build/symbols/dart
+
+      - name: Retain R8 mapping and Dart symbols
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapping="build/app/outputs/mapping/release/mapping.txt"
+          if [[ ! -f "$mapping" ]]; then
+            echo "R8 mapping.txt was not produced by the release build"
+            exit 1
+          fi
+          mkdir -p build/symbols
+          cp "$mapping" build/symbols/mapping.txt
+
+          # --split-debug-info writes one .symbols file per ABI snapshot.
+          if ! find build/symbols/dart -type f -name '*.symbols' | grep -q .; then
+            echo "Dart symbol files were not produced; check --split-debug-info"
+            exit 1
+          fi
+          ls -l build/symbols build/symbols/dart
 
       - name: Verify production certificate and checksums
         shell: bash
@@ -124,6 +146,7 @@ jobs:
             build/app/outputs/flutter-apk/app-release.apk
             build/SHA256SUMS.txt
             build/signing-certificate.txt
+            build/symbols/
           if-no-files-found: error
 
       - name: Publish GitHub release

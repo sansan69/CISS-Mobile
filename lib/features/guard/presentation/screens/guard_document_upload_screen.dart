@@ -1,12 +1,14 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/network/providers.dart';
+import '../../../../../core/security/screen_security.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
@@ -75,70 +77,75 @@ class GuardDocumentUploadScreen extends ConsumerWidget {
         ),
     ];
 
-    return ScreenScaffold(
-      title: 'Upload documents',
-      subtitle: 'Missing enrolment documents',
-      children: <Widget>[
-        if (entries.isEmpty)
-          ModernCard(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Column(
-                children: <Widget>[
-                  Icon(
-                    Icons.verified_user_rounded,
-                    size: 40,
-                    color: tokens.success,
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  Text(
-                    'All documents are on file.',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+    // Aadhaar / identity documents must not reach the recents thumbnail,
+    // screenshots or screen recordings (F-09).
+    return SecureScreen(
+      holder: 'guard_document_upload',
+      child: ScreenScaffold(
+        title: 'Upload documents',
+        subtitle: 'Missing enrolment documents',
+        children: <Widget>[
+          if (entries.isEmpty)
+            ModernCard(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  children: <Widget>[
+                    Icon(
+                      Icons.verified_user_rounded,
+                      size: 40,
+                      color: tokens.success,
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Text(
-                    'Contact the administrator if a correction is needed.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: tokens.inkMuted,
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      'All documents are on file.',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'Contact the administrator if a correction is needed.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: tokens.inkMuted,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          )
-        else
-          ...entries.map(
-            (entry) => Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: ModernCard(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.lg,
-                    vertical: AppSpacing.sm,
-                  ),
-                  leading: Icon(entry.icon, color: tokens.primary),
-                  title: Text(
-                    entry.title,
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  subtitle: Text(entry.subtitle,
-                      style: TextStyle(color: tokens.inkMuted)),
-                  trailing: const Icon(Icons.chevron_right_rounded),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => _GuardDocumentUploadForm(
-                        category: entry.key,
-                        profile: profile,
+            )
+          else
+            ...entries.map(
+              (entry) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: ModernCard(
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.lg,
+                      vertical: AppSpacing.sm,
+                    ),
+                    leading: Icon(entry.icon, color: tokens.primary),
+                    title: Text(
+                      entry.title,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    subtitle: Text(entry.subtitle,
+                        style: TextStyle(color: tokens.inkMuted)),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => _GuardDocumentUploadForm(
+                          category: entry.key,
+                          profile: profile,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -178,8 +185,7 @@ class _GuardDocumentUploadForm extends ConsumerStatefulWidget {
 class _GuardDocumentUploadFormState
     extends ConsumerState<_GuardDocumentUploadForm> {
   final _documentNumber = TextEditingController();
-  final _aadhaarNumber = TextEditingController();
-  final ImagePicker _picker = ImagePicker();
+  final TextEditingController _aadhaarNumber = TextEditingController();
 
   String? _documentType;
   bool _consentAccepted = false;
@@ -214,20 +220,27 @@ class _GuardDocumentUploadFormState
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: const <String>['jpg', 'jpeg', 'png', 'pdf'],
-        withData: false,
+        // Web has no file paths: the picker must hand back bytes.
+        withData: kIsWeb,
       );
       if (result == null || result.files.isEmpty) return null;
       final file = result.files.first;
+      final bytes = file.bytes;
       final path = file.path;
-      if (path == null || path.isEmpty) {
-        throw StateError('Could not resolve picked file path.');
+      if (bytes == null && (path == null || path.isEmpty)) {
+        throw StateError('Could not resolve picked file.');
       }
-      if (await File(path).length() > _kMaxFileBytes) {
+      final sizeBytes = bytes?.length ?? await File(path!).length();
+      if (sizeBytes > _kMaxFileBytes) {
         throw StateError('Document must be no larger than 5 MB.');
       }
       return DocumentUploadFile(
-        path: path,
-        name: file.name.isEmpty ? 'document.${_extensionOf(path)}' : file.name,
+        path: path ?? '',
+        name:
+            file.name.isEmpty
+                ? 'document.${_extensionOf(path ?? 'jpg')}'
+                : file.name,
+        bytes: bytes,
       );
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
@@ -242,15 +255,18 @@ class _GuardDocumentUploadFormState
 
   Future<void> _takeFrontPhoto() async {
     try {
-      final picked = await _picker.pickImage(
+      final picked = await ImagePicker().pickImage(
         source: ImageSource.camera,
         imageQuality: 80,
       );
       if (picked != null && mounted) {
+        // Web picked files are object URLs; keep the bytes for the upload.
+        final bytes = await picked.readAsBytes();
         setState(
           () => _front = DocumentUploadFile(
             path: picked.path,
             name: picked.name.isEmpty ? 'aadhaar.jpg' : picked.name,
+            bytes: bytes,
           ),
         );
       }

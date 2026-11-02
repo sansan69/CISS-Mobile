@@ -50,11 +50,18 @@ class FingerprintSupport {
 class BiometricService {
   final LocalAuthentication _auth = LocalAuthentication();
 
+  /// `local_auth` has no web implementation, so every capability probe and
+  /// prompt must answer "unavailable" in the browser instead of invoking a
+  /// missing plugin channel.
+  bool get _isWeb => kIsWeb;
+
   Future<bool> isSupported() async {
+    if (_isWeb) return false;
     return await _auth.isDeviceSupported();
   }
 
   Future<bool> canAuthenticate() async {
+    if (_isWeb) return false;
     final bool canAuthenticateWithBiometrics = await _auth.canCheckBiometrics;
     final bool canAuthenticate =
         canAuthenticateWithBiometrics || await _auth.isDeviceSupported();
@@ -62,10 +69,12 @@ class BiometricService {
   }
 
   Future<bool> canAuthenticateWithBiometrics() async {
+    if (_isWeb) return false;
     return await _auth.canCheckBiometrics;
   }
 
   Future<List<BiometricType>> getAvailableBiometrics() async {
+    if (_isWeb) return const <BiometricType>[];
     return await _auth.getAvailableBiometrics();
   }
 
@@ -78,6 +87,14 @@ class BiometricService {
   /// Any enrolled biometric classification qualifies because `local_auth`
   /// cannot enforce a stronger policy consistently on every supported device.
   Future<FingerprintSupport> checkFingerprintSupport() async {
+    if (_isWeb) {
+      // No biometric API is exposed to web apps; report the same state as a
+      // device without a sensor so the UI hides biometric enrolment.
+      return const FingerprintSupport(
+        availability: FingerprintAvailability.noSensor,
+        enrolledBiometrics: <BiometricType>[],
+      );
+    }
     var deviceSupported = false;
     try {
       deviceSupported = await _auth.isDeviceSupported();
@@ -125,6 +142,7 @@ class BiometricService {
     bool stickyAuth = false,
     bool sensitiveTransaction = true,
   }) async {
+    if (_isWeb) return false;
     try {
       final didAuthenticate = await _auth.authenticate(
         localizedReason: localizedReason,
@@ -174,6 +192,7 @@ class BiometricService {
   Future<bool> authenticateBiometricOnly({
     required String localizedReason,
   }) async {
+    if (_isWeb) return false;
     try {
       final didAuthenticate = await _auth.authenticate(
         localizedReason: localizedReason,
@@ -199,6 +218,7 @@ class BiometricService {
   Future<BiometricAuthOutcome> authenticateFingerprint({
     required String localizedReason,
   }) async {
+    if (_isWeb) return BiometricAuthOutcome.notAvailable;
     try {
       final didAuthenticate = await _auth.authenticate(
         localizedReason: localizedReason,

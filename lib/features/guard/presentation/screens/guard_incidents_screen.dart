@@ -1,10 +1,11 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
+import '../../../../../core/media/photo_store.dart';
 import '../../../../../core/models/incident_models.dart';
+import '../../../../../core/offline/offline_queue.dart';
 import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/models/attendance_models.dart';
 import '../../../../../core/network/ciss_error.dart';
@@ -40,7 +41,6 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
   final TextEditingController _locationController = TextEditingController();
 
   XFile? _photo;
-  final ImagePicker _picker = ImagePicker();
 
   String? _message;
   bool _loading = false;
@@ -85,7 +85,7 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
 
   Future<void> _takePhoto() async {
     try {
-      final picked = await _picker.pickImage(
+      final picked = await pickPhoto(
         source: ImageSource.camera,
         imageQuality: 70,
       );
@@ -160,16 +160,25 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
         }
       } catch (uploadOrSubmitError) {
         if (CissError.isRetryableNetworkError(uploadOrSubmitError)) {
-          await ref
-              .read(offlineQueueProvider)
-              .enqueue(
-                path: '/api/guard/incidents',
-                method: 'POST',
-                body: {
-                  ...payload,
-                  if (photoDataUrl != null) 'photoDataUrls': [photoDataUrl],
-                },
+          try {
+            await ref
+                .read(offlineQueueProvider)
+                .enqueue(
+                  path: '/api/guard/incidents',
+                  method: 'POST',
+                  body: {
+                    ...payload,
+                    if (photoDataUrl != null) 'photoDataUrls': [photoDataUrl],
+                  },
+                );
+          } on OfflineQueueError catch (queueError) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(queueError.message)),
               );
+            }
+            return;
+          }
 
           await ref.read(draftServiceProvider).clearDraft(_draftKey);
 
@@ -375,8 +384,8 @@ class _GuardIncidentsScreenState extends ConsumerState<GuardIncidentsScreen> {
                                         borderRadius: BorderRadius.circular(
                                           AppRadius.md,
                                         ),
-                                        child: Image.file(
-                                          File(_photo!.path),
+                                        child: photoImage(
+                                          _photo!.path,
                                           fit: BoxFit.cover,
                                         ),
                                       ),

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../core/haptics.dart';
+import '../../../../../core/media/photo_store.dart';
 import '../../../../../core/offline/offline_queue.dart';
 import '../../../../../core/models/attendance_models.dart';
 import '../../../../../core/models/guard_profile.dart';
@@ -505,8 +505,7 @@ class _GuardAttendanceScreenState extends ConsumerState<GuardAttendanceScreen> {
     });
 
     try {
-      final file = File(_photoPath!);
-      final bytes = await file.readAsBytes();
+      final bytes = await readPhotoBytes(_photoPath!);
       final dataUrl = await ref
           .read(mobileRepositoryProvider)
           .encodeFileToDataUrl(bytes, 'image/jpeg');
@@ -2148,8 +2147,8 @@ class _BiometricPhotoCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.card),
           child: Stack(
             children: [
-              Image.file(
-                File(photoPath!),
+              photoImage(
+                photoPath!,
                 height: 180,
                 width: double.infinity,
                 fit: BoxFit.cover,

@@ -17,9 +17,8 @@ import 'screens/guard_attendance_screen.dart';
 import 'screens/guard_dashboard_screen.dart';
 import 'screens/guard_evaluations_screen.dart';
 import 'screens/guard_incidents_screen.dart';
-import 'screens/guard_leave_screen.dart';
-import 'screens/guard_payslips_screen.dart';
 import 'screens/guard_patrol_screen.dart';
+import 'screens/guard_payslips_screen.dart';
 import 'screens/guard_profile_screen.dart';
 import 'screens/guard_training_screen.dart';
 import 'widgets/guard_portal_widgets.dart';
@@ -163,7 +162,7 @@ class GuardActivityScreen extends ConsumerWidget {
             ModernHero(
               eyebrow: 'Operations',
               title: 'Duty Activity',
-              subtitle: 'Patrol, hourly night checks, leave and incident reports.',
+              subtitle: 'Patrol, hourly night checks, and incident reports.',
             ),
             const SizedBox(height: AppSpacing.lg),
             Padding(
@@ -178,18 +177,6 @@ class GuardActivityScreen extends ConsumerWidget {
                       Navigator.of(context).push(
                         MaterialPageRoute<void>(
                           builder: (_) => const GuardPatrolScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  GuardRecordCard(
-                    title: 'Leave Requests',
-                    subtitle: 'Apply for time off and review approval status',
-                    icon: Icons.event_available_rounded,
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const GuardLeaveScreen(),
                         ),
                       );
                     },
@@ -233,7 +220,7 @@ class GuardProfileHubScreen extends ConsumerWidget {
             ModernHero(
               eyebrow: 'Account',
               title: 'Profile & Growth',
-              subtitle: 'Credentials, payslips, training modules, and settings.',
+              subtitle: 'Credentials, salary slips, training modules, and settings.',
             ),
             const SizedBox(height: AppSpacing.lg),
             Padding(
@@ -253,8 +240,8 @@ class GuardProfileHubScreen extends ConsumerWidget {
                     },
                   ),
                   GuardRecordCard(
-                    title: 'Salary Payslips',
-                    subtitle: 'Monthly earnings, deductions, and PDF slips',
+                    title: 'Salary Slips',
+                    subtitle: 'Download PDF payslips published by the office',
                     icon: Icons.receipt_long_outlined,
                     onTap: () {
                       Navigator.of(context).push(

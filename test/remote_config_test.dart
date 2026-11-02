@@ -8,12 +8,12 @@ void main() {
       'version': 7,
       'app': {'minSupportedVersion': '1.0.21', 'forceUpdate': true, 'maintenance': false,
               'currencySymbol': '₹', 'distanceUnit': 'km'},
-      'modules': {'leave': true, 'loan': false},
+      'modules': {'expense': true, 'loan': false},
     });
     expect(rc.version, 7);
     expect(rc.app.forceUpdate, isTrue);
     expect(rc.app.currencySymbol, '₹');
-    expect(rc.modules.isOn('leave', fallback: false), isTrue);
+    expect(rc.modules.isOn('expense', fallback: false), isTrue);
     expect(rc.modules.isOn('loan', fallback: true), isFalse);
     expect(rc.modules.isOn('patrol', fallback: false), isTrue); // default
   });

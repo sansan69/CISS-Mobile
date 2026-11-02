@@ -24,7 +24,7 @@ RemoteConfig _cfg(Map<String, bool> modules) =>
     RemoteConfig.fromJson(<String, dynamic>{'modules': modules});
 
 Widget _app() => const MaterialApp(
-      home: ModuleGate(module: 'leave', child: Text('LEAVE')),
+      home: ModuleGate(module: 'expense', child: Text('EXPENSE')),
     );
 
 void main() {
@@ -33,14 +33,14 @@ void main() {
       ProviderScope(
         overrides: <Override>[
           remoteConfigProvider
-              .overrideWith(() => _FixedConfigNotifier(_cfg({'leave': true}))),
+              .overrideWith(() => _FixedConfigNotifier(_cfg({'expense': true}))),
         ],
         child: _app(),
       ),
     );
     await tester.pump();
 
-    expect(find.text('LEAVE'), findsOneWidget);
+    expect(find.text('EXPENSE'), findsOneWidget);
     expect(find.textContaining("isn't enabled"), findsNothing);
   });
 
@@ -50,14 +50,14 @@ void main() {
       ProviderScope(
         overrides: <Override>[
           remoteConfigProvider
-              .overrideWith(() => _FixedConfigNotifier(_cfg({'leave': false}))),
+              .overrideWith(() => _FixedConfigNotifier(_cfg({'expense': false}))),
         ],
         child: _app(),
       ),
     );
     await tester.pump();
 
-    expect(find.text('LEAVE'), findsNothing);
+    expect(find.text('EXPENSE'), findsNothing);
     expect(find.textContaining("isn't enabled"), findsOneWidget);
   });
 }

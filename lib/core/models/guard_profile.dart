@@ -294,11 +294,20 @@ class GuardDocument {
 /// Kept intentionally decoupled from image_picker/file_picker so the
 /// repository and tests never depend on a concrete picker package.
 class DocumentUploadFile {
-  const DocumentUploadFile({required this.path, required this.name});
+  const DocumentUploadFile({
+    required this.path,
+    required this.name,
+    this.bytes,
+  });
 
   /// Absolute path to the file on disk (JPEG/PNG/PDF allowed, ≤5 MB).
+  ///
+  /// Empty on web, where a picked file only exists as bytes.
   final String path;
 
   /// Original file name used as the storage name.
   final String name;
+
+  /// Raw file bytes. Required on web and used there for the multipart upload.
+  final List<int>? bytes;
 }

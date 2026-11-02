@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Ciss Mobile</string>
+	<string>CISS Workforce</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -31,8 +31,6 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
@@ -45,5 +43,29 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>CISS Workforce uses your location while you are on duty to record attendance check-ins, confirm you are inside your assigned site geofence and record patrol movement.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>CISS Workforce tracks your location during an active duty shift so your field officer can confirm site coverage, even while the app is in the background.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>CISS Workforce tracks your location during an active duty shift so your field officer can confirm site coverage, even while the app is in the background.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>CISS Workforce uses the camera to capture attendance photos, scan guard QR codes and attach photo evidence to incident reports.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>CISS Workforce lets you attach photos from your library to incident reports and duty proof.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>CISS Workforce saves photos you capture for attendance and incidents to your photo library when you choose to.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>CISS Workforce uses Face ID to unlock the app and confirm your identity for attendance.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>CISS Workforce reads motion and activity data to keep duty heartbeats accurate and to pause location tracking when you are stationary.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>CISS Workforce uses the microphone when you record a video as part of an incident report.</string>
 </dict>
 </plist>

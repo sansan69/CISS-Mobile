@@ -1,5 +1,4 @@
 import 'attendance_models.dart';
-import 'leave_models.dart';
 import 'report_models.dart';
 
 class GuardDashboardSnapshot {
@@ -12,7 +11,6 @@ class GuardDashboardSnapshot {
     required this.presentDays,
     required this.absentDays,
     required this.workingDays,
-    required this.leaveBalance,
     required this.latestEvalScore,
     required this.latestEvalPeriod,
     required this.nextShiftLabel,
@@ -29,7 +27,6 @@ class GuardDashboardSnapshot {
   final int presentDays;
   final int absentDays;
   final int workingDays;
-  final LeaveBalanceModel? leaveBalance;
   final num? latestEvalScore;
   final String? latestEvalPeriod;
   final String? nextShiftLabel;

@@ -37,8 +37,20 @@
     <!-- In-app APK update: install packages directly from the app -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!--
+      The app only captures still images and scans QR codes; it never records
+      audio or video with sound. Camera/mobile_scanner transitive manifests
+      request RECORD_AUDIO, so remove it from the merged manifest instead of
+      asking users for a microphone permission the product does not use.
+    -->
+    <uses-permission
+        android:name="android.permission.RECORD_AUDIO"
+        tools:node="remove" />
+
     <application
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="false"
         android:label="CISS Workforce"
         android:name=".CissMobileApplication"
         android:icon="@mipmap/ic_launcher"

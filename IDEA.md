@@ -1,0 +1,1 @@
+The HRM, SAAS app for enrolling the security guards, managing them, managing field officers, clients, sites and duty locations under the client, a multi user dashboard, live tracking and attendance recording of the guards etc.

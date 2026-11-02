@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../motion.dart';
 import '../../core/settings/remote_config_provider.dart';
 import '../../core/settings/route_modules.dart';
 import '../../features/shared/module_unavailable_screen.dart';
@@ -34,25 +35,30 @@ Page<void> _buildPage({
       Animation<double> secondaryAnimation,
       Widget child,
     ) {
+      final faded = FadeTransition(
+        opacity: CurvedAnimation(
+          parent: animation,
+          curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
+        ),
+        child: child,
+      );
+      // Respect the OS "reduce motion" setting: collapse to a cross-fade.
+      if (MediaQuery.disableAnimationsOf(context)) {
+        return faded;
+      }
       return SlideTransition(
         position: Tween<Offset>(
-          begin: const Offset(0.08, 0),
+          begin: AppMotion.routeSlideBegin,
           end: Offset.zero,
         ).animate(CurvedAnimation(
           parent: animation,
-          curve: Curves.easeOutCubic,
+          curve: AppMotion.standardCurve,
         )),
-        child: FadeTransition(
-          opacity: CurvedAnimation(
-            parent: animation,
-            curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
-          ),
-          child: child,
-        ),
+        child: faded,
       );
     },
-    transitionDuration: const Duration(milliseconds: 280),
-    reverseTransitionDuration: const Duration(milliseconds: 200),
+    transitionDuration: AppMotion.routeIn,
+    reverseTransitionDuration: AppMotion.routeOut,
   );
 }
 

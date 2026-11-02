@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +8,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../app/theme/app_tokens.dart';
 import '../../../core/haptics.dart';
+import '../../../core/media/photo_store.dart';
 import '../../../core/models/attendance_models.dart';
 import '../../../core/network/providers.dart';
 import '../../../core/network/ciss_error.dart';
@@ -664,8 +663,8 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
             if (_photoPath != null)
               ClipRRect(
                 borderRadius: BorderRadius.circular(AppRadius.md),
-                child: Image.file(
-                  File(_photoPath!),
+                child: photoImage(
+                  _photoPath!,
                   height: 160,
                   width: double.infinity,
                   fit: BoxFit.cover,
@@ -768,8 +767,7 @@ class _QrAttendanceFlowState extends ConsumerState<QrAttendanceFlow>
     if (result != null && mounted) {
       // Pre-encode photo for offline queue support
       try {
-        final file = File(result);
-        final bytes = await file.readAsBytes();
+        final bytes = await readPhotoBytes(result);
         _photoDataUrl = await ref
             .read(mobileRepositoryProvider)
             .encodeFileToDataUrl(bytes, 'image/jpeg');

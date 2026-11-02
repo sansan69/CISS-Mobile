@@ -1,21 +1,20 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+
+import '../../core/media/photo_store.dart';
 
 class CameraCaptureScreen extends StatelessWidget {
   const CameraCaptureScreen({super.key});
 
-  static Future<File?> capture({ImageSource source = ImageSource.camera}) async {
-    final picker = ImagePicker();
-    final XFile? picked = await picker.pickImage(
-      source: source,
-      imageQuality: 80,
-      maxWidth: 1920,
-      maxHeight: 1920,
-    );
-    if (picked == null) return null;
-    return File(picked.path);
+  /// Picks or captures a photo and returns its path.
+  ///
+  /// On web the picked bytes are cached for the session because `blob:` paths
+  /// cannot be read back through `dart:io`.
+  static Future<String?> capture({
+    ImageSource source = ImageSource.camera,
+  }) async {
+    final picked = await pickPhoto(source: source);
+    return picked?.path;
   }
 
   @override
@@ -40,9 +39,9 @@ class CameraCaptureScreen extends StatelessWidget {
             const SizedBox(height: 32),
             FilledButton.icon(
               onPressed: () async {
-                final file = await capture();
-                if (file != null && context.mounted) {
-                  Navigator.of(context).pop(file.path);
+                final path = await capture();
+                if (path != null && context.mounted) {
+                  Navigator.of(context).pop(path);
                 }
               },
               icon: const Icon(Icons.camera_alt),
@@ -55,9 +54,9 @@ class CameraCaptureScreen extends StatelessWidget {
             const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: () async {
-                final file = await capture(source: ImageSource.gallery);
-                if (file != null && context.mounted) {
-                  Navigator.of(context).pop(file.path);
+                final path = await capture(source: ImageSource.gallery);
+                if (path != null && context.mounted) {
+                  Navigator.of(context).pop(path);
                 }
               },
               icon: const Icon(Icons.photo_library, color: Colors.white),

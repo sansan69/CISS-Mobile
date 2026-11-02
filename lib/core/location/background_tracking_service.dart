@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:isolate';
 import 'dart:ui';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart' hide ActivityType;
 import 'package:http/http.dart' as http;
@@ -31,6 +31,7 @@ class BackgroundTrackingService {
   static const TrackingSessionStore _sessionStore = TrackingSessionStore();
 
   static Future<void> initialize() async {
+    if (kIsWeb) return;
     if (_configured) return;
     _configured = true;
 
@@ -66,6 +67,9 @@ class BackgroundTrackingService {
     String? clientName,
     String? district,
   }) async {
+    // The web build keeps location handling in the foreground page; there is no
+    // background service to start.
+    if (kIsWeb) return;
     // Verify location permission before starting
     final locStatus = await Permission.location.status;
     if (locStatus != PermissionStatus.granted &&
@@ -99,6 +103,7 @@ class BackgroundTrackingService {
   }
 
   static Future<void> stop() async {
+    if (kIsWeb) return;
     await _sessionStore.clear();
     FlutterBackgroundService().invoke('stopService');
   }
@@ -582,11 +587,11 @@ void onStart(ServiceInstance service) async {
         _updateNotification(service, siteContext, isInside, null);
       }
 
+      // Never log coordinates or geofence distance: release logs are readable
+      // on compromised/shared devices and reveal a guard's precise location.
       debugPrint(
-        'Tracking [$locationSource]: ${position.latitude.toStringAsFixed(5)}, '
-        '${position.longitude.toStringAsFixed(5)} '
-        '— dist: ${distance.toStringAsFixed(1)}m '
-        '— out: $isOut (buffer: ${accuracyBuffer.toStringAsFixed(1)}m)',
+        'Tracking [$locationSource]: update processed '
+        '(out: $isOut, buffer: ${accuracyBuffer.toStringAsFixed(1)}m)',
       );
     } catch (e) {
       debugPrint('BackgroundTracking error: $e');

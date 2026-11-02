@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../app/theme/app_tokens.dart';
+import '../../../core/auth/pin_policy.dart';
 import '../../../core/haptics.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../../shared/widgets/brand_banner.dart';
@@ -78,9 +80,10 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
       validationError = 'Enter a valid registered phone number.';
     } else if (dateOfBirth.isEmpty) {
       validationError = 'Select your date of birth.';
-    } else if (!RegExp(r'^\d{4,6}$').hasMatch(pin)) {
-      validationError = 'Enter a 4 to 6 digit PIN.';
-    } else if (pin != confirmPin) {
+    } else {
+      validationError = validateNewGuardPin(pin);
+    }
+    if (validationError == null && pin != confirmPin) {
       validationError = 'PIN confirmation does not match.';
     }
 
@@ -157,7 +160,7 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Text(
-                    'Enter the same phone number recorded for your employee profile, confirm your date of birth, and choose a 4 to 6 digit PIN.',
+                    'Enter the same phone number recorded for your employee profile, confirm your date of birth, and choose a 6-digit PIN that is not repeated or sequential.',
                     style: Theme.of(
                       context,
                     ).textTheme.bodyMedium?.copyWith(color: tokens.inkMuted),
@@ -213,9 +216,13 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
                     controller: _pinController,
                     obscureText: true,
                     keyboardType: TextInputType.number,
+                    inputFormatters: <TextInputFormatter>[
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(6),
+                    ],
                     decoration: const InputDecoration(
                       labelText: 'New PIN',
-                      hintText: '1234',
+                      hintText: '••••••',
                       prefixIcon: Icon(Icons.lock_outline_rounded),
                     ),
                   ),
@@ -224,9 +231,13 @@ class _GuardPinSetupScreenState extends ConsumerState<GuardPinSetupScreen> {
                     controller: _confirmPinController,
                     obscureText: true,
                     keyboardType: TextInputType.number,
+                    inputFormatters: <TextInputFormatter>[
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(6),
+                    ],
                     decoration: const InputDecoration(
                       labelText: 'Confirm PIN',
-                      hintText: '1234',
+                      hintText: '••••••',
                       prefixIcon: Icon(Icons.lock_person_rounded),
                     ),
                   ),

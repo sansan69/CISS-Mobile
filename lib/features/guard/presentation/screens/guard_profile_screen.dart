@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../../core/models/guard_profile.dart';
 import '../../../../../core/network/providers.dart';
+import '../../../../../core/security/screen_security.dart';
 import '../../../../../app/theme/app_tokens.dart';
 import '../../../../../shared/widgets/modern_card.dart';
 import '../../../../../shared/widgets/screen_scaffold.dart';
@@ -26,226 +27,233 @@ class GuardProfileScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(guardProfileProvider);
-    return profileAsync.when(
-      loading:
-          () => const GuardLoadingScaffold(label: 'Loading guard profile...'),
-      error:
-          (Object error, StackTrace stackTrace) => GuardErrorScaffold(
-            title: 'Could not load profile',
-            error: error,
-            onRetry: () => ref.invalidate(guardProfileProvider),
-          ),
-      data: (profile) {
-        final docs = profile.documents;
-
-        return ScreenScaffold(
-          title: 'Profile',
-          subtitle: profile.employeeId,
-          actions: <Widget>[
-            IconButton(
-              onPressed: () => ref.invalidate(guardProfileProvider),
-              icon: const Icon(Icons.refresh_rounded),
+    // Personal and identity-document data must not reach the recents thumbnail,
+    // screenshots or screen recordings (F-09). Nested sensitive screens
+    // (document upload, Aadhaar correction) add their own holder, so the flag
+    // survives overlapping routes.
+    return SecureScreen(
+      holder: 'guard_profile',
+      child: profileAsync.when(
+        loading:
+            () => const GuardLoadingScaffold(label: 'Loading guard profile...'),
+        error:
+            (Object error, StackTrace stackTrace) => GuardErrorScaffold(
+              title: 'Could not load profile',
+              error: error,
+              onRetry: () => ref.invalidate(guardProfileProvider),
             ),
-          ],
-          children: <Widget>[
-            // ── Hero panel ─────────────────────────────────────────────
-            _ProfileHero(profile: profile),
-            const SizedBox(height: AppSpacing.lg),
+        data: (profile) {
+          final docs = profile.documents;
 
-            // ── Personal information ───────────────────────────────────
-            _SectionHeader(title: 'Personal info'),
-            const SizedBox(height: AppSpacing.sm),
-            _InfoCard(
-              rows: <_InfoRow>[
-                _InfoRow('Phone', profile.phoneNumber),
-                _InfoRow(
-                  'Email',
-                  (profile.emailAddress ?? '').isEmpty
-                      ? '-'
-                      : profile.emailAddress!,
-                ),
-                _InfoRow(
-                  'Gender',
-                  (profile.gender ?? '').isEmpty ? '-' : profile.gender!,
-                ),
-                _InfoRow(
-                  'Joining Date',
-                  _formatDate(profile.joiningDate ?? ''),
-                ),
-                _InfoRow('Resource ID', profile.resourceIdNumber ?? ''),
-                _InfoRow('Address', profile.address ?? ''),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.lg),
+          return ScreenScaffold(
+            title: 'Profile',
+            subtitle: profile.employeeId,
+            actions: <Widget>[
+              IconButton(
+                onPressed: () => ref.invalidate(guardProfileProvider),
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ],
+            children: <Widget>[
+              // ── Hero panel ─────────────────────────────────────────────
+              _ProfileHero(profile: profile),
+              const SizedBox(height: AppSpacing.lg),
 
-            // ── Bank details ───────────────────────────────────────────
-            if (profile.bankAccountNumber != null ||
-                profile.bankIfscCode != null ||
-                profile.bankName != null) ...[
-              _SectionHeader(title: 'Bank details'),
+              // ── Personal information ───────────────────────────────────
+              _SectionHeader(title: 'Personal info'),
               const SizedBox(height: AppSpacing.sm),
               _InfoCard(
                 rows: <_InfoRow>[
-                  if (profile.bankName != null && profile.bankName!.isNotEmpty)
-                    _InfoRow('Bank', profile.bankName!),
-                  if (profile.bankAccountNumber != null &&
-                      profile.bankAccountNumber!.isNotEmpty)
-                    _InfoRow('Account Number', profile.bankAccountNumber!),
-                  if (profile.bankIfscCode != null &&
-                      profile.bankIfscCode!.isNotEmpty)
-                    _InfoRow('IFSC Code', profile.bankIfscCode!),
+                  _InfoRow('Phone', profile.phoneNumber),
+                  _InfoRow(
+                    'Email',
+                    (profile.emailAddress ?? '').isEmpty
+                        ? '-'
+                        : profile.emailAddress!,
+                  ),
+                  _InfoRow(
+                    'Gender',
+                    (profile.gender ?? '').isEmpty ? '-' : profile.gender!,
+                  ),
+                  _InfoRow(
+                    'Joining Date',
+                    _formatDate(profile.joiningDate ?? ''),
+                  ),
+                  _InfoRow('Resource ID', profile.resourceIdNumber ?? ''),
+                  _InfoRow('Address', profile.address ?? ''),
                 ],
               ),
               const SizedBox(height: AppSpacing.lg),
-            ],
 
-            // ── Documents ──────────────────────────────────────────────
-            if (docs.isNotEmpty) ...[
-              _SectionHeader(title: 'Documents'),
-              const SizedBox(height: AppSpacing.sm),
-              ...docs.map(
-                (doc) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                  child: DocumentListTile(
-                    name: doc.label,
-                    url: doc.url,
-                    fileType: _guessFileType(doc.url),
+              // ── Bank details ───────────────────────────────────────────
+              if (profile.bankAccountNumber != null ||
+                  profile.bankIfscCode != null ||
+                  profile.bankName != null) ...[
+                _SectionHeader(title: 'Bank details'),
+                const SizedBox(height: AppSpacing.sm),
+                _InfoCard(
+                  rows: <_InfoRow>[
+                    if (profile.bankName != null && profile.bankName!.isNotEmpty)
+                      _InfoRow('Bank', profile.bankName!),
+                    if (profile.bankAccountNumber != null &&
+                        profile.bankAccountNumber!.isNotEmpty)
+                      _InfoRow('Account Number', profile.bankAccountNumber!),
+                    if (profile.bankIfscCode != null &&
+                        profile.bankIfscCode!.isNotEmpty)
+                      _InfoRow('IFSC Code', profile.bankIfscCode!),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
+              ],
+
+              // ── Documents ──────────────────────────────────────────────
+              if (docs.isNotEmpty) ...[
+                _SectionHeader(title: 'Documents'),
+                const SizedBox(height: AppSpacing.sm),
+                ...docs.map(
+                  (doc) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: DocumentListTile(
+                      name: doc.label,
+                      url: doc.url,
+                      fileType: _guessFileType(doc.url),
+                    ),
                   ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+              ],
+
+              // ── Verification status ────────────────────────────────────
+              _SectionHeader(title: 'Verification status'),
+              const SizedBox(height: AppSpacing.sm),
+              ModernCard(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ComplianceTag(
+                      label: 'Aadhaar Card',
+                      status: profile.canUploadAadhaar
+                          ? ComplianceStatus.missing
+                          : ComplianceStatus.verified,
+                    ),
+                    ComplianceTag(
+                      label: 'Identity Proof',
+                      status: profile.canUploadIdentity
+                          ? ComplianceStatus.missing
+                          : ComplianceStatus.verified,
+                    ),
+                    ComplianceTag(
+                      label: 'Address Proof',
+                      status: profile.canUploadAddress
+                          ? ComplianceStatus.missing
+                          : ComplianceStatus.verified,
+                    ),
+                    ComplianceTag(
+                      label: 'Bank Details',
+                      status: (profile.bankAccountNumber ?? '').isNotEmpty
+                          ? ComplianceStatus.verified
+                          : ComplianceStatus.missing,
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: AppSpacing.lg),
-            ],
 
-            // ── Verification status ────────────────────────────────────
-            _SectionHeader(title: 'Verification status'),
-            const SizedBox(height: AppSpacing.sm),
-            ModernCard(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ComplianceTag(
-                    label: 'Aadhaar Card',
-                    status: profile.canUploadAadhaar
-                        ? ComplianceStatus.missing
-                        : ComplianceStatus.verified,
+              // ── Document actions ────────────────────────────────────────
+              _SectionHeader(title: 'Document actions'),
+              const SizedBox(height: AppSpacing.sm),
+              if (profile.anyMissingDocuments)
+                ModernCard(
+                  child: ListTile(
+                    leading: const Icon(Icons.upload_file_rounded),
+                    title: const Text('Upload missing documents'),
+                    subtitle: const Text('Add Aadhaar, identity or address proof'),
+                    trailing: const Icon(Icons.chevron_right_rounded),
+                    onTap: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => GuardDocumentUploadScreen(
+                            profile: profile,
+                          ),
+                        ),
+                      );
+                      if (context.mounted) ref.invalidate(guardProfileProvider);
+                    },
                   ),
-                  ComplianceTag(
-                    label: 'Identity Proof',
-                    status: profile.canUploadIdentity
-                        ? ComplianceStatus.missing
-                        : ComplianceStatus.verified,
-                  ),
-                  ComplianceTag(
-                    label: 'Address Proof',
-                    status: profile.canUploadAddress
-                        ? ComplianceStatus.missing
-                        : ComplianceStatus.verified,
-                  ),
-                  ComplianceTag(
-                    label: 'Bank Details',
-                    status: (profile.bankAccountNumber ?? '').isNotEmpty
-                        ? ComplianceStatus.verified
-                        : ComplianceStatus.missing,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-
-            // ── Document actions ────────────────────────────────────────
-            _SectionHeader(title: 'Document actions'),
-            const SizedBox(height: AppSpacing.sm),
-            if (profile.anyMissingDocuments)
+                ),
+              const SizedBox(height: AppSpacing.sm),
               ModernCard(
                 child: ListTile(
-                  leading: const Icon(Icons.upload_file_rounded),
-                  title: const Text('Upload missing documents'),
-                  subtitle: const Text('Add Aadhaar, identity or address proof'),
+                  leading: const Icon(Icons.published_with_changes_rounded),
+                  title: const Text('Request Aadhaar correction'),
+                  subtitle: const Text('Notify us about an Aadhaar detail to fix'),
                   trailing: const Icon(Icons.chevron_right_rounded),
                   onTap: () async {
                     await Navigator.of(context).push(
                       MaterialPageRoute<void>(
-                        builder: (_) => GuardDocumentUploadScreen(
-                          profile: profile,
-                        ),
+                        builder: (_) => const GuardAadhaarCorrectionScreen(),
                       ),
                     );
                     if (context.mounted) ref.invalidate(guardProfileProvider);
                   },
                 ),
               ),
-            const SizedBox(height: AppSpacing.sm),
-            ModernCard(
-              child: ListTile(
-                leading: const Icon(Icons.published_with_changes_rounded),
-                title: const Text('Request Aadhaar correction'),
-                subtitle: const Text('Notify us about an Aadhaar detail to fix'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () async {
-                  await Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const GuardAadhaarCorrectionScreen(),
-                    ),
-                  );
-                  if (context.mounted) ref.invalidate(guardProfileProvider);
-                },
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-
-            // ── ID proof details ───────────────────────────────────────
-            if (profile.idProofNumber != null &&
-                profile.idProofNumber!.isNotEmpty) ...[
-              _SectionHeader(title: 'ID proof details'),
-              const SizedBox(height: AppSpacing.sm),
-              _InfoCard(
-                rows: <_InfoRow>[
-                  if (profile.idProofType != null &&
-                      profile.idProofType!.isNotEmpty)
-                    _InfoRow('Type', profile.idProofType!),
-                  _InfoRow('Number', profile.idProofNumber!),
-                ],
-              ),
               const SizedBox(height: AppSpacing.lg),
-            ],
 
-            // ── Address proof details ──────────────────────────────────
-            if (profile.addressProofNumber != null &&
-                profile.addressProofNumber!.isNotEmpty) ...[
-              _SectionHeader(title: 'Address proof details'),
+              // ── ID proof details ───────────────────────────────────────
+              if (profile.idProofNumber != null &&
+                  profile.idProofNumber!.isNotEmpty) ...[
+                _SectionHeader(title: 'ID proof details'),
+                const SizedBox(height: AppSpacing.sm),
+                _InfoCard(
+                  rows: <_InfoRow>[
+                    if (profile.idProofType != null &&
+                        profile.idProofType!.isNotEmpty)
+                      _InfoRow('Type', profile.idProofType!),
+                    _InfoRow('Number', profile.idProofNumber!),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
+              ],
+
+              // ── Address proof details ──────────────────────────────────
+              if (profile.addressProofNumber != null &&
+                  profile.addressProofNumber!.isNotEmpty) ...[
+                _SectionHeader(title: 'Address proof details'),
+                const SizedBox(height: AppSpacing.sm),
+                _InfoCard(
+                  rows: <_InfoRow>[
+                    if (profile.addressProofType != null &&
+                        profile.addressProofType!.isNotEmpty)
+                      _InfoRow('Type', profile.addressProofType!),
+                    _InfoRow('Number', profile.addressProofNumber!),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.lg),
+              ],
+
+              // ── Security settings ──────────────────────────────────────
+              const SecuritySettingsCard(),
               const SizedBox(height: AppSpacing.sm),
-              _InfoCard(
-                rows: <_InfoRow>[
-                  if (profile.addressProofType != null &&
-                      profile.addressProofType!.isNotEmpty)
-                    _InfoRow('Type', profile.addressProofType!),
-                  _InfoRow('Number', profile.addressProofNumber!),
-                ],
+              ModernCard(
+                child: ListTile(
+                  leading: const Icon(Icons.pin_rounded),
+                  title: const Text('Change PIN'),
+                  subtitle: const Text('Update your guard login PIN'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap:
+                      () => showDialog<void>(
+                        context: context,
+                        builder: (_) => const _ChangePinDialog(),
+                      ),
+                ),
               ),
-              const SizedBox(height: AppSpacing.lg),
             ],
-
-            // ── Security settings ──────────────────────────────────────
-            const SecuritySettingsCard(),
-            const SizedBox(height: AppSpacing.sm),
-            ModernCard(
-              child: ListTile(
-                leading: const Icon(Icons.pin_rounded),
-                title: const Text('Change PIN'),
-                subtitle: const Text('Update your guard login PIN'),
-                trailing: const Icon(Icons.chevron_right_rounded),
-                onTap:
-                    () => showDialog<void>(
-                      context: context,
-                      builder: (_) => const _ChangePinDialog(),
-                    ),
-              ),
-            ),
-          ],
-        );
-      },
+          );
+        },
+      ),
     );
   }
 }

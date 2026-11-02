@@ -55,13 +55,62 @@ void main() {
   });
 
   group('Mobile API route compatibility', () {
-    test('leave queue uses the same supported route as online submission', () {
-      final leaveScreen =
+    test('retired payroll surfaces stay gone; payslip documents are back', () {
+      final repository =
+          File('lib/core/network/mobile_repository.dart').readAsStringSync();
+      final routeModules =
+          File('lib/core/settings/route_modules.dart').readAsStringSync();
+      final dashboard =
+          File('lib/features/guard/presentation/screens/guard_dashboard_screen.dart')
+              .readAsStringSync();
+      final shell =
+          File('lib/features/guard/presentation/guard_shell.dart').readAsStringSync();
+      final notifications =
+          File('lib/features/shared/notification_inbox_screen.dart')
+              .readAsStringSync();
+      final refresh =
+          File('lib/core/sync/refresh_controller.dart').readAsStringSync();
+      final dashboardModel =
+          File('lib/core/models/mobile_dashboard_models.dart').readAsStringSync();
+
+      // Leave and the payroll engine stay retired.
+      expect(repository, isNot(contains('/api/guard/leave')));
+      expect(repository, isNot(contains('fetchLeaveOverview')));
+      expect(repository, isNot(contains('leaveBalance')));
+      expect(routeModules, isNot(contains('/guard/leave')));
+      expect(dashboardModel, isNot(contains('leaveBalance')));
+      expect(dashboard, isNot(contains('Leave')));
+      expect(shell, isNot(contains('Leave Requests')));
+      expect(notifications, isNot(contains('leave_approved')));
+      expect(refresh, isNot(contains('guardLeaveProvider')));
+      expect(
+        File('lib/features/guard/presentation/screens/guard_leave_screen.dart')
+            .existsSync(),
+        isFalse,
+      );
+
+      // Payslips are back as admin-uploaded documents only: no payroll figures
+      // travel with them and the app never computes pay.
+      expect(repository, contains('/api/guard/payslips'));
+      expect(repository, contains('fetchPayslips'));
+      expect(repository, isNot(contains('netPay')));
+      expect(routeModules, contains('/guard/payslips'));
+      expect(dashboard, contains("moduleEnabled(ref, 'payslips')"));
+      expect(shell, contains('Salary Slips'));
+      expect(
+        File('lib/features/guard/presentation/screens/guard_payslips_screen.dart')
+            .existsSync(),
+        isTrue,
+      );
+      final payslipScreen =
           File(
-            'lib/features/guard/presentation/screens/guard_leave_screen.dart',
+            'lib/features/guard/presentation/screens/guard_payslips_screen.dart',
           ).readAsStringSync();
-      expect(leaveScreen, contains("path: '/api/guard/leave'"));
-      expect(leaveScreen, isNot(contains('/api/guard/leave/requests')));
+      // Delivery only: download the PDF, open/share it, never print its bytes.
+      expect(payslipScreen, contains('downloadPayslipPdf'));
+      expect(payslipScreen, isNot(contains('netPay')));
+      expect(payslipScreen, isNot(contains('debugPrint')));
+      expect(payslipScreen, isNot(contains('print(')));
     });
 
     test('forgot PIN no longer calls the removed self-service route', () {

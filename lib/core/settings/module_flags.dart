@@ -6,9 +6,16 @@ class ModuleFlags {
   factory ModuleFlags.fromJson(Map<String, dynamic> json) => ModuleFlags(
         <String, bool>{
           ..._defaults,
-          ...json.map((k, v) => MapEntry(k, v == true)),
+          for (final entry in json.entries)
+            if (!_removedModules.contains(entry.key))
+              entry.key: entry.value == true,
         },
       );
+
+  /// Modules the client refuses to enable even when a stale server snapshot
+  /// still lists them. `leave` is retired with payroll; `payslips` is live
+  /// again (admin-uploaded PDFs only, no payroll figures).
+  static const Set<String> _removedModules = <String>{'leave'};
 
   factory ModuleFlags.defaults() => ModuleFlags(_defaults);
 
@@ -17,7 +24,6 @@ class ModuleFlags {
         'qrAttendance': true,
         'offlineTracking': true,
         'biometricVerification': true,
-        'leave': true,
         'documents': true,
         'payslips': true,
         'patrol': true,
@@ -44,7 +50,8 @@ class ModuleFlags {
         'uidLogin': false,
       };
 
-  bool isOn(String key, {required bool fallback}) => _values[key] ?? fallback;
+  bool isOn(String key, {required bool fallback}) =>
+      _removedModules.contains(key) ? false : (_values[key] ?? fallback);
 
   bool get geoFence => isOn('geoFence', fallback: true);
   bool get ipAttendance => isOn('ipAttendance', fallback: false);
